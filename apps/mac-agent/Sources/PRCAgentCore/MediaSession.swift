@@ -1,0 +1,114 @@
+import CoreMedia
+import Foundation
+import PRCProtocol
+import WebRTC
+
+public enum MediaConnectionState: Sendable, Equatable {
+    case connecting
+    case connected(path: String)
+    case disconnected
+    case failed
+    case closed
+}
+
+public protocol MediaSessionDelegate: AnyObject, Sendable {
+    func media(didGenerateCandidate candidate: IceCandidatePayload)
+    func media(didChangeState state: MediaConnectionState)
+    func media(didOpenChannel label: ChannelLabel)
+    func media(didReceive frame: DataChannelFrame, on label: ChannelLabel)
+    func media(didRejectMessage error: DataChannelError)
+}
+
+/// The coordinator's view of screen capture plus WebRTC. Injected so tests can run without either.
+public protocol MediaSession: AnyObject, Sendable {
+    var delegate: MediaSessionDelegate? { get set }
+    /// Starts capture and prepares the peer connection. Returns the display being streamed.
+    func start() async throws -> MediaDisplay
+    func answer(offer: String) async throws -> String
+    func add(candidate: IceCandidatePayload)
+    func send(_ message: DataChannelMessage, ts: Int64)
+    func stop() async
+}
+
+public typealias MediaSessionFactory = @Sendable () throws -> MediaSession
+
+public enum MediaError: Error, Sendable {
+    case screenRecordingDenied
+}
+
+/// ScreenCaptureKit into libwebrtc. One instance per session.
+public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unchecked Sendable {
+    public weak var delegate: MediaSessionDelegate?
+    private let webrtc: WebRTCSession
+    private var capturer: ScreenCapturer?
+    private let config: AgentConfig
+    private var announcedConnected = false
+
+    public init(config: AgentConfig) throws {
+        self.config = config
+        webrtc = try WebRTCSession(iceServers: [], maxBitrateBps: config.maxBitrateBps, maxFramerate: config.maxFramerate)
+        webrtc.delegate = self
+    }
+
+    public func start() async throws -> MediaDisplay {
+        guard Permissions.screenRecordingGranted else {
+            Permissions.requestScreenRecording()
+            throw MediaError.screenRecordingDenied
+        }
+        let webrtc = self.webrtc
+        let capturer = ScreenCapturer { pixelBuffer, time in
+            webrtc.deliver(pixelBuffer: pixelBuffer, time: time)
+        }
+        self.capturer = capturer
+        return try await capturer.start(maxLongEdge: config.maxLongEdge, fps: config.maxFramerate)
+    }
+
+    public func answer(offer: String) async throws -> String {
+        try await webrtc.answer(offerSDP: offer)
+    }
+
+    public func add(candidate: IceCandidatePayload) {
+        webrtc.add(candidate: candidate)
+    }
+
+    public func send(_ message: DataChannelMessage, ts: Int64) {
+        webrtc.send(message, ts: ts)
+    }
+
+    public func stop() async {
+        await capturer?.stop()
+        capturer = nil
+        webrtc.close()
+    }
+
+    // MARK: WebRTCSessionDelegate
+
+    public func webrtc(_ session: WebRTCSession, didGenerateCandidate candidate: IceCandidatePayload) {
+        delegate?.media(didGenerateCandidate: candidate)
+    }
+
+    public func webrtc(_ session: WebRTCSession, didChangeConnectionState state: RTCPeerConnectionState) {
+        switch state {
+        case .connected:
+            session.selectedPath { [weak self] path in
+                self?.delegate?.media(didChangeState: .connected(path: path ?? "Direct"))
+            }
+        case .disconnected: delegate?.media(didChangeState: .disconnected)
+        case .failed: delegate?.media(didChangeState: .failed)
+        case .closed: delegate?.media(didChangeState: .closed)
+        default: delegate?.media(didChangeState: .connecting)
+        }
+    }
+
+    public func webrtc(_ session: WebRTCSession, didOpenChannel label: ChannelLabel) {
+        delegate?.media(didOpenChannel: label)
+    }
+
+    public func webrtc(_ session: WebRTCSession, didReceive frame: DataChannelFrame, on label: ChannelLabel) {
+        delegate?.media(didReceive: frame, on: label)
+    }
+
+    public func webrtc(_ session: WebRTCSession, didRejectMessage error: DataChannelError, on label: String) {
+        delegate?.media(didRejectMessage: error)
+    }
+}

@@ -179,7 +179,7 @@ export interface SessionChallengePayload {
   expires_at: number;
 }
 export interface SessionEndPayload {
-  reason: "user" | "idle_timeout" | "revoked" | "remote_access_disabled" | "replaced" | "error";
+  reason: "user" | "idle_timeout" | "revoked" | "remote_access_disabled" | "replaced" | "expired" | "error";
 }
 export interface SessionRejectPayload {
   reason:
@@ -190,7 +190,8 @@ export interface SessionRejectPayload {
     | "auth_failed"
     | "version_unsupported"
     | "expired"
-    | "malformed";
+    | "malformed"
+    | "host_error";
 }
 export interface SessionRequestPayload {
   /**
@@ -218,7 +219,7 @@ export interface ByeMessage {
   v: number;
   type: "bye";
   ts: number;
-  reason: "user" | "idle_timeout" | "revoked" | "remote_access_disabled" | "replaced" | "error";
+  reason: "user" | "idle_timeout" | "revoked" | "remote_access_disabled" | "replaced" | "expired" | "error";
 }
 export interface DisplayInfoMessage {
   v: number;

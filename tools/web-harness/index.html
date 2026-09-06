@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRC Web Harness</title>
+<style>
+  :root { color-scheme: light dark; font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+  body { margin: 0; display: grid; grid-template-columns: 360px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
+  header { grid-column: 1 / -1; padding: 10px 16px; border-bottom: 1px solid #8884; display: flex; gap: 16px; align-items: baseline; }
+  header h1 { font-size: 16px; margin: 0; }
+  aside { padding: 12px 16px; border-right: 1px solid #8884; overflow: auto; }
+  main { display: grid; grid-template-rows: 1fr 180px; min-width: 0; }
+  section { margin-bottom: 18px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity: .7; margin: 0 0 6px; }
+  label { display: block; font-size: 12px; opacity: .8; margin-top: 8px; }
+  input, textarea, select, button { font: inherit; width: 100%; box-sizing: border-box; margin-top: 2px; }
+  textarea { height: 80px; font-family: ui-monospace, monospace; font-size: 11px; }
+  button { width: auto; padding: 4px 12px; margin-right: 6px; margin-top: 8px; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .fp { font-size: 20px; font-weight: 600; letter-spacing: .05em; }
+  #video { width: 100%; height: 100%; background: #111; outline: none; object-fit: contain; display: block; }
+  #videoWrap { min-height: 0; position: relative; }
+  #videoWrap:focus-within { box-shadow: inset 0 0 0 2px #4a90e2; }
+  #log { overflow: auto; padding: 8px 16px; border-top: 1px solid #8884; font-family: ui-monospace, monospace; font-size: 11px; }
+  .in { color: #2a7; } .out { color: #48c; } .err { color: #d55; } .ok { color: #2a7; font-weight: 600; }
+  #compare { font-weight: 600; color: #c80; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input[type=checkbox] { width: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PRC Web Harness</h1>
+  <span id="status">idle</span>
+  <span id="rtt"></span>
+  <span style="margin-left:auto; opacity:.6">development tool, not a product</span>
+</header>
+<aside>
+  <section>
+    <h2>This browser</h2>
+    <div>fingerprint <span class="fp" id="fingerprint"></span></div>
+    <div><code id="deviceId"></code></div>
+    <button id="resetIdentity">Reset identity</button>
+  </section>
+  <section>
+    <h2>Pair with a Mac</h2>
+    <label>Device name shown on the Mac<input id="deviceName" value="Web Harness"></label>
+    <label>QR payload text (type <code>pair</code> in prc-agent, paste the JSON here)<textarea id="qr" placeholder='{"v":1,"kind":"prc-pair",...}'></textarea></label>
+    <label>Address override (optional)<input id="pairAddress" placeholder="192.168.1.20:47500"></label>
+    <button id="pair">Pair</button>
+    <div id="compare"></div>
+  </section>
+  <section>
+    <h2>Session</h2>
+    <label>Paired host<select id="host"></select></label>
+    <label>Address<input id="address" placeholder="host:47500"></label>
+    <div>
+      <button id="connect" disabled>Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <button id="forget">Forget host</button>
+    </div>
+    <div class="row"><input type="checkbox" id="sendInput" checked><label for="sendInput" style="margin:0">Send mouse and keyboard from the video</label></div>
+    <label>Send text<div class="row"><input id="text" placeholder="typed on the Mac as one text event"><button id="sendText">Send</button></div></label>
+  </section>
+</aside>
+<main>
+  <div id="videoWrap"><video id="video" autoplay playsinline muted tabindex="0"></video></div>
+  <div id="log"></div>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

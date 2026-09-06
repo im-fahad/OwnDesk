@@ -271,7 +271,7 @@ Receiver rules, applied in this order, all failures fatal for that message:
 4. `from` is a known device. For `PAIR_REQUEST` only, the key inside the payload is used and the message is self-certifying.
 5. `sig` verifies against the sender's known public key.
 6. `ts` is within 300 seconds of local time.
-7. `seq` is greater than the last accepted `seq` from this sender for this session. `seq` starts at 1 per session and per pairing attempt.
+7. `seq` is greater than the last accepted `seq` from this sender for this session. `seq` starts at 1 per session and per attempt in the empty namespace. An attempt is one exchange: `PAIR_REQUEST` answered by `PAIR_RESULT`, or `SESSION_REQUEST` answered by `SESSION_CHALLENGE` or `SESSION_REJECT`. Both sides reset their `seq` state for the empty namespace once that reply is sent or received, so a retry starts at 1 again.
 8. Only then is `payload` decoded and validated against the schema for `type`.
 
 Why the payload is opaque bytes: signing the exact bytes the sender serialized removes any need for canonical JSON across Swift, Kotlin, and TypeScript.
@@ -456,7 +456,7 @@ data channels open
 { "reason": "remote_access_disabled" }
 ```
 
-Reasons: `untrusted`, `revoked`, `remote_access_disabled`, `busy`, `auth_failed`, `version_unsupported`, `expired`, `malformed`.
+Reasons: `untrusted`, `revoked`, `remote_access_disabled`, `busy`, `auth_failed`, `version_unsupported`, `expired`, `malformed`, `host_error`. The last one means the device was accepted but the host could not start capture or media, typically because Screen Recording is not granted.
 
 `SDP_OFFER`
 
@@ -484,7 +484,7 @@ Reasons: `untrusted`, `revoked`, `remote_access_disabled`, `busy`, `auth_failed`
 { "reason": "user" }
 ```
 
-Reasons: `user`, `idle_timeout`, `revoked`, `remote_access_disabled`, `replaced`, `error`.
+Reasons: `user`, `idle_timeout`, `revoked`, `remote_access_disabled`, `replaced`, `expired`, `error`.
 
 ### 8.2 Session lifetime
 
@@ -687,7 +687,7 @@ Every message:
 | `mouse_move_rel` | `dx`, `dy` in host points | Relative. Used by Android trackpad mode. Host applies its own acceleration curve. |
 | `mouse_down` | `button`: `left`, `right`, `middle` | Host computes click count from timing and position and sets `mouseEventClickState`. |
 | `mouse_up` | `button` | |
-| `scroll` | `dx`, `dy` in points, `precise` bool, `phase`: `began`, `changed`, `ended`, `momentum`, or omitted | Precise true for trackpad and touch, false for wheel notches. |
+| `scroll` | `dx`, `dy` in points, `precise` bool, `phase`: `began`, `changed`, `ended`, `momentum`, or omitted | Precise true for trackpad and touch, false for wheel notches. Sign follows the browser WheelEvent: positive `dy` scrolls the content down. |
 | `key_down` | `code` string, `modifiers` array, `repeat` bool | `code` uses W3C UI Events `KeyboardEvent.code` names such as `KeyA`, `ShiftLeft`, `MetaLeft`, `Enter`, `ArrowUp`, `F5`. Host maps to macOS virtual key codes. |
 | `key_up` | `code`, `modifiers` | |
 | `text` | `text` string, at most 256 code points | Inserted with `keyboardSetUnicodeString`. Used for soft keyboards, IME output, and pasted text. Never logged. |

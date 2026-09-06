@@ -10,7 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "PRCIdentity"),
-        .target(name: "PRCProtocol", dependencies: ["PRCIdentity"]),
+        .target(name: "PRCProtocol", dependencies: ["PRCIdentity"], resources: [.copy("Resources/w3c-to-macos.json")]),
         .testTarget(name: "PRCProtocolTests", dependencies: ["PRCProtocol", "PRCIdentity"]),
     ]
 )

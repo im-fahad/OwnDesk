@@ -7,7 +7,8 @@
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "harness": "node tools/web-harness/serve.js"
   },
   "engines": {
     "node": ">=24"

@@ -63,11 +63,11 @@
     },
     "sessionEndReason": {
       "type": "string",
-      "enum": ["user", "idle_timeout", "revoked", "remote_access_disabled", "replaced", "error"]
+      "enum": ["user", "idle_timeout", "revoked", "remote_access_disabled", "replaced", "expired", "error"]
     },
     "sessionRejectReason": {
       "type": "string",
-      "enum": ["untrusted", "revoked", "remote_access_disabled", "busy", "auth_failed", "version_unsupported", "expired", "malformed"]
+      "enum": ["untrusted", "revoked", "remote_access_disabled", "busy", "auth_failed", "version_unsupported", "expired", "malformed", "host_error"]
     },
     "wsUrl": {
       "type": "string",

@@ -1,0 +1,7 @@
+{
+  "name": "@prc/web-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser test client for the PRC agent. Development only."
+}

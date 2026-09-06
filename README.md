@@ -15,11 +15,12 @@ packages/protocol      JSON Schemas, key code tables, signing test vectors,
 packages/swift         Swift package used by the Mac agent and Mac controller
   PRCIdentity          P-256 keys in Secure Enclave or Keychain, signing, encodings
   PRCProtocol          Envelope signing and receiver rules, typed payloads, pairing, server auth
-apps/mac-agent         Mac Mini agent (Swift)                      [pending]
+apps/mac-agent         Mac Mini agent (Swift): signaling server, pairing, sessions,
+                       ScreenCaptureKit + libwebrtc, input injection, headless CLI
 apps/mac-controller    MacBook controller (Swift)                  [pending]
 apps/android-controller Android controller (Kotlin)                [pending]
 services/rendezvous    Cloud signaling relay (Node, TypeScript)    [pending]
-tools/web-harness      Browser test client, development only       [pending]
+tools/web-harness      Browser test client, development only
 infra/                 Docker, coturn, reverse proxy               [pending]
 ```
 
@@ -33,6 +34,14 @@ npm test                                   # protocol package tests
 npm run typecheck
 
 cd packages/swift && swift test            # Swift package against the same vectors
+cd apps/mac-agent && swift test            # agent: flows, WebSocket server, WebRTC loopback
+```
+
+Run the agent and try it from a browser (see [apps/mac-agent/README.md](apps/mac-agent/README.md)):
+
+```sh
+cd apps/mac-agent && swift run prc-agent --file-identity   # terminal 1
+npm run harness                                             # terminal 2, then open http://127.0.0.1:8080/
 ```
 
 Regenerate test vectors and generated types after changing a schema:

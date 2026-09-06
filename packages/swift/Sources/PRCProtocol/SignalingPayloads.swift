@@ -22,10 +22,12 @@ public enum SessionRejectReason: String, Codable, Sendable {
     case remoteAccessDisabled = "remote_access_disabled"
     case authFailed = "auth_failed"
     case versionUnsupported = "version_unsupported"
+    /// The host accepted the device but could not start capture or media.
+    case hostError = "host_error"
 }
 
 public enum SessionEndReason: String, Codable, Sendable {
-    case user, revoked, replaced, error
+    case user, revoked, replaced, expired, error
     case idleTimeout = "idle_timeout"
     case remoteAccessDisabled = "remote_access_disabled"
 }
