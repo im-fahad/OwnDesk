@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/server/presence.json",
+  "type": "object",
+  "required": ["kind", "device_id", "online"],
+  "properties": {
+    "kind": { "const": "presence" },
+    "device_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+    "online": { "type": "boolean" }
+  }
+}

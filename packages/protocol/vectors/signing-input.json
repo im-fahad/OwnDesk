@@ -1,0 +1,16 @@
+{
+  "description": "The exact bytes signed for an envelope. Implementations must reproduce signing_input byte for byte.",
+  "payload_json": "{\"client_nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"versions\":[1],\"path\":\"lan\",\"capabilities\":{\"codecs\":[\"H264\"],\"max_height\":1080,\"max_fps\":60}}",
+  "unsigned": {
+    "v": 1,
+    "type": "SESSION_REQUEST",
+    "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+    "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+    "session": "",
+    "seq": 1,
+    "ts": 1757203200000,
+    "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19"
+  },
+  "signing_input": "prc-signaling-v1\n1\nSESSION_REQUEST\nff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf\n25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03\n\n1\n1757203200000\neyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+  "signing_input_sha256_hex": "ba499dcbbf139c5d8992e9476268201e7e9413e133591ecfb60854ec66d3e304"
+}

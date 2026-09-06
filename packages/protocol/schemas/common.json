@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/common.json",
+  "title": "PRC common definitions",
+  "$defs": {
+    "deviceId": {
+      "description": "Lowercase hex SHA-256 of the 65-byte X9.63 public key.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]*$"
+    },
+    "bytes16": {
+      "description": "16 random bytes, base64url without padding (22 chars).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "bytes32": {
+      "description": "32 bytes, base64url without padding (43 chars).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "signature": {
+      "description": "ECDSA P-256 raw r||s, 64 bytes, base64url without padding (86 chars).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "publicKey": {
+      "description": "X9.63 uncompressed P-256 point, 65 bytes, base64url without padding (87 chars).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{87}$"
+    },
+    "timestampMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "protocolVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "deviceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "deviceType": {
+      "type": "string",
+      "enum": ["mac", "android", "web"]
+    },
+    "displayInfo": {
+      "type": "object",
+      "required": ["display_id", "width_px", "height_px", "scale"],
+      "properties": {
+        "display_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "width_px": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "height_px": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 4 }
+      }
+    },
+    "sessionEndReason": {
+      "type": "string",
+      "enum": ["user", "idle_timeout", "revoked", "remote_access_disabled", "replaced", "error"]
+    },
+    "sessionRejectReason": {
+      "type": "string",
+      "enum": ["untrusted", "revoked", "remote_access_disabled", "busy", "auth_failed", "version_unsupported", "expired", "malformed"]
+    },
+    "wsUrl": {
+      "type": "string",
+      "pattern": "^wss?://[^\\s]+$",
+      "maxLength": 512
+    }
+  }
+}

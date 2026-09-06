@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/SESSION_ACCEPT.json",
+  "type": "object",
+  "required": ["client_nonce", "host_nonce", "display", "resume_window_s"],
+  "properties": {
+    "client_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "host_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "display": { "$ref": "https://prc.local/schemas/common.json#/$defs/displayInfo" },
+    "resume_window_s": { "type": "integer", "minimum": 0, "maximum": 86400 }
+  }
+}

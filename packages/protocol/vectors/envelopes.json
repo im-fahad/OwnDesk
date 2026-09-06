@@ -1,0 +1,253 @@
+{
+  "description": "Receiver rule cases, processed in order by one receiver instance with the given clock and trust set.",
+  "receiver": {
+    "self_device_id": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+    "trusted": {
+      "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf": "BBC10UuiGwHuszh6P5QHlxuWXI9aXsEPVY_wozf0aTePwKmfZ0FlbiGlGvUJBbJqoFw8Bl8F8IVBSy7UiMzmAkM"
+    },
+    "now_ms": 1757203200000,
+    "accept_pair_requests": true
+  },
+  "cases": [
+    {
+      "name": "valid SESSION_REQUEST seq 1",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 1,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "aOuOhuyyvkBgqjkcVxEpixkki0dnAkZH_Wk8DyHiYAXYOAS_7Chsx4x0EGCAGDWF1f1JgDuJ9ovgpTYgr2Hc0A"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "exact replay of seq 1",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 1,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "aOuOhuyyvkBgqjkcVxEpixkki0dnAkZH_Wk8DyHiYAXYOAS_7Chsx4x0EGCAGDWF1f1JgDuJ9ovgpTYgr2Hc0A"
+      },
+      "expect": "replayed"
+    },
+    {
+      "name": "payload changed after signing",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 2,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImNsb3VkIiwiY2FwYWJpbGl0aWVzIjp7ImNvZGVjcyI6WyJIMjY0Il0sIm1heF9oZWlnaHQiOjEwODAsIm1heF9mcHMiOjYwfX0",
+        "sig": "_lWkkkVNNtL5gXjYtBLlXQIkzDHQacJnWM7jvdWZ0J24MUN-W9nu-iTX4EFXb5w0_Z_fNHETFYu-lYHB7nfdDg"
+      },
+      "expect": "bad_signature"
+    },
+    {
+      "name": "timestamp 10 minutes old",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 3,
+        "ts": 1757202600000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "vOuBDtLn2c34yh8sgEbcsrDZZ_utR4nh6CAeiXmWqCyC05D9r9UtX2LxeeiwYSaGYiazpvxj_yU--fnJLtmX2Q"
+      },
+      "expect": "stale_timestamp"
+    },
+    {
+      "name": "addressed to another device",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "session": "",
+        "seq": 3,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "gUQZPrUMKeiwOYwNrhgsCqauEFIwizPyU8iJ9TGFOQ4wWxJNRlwADlxYeSDZwgD8KJIx-JLuG58GmyE4yZoEcQ"
+      },
+      "expect": "wrong_recipient"
+    },
+    {
+      "name": "unknown sender with valid signature",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "90dca91648c25e15622e8606fa983b07f2dbef230cbf8640ab6b015e7ec5f021",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 1,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "13OukSiohe38imYW5OAtXXbSUhmXBNBg-TvMv3gAYRwEmU1OjKh8MIbQDUmzhI0E8d_JoIG4Cjo6kv0r14IL5g"
+      },
+      "expect": "unknown_sender"
+    },
+    {
+      "name": "unsupported version 2",
+      "envelope": {
+        "v": 2,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 3,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "BCBMTGPl5E4X_CS_S9ldamTSalTYi79mwukWy3XLFnOTiDaMZLEn7B0Vo2bzKhlmrg8rH_R4hjM-CN7dY-THBw"
+      },
+      "expect": "unsupported_version"
+    },
+    {
+      "name": "unknown type",
+      "envelope": {
+        "v": 1,
+        "type": "FOO",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 3,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "V3oeeoMNvMk5kl5Y5TLOYd_C7QNshjwB8JaEEVl3Bg4m1XiuhYikIsYEpRMblccFAJt71qKO3UHGLBQhsxaMyg"
+      },
+      "expect": "unknown_type"
+    },
+    {
+      "name": "valid signature, payload missing client_nonce",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 3,
+        "ts": 1757203200000,
+        "payload": "eyJ2ZXJzaW9ucyI6WzFdLCJwYXRoIjoibGFuIiwiY2FwYWJpbGl0aWVzIjp7ImNvZGVjcyI6WyJIMjY0Il0sIm1heF9oZWlnaHQiOjEwODAsIm1heF9mcHMiOjYwfX0",
+        "sig": "oxie5sWu_NFAtlfx7EUtexE6eH-nrmg5FH7iboJLpnsqKKUsVp4P6wtfw01w0aud9q876m0nmOh68YgfOF4phg"
+      },
+      "expect": "invalid_payload"
+    },
+    {
+      "name": "PAIR_REQUEST self-certified by unknown device",
+      "envelope": {
+        "v": 1,
+        "type": "PAIR_REQUEST",
+        "from": "90dca91648c25e15622e8606fa983b07f2dbef230cbf8640ab6b015e7ec5f021",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 1,
+        "ts": 1757203200000,
+        "payload": "eyJwdWJsaWNfa2V5IjoiQktUNkhkZFNibVd0RTd3ODZCaGVUR1ZMQ3c0aW1qZnpTR3oxNy1qWGZaVG9kTmJONlBCRFplVlVyZDZKMi1yd044N2xSQ3ZWdmhaMWNOVGxXLXMxU3FFIiwiZGV2aWNlX25hbWUiOiJUZXN0IFBob25lIiwiZGV2aWNlX3R5cGUiOiJhbmRyb2lkIiwicGFpcmluZ19zZXNzaW9uX2lkIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsInByb29mIjoiQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3YyJ9",
+        "sig": "FrZTN9x_SXAFuaMQQc-9obK24R8RIk4H_PfoRq7yZ7ULdEZfgDhggqgz3P1wzkE4_cPFN2C9uUXr_NqKfLYROw"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "PAIR_REQUEST whose public_key does not match from",
+      "envelope": {
+        "v": 1,
+        "type": "PAIR_REQUEST",
+        "from": "90dca91648c25e15622e8606fa983b07f2dbef230cbf8640ab6b015e7ec5f021",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 2,
+        "ts": 1757203200000,
+        "payload": "eyJwdWJsaWNfa2V5IjoiQkJDMTBVdWlHd0h1c3poNlA1UUhseHVXWEk5YVhzRVBWWV93b3pmMGFUZVB3S21mWjBGbGJpR2xHdlVKQmJKcW9GdzhCbDhGOElWQlN5N1VpTXptQWtNIiwiZGV2aWNlX25hbWUiOiJUZXN0IFBob25lIiwiZGV2aWNlX3R5cGUiOiJhbmRyb2lkIiwicGFpcmluZ19zZXNzaW9uX2lkIjoiRUJFU0V4UVZGaGNZR1JvYkhCMGVIdyIsInByb29mIjoiQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3YyJ9",
+        "sig": "VusQ1h-dExAF4pSqdos8C4aA9F7HDnRJsTXQvExHoPJSu90T_ZQ_o0Y6CSjmVg4yTzpzKfMpQr1waHopX-k4fg"
+      },
+      "expect": "unknown_sender"
+    },
+    {
+      "name": "seq 3 accepted after rejected attempts",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 3,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "t1UFpfM3u47Y54BKd2e3PvAbXo7ihdIgF-f6wVo6ImkwV6PcKH2zBhU7O4mR4Qhxmh2K5yE4nsMz23aCwnDiQg"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "seq 2 after seq 3 is a replay",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 2,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "REH-KS0eKiOTSrzmPw5ON3EnH2kfrK0DKxDc3YMp-DoULGKtr67xOxhcwPveB2WIvDSRQA1ChOuBNK9Vojc5Gw"
+      },
+      "expect": "replayed"
+    },
+    {
+      "name": "signature field wrong length",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 4,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "AAAAAAAAAA"
+      },
+      "expect": "malformed"
+    },
+    {
+      "name": "seq restarts at 1 inside a session id",
+      "envelope": {
+        "v": 1,
+        "type": "SDP_OFFER",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "ICEiIyQlJicoKSorLC0uLw",
+        "seq": 1,
+        "ts": 1757203200000,
+        "payload": "eyJzZHAiOiJ2PTBcclxubz0tIDEgMSBJTiBJUDQgMTI3LjAuMC4xXHJcbiIsImljZV9yZXN0YXJ0IjpmYWxzZX0",
+        "sig": "28cMj0XjTaPJ9elHVRrDCumiVH-dIK5aLuwy52ewGcsGLG5KNGuRU9jtPDxX9sIu92-cnAdbpOU_iGIYJmMe3g"
+      },
+      "expect": "ok"
+    },
+    {
+      "name": "host-signed message claiming to be from controller",
+      "envelope": {
+        "v": 1,
+        "type": "SESSION_REQUEST",
+        "from": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+        "to": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+        "session": "",
+        "seq": 5,
+        "ts": 1757203200000,
+        "payload": "eyJjbGllbnRfbm9uY2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R3IiwidmVyc2lvbnMiOlsxXSwicGF0aCI6ImxhbiIsImNhcGFiaWxpdGllcyI6eyJjb2RlY3MiOlsiSDI2NCJdLCJtYXhfaGVpZ2h0IjoxMDgwLCJtYXhfZnBzIjo2MH19",
+        "sig": "rvIJy2zEZSmFdFRKwUmtKnjqZpWdG9TFionbkZzZ4HHnDdchT6-sd1t0biSOAvN2xQM9gTD6haAicguMmh8A5A"
+      },
+      "expect": "bad_signature"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "prc",
+  "private": true,
+  "description": "Personal Remote Control System: private, self-hosted remote control for a Mac Mini.",
+  "workspaces": [
+    "packages/protocol"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

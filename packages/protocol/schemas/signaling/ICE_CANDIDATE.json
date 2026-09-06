@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/ICE_CANDIDATE.json",
+  "type": "object",
+  "required": ["candidate", "sdp_mid", "sdp_mline_index"],
+  "properties": {
+    "candidate": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "sdp_mid": { "anyOf": [ { "type": "null" }, { "type": "string", "maxLength": 64 } ] },
+    "sdp_mline_index": { "anyOf": [ { "type": "null" }, { "type": "integer", "minimum": 0, "maximum": 64 } ] }
+  }
+}

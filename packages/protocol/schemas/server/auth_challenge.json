@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/server/auth_challenge.json",
+  "type": "object",
+  "required": ["kind", "nonce", "origin"],
+  "properties": {
+    "kind": { "const": "auth_challenge" },
+    "nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes32" },
+    "origin": { "type": "string", "minLength": 1, "maxLength": 253 }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@prc/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PRC protocol: schemas, key tables, test vectors, and the TypeScript reference implementation.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "vectors": "node scripts/generate-vectors.ts",
+    "codegen": "node scripts/codegen.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "^5.9.0"
+  }
+}

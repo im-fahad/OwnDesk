@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/envelope.json",
+  "title": "Signaling envelope",
+  "description": "Every control-plane message between two devices. The signature covers the fields in section 6 of the spec.",
+  "type": "object",
+  "required": ["v", "type", "from", "to", "session", "seq", "ts", "payload", "sig"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[A-Z_]+$" },
+    "from": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+    "to": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+    "session": {
+      "description": "Empty for pairing and SESSION_REQUEST. Otherwise the session id.",
+      "anyOf": [
+        { "const": "" },
+        { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" }
+      ]
+    },
+    "seq": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "ts": { "$ref": "https://prc.local/schemas/common.json#/$defs/timestampMs" },
+    "payload": { "$ref": "https://prc.local/schemas/common.json#/$defs/base64url" },
+    "sig": { "$ref": "https://prc.local/schemas/common.json#/$defs/signature" }
+  }
+}

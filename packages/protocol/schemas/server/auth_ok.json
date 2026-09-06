@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/server/auth_ok.json",
+  "type": "object",
+  "required": ["kind", "ice_servers"],
+  "properties": {
+    "kind": { "const": "auth_ok" },
+    "ice_servers": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["urls"],
+        "properties": {
+          "urls": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "pattern": "^(stun|stuns|turn|turns):", "maxLength": 256 } },
+          "username": { "type": "string", "maxLength": 256 },
+          "credential": { "type": "string", "maxLength": 256 }
+        }
+      }
+    }
+  }
+}

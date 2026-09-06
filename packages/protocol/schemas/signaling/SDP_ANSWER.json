@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/SDP_ANSWER.json",
+  "type": "object",
+  "required": ["sdp"],
+  "properties": {
+    "sdp": { "type": "string", "minLength": 1, "maxLength": 32768 }
+  }
+}

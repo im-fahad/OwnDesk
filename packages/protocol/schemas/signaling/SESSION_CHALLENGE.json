@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/SESSION_CHALLENGE.json",
+  "type": "object",
+  "required": ["host_nonce", "client_nonce", "session_id", "version", "expires_at"],
+  "properties": {
+    "host_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "client_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "session_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "version": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "expires_at": { "$ref": "https://prc.local/schemas/common.json#/$defs/timestampMs" }
+  }
+}

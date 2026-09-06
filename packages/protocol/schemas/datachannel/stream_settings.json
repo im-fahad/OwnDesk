@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/datachannel/stream_settings.json",
+  "type": "object",
+  "required": ["v", "type", "ts"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "stream_settings" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "max_height": { "type": "integer", "minimum": 360, "maximum": 4320 },
+    "max_fps": { "type": "integer", "minimum": 5, "maximum": 120 },
+    "prefer": { "type": "string", "enum": ["latency", "quality"] }
+  }
+}

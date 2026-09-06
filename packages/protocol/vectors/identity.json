@@ -1,0 +1,34 @@
+{
+  "description": "Public key encoding, device id derivation, and fingerprint display.",
+  "keys": {
+    "host": {
+      "public_key": "BJEqk1yxcoYTuSFSWP94kiAKsEYrqjcBUvFehcVCJ5O-ZwIBi1c530ivTJ6Z08phWSXOseb4A0ZTD23f-Hsc9zQ",
+      "device_id": "25aaf3b74f823afeaa6d2ae0169c3323d29ec3414c300210c982336399679e03",
+      "fingerprint": "25AA-F3B7-4F82"
+    },
+    "controller": {
+      "public_key": "BBC10UuiGwHuszh6P5QHlxuWXI9aXsEPVY_wozf0aTePwKmfZ0FlbiGlGvUJBbJqoFw8Bl8F8IVBSy7UiMzmAkM",
+      "device_id": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+      "fingerprint": "FF28-84B1-1F62"
+    },
+    "stranger": {
+      "public_key": "BKT6HddSbmWtE7w86BheTGVLCw4imjfzSGz17-jXfZTodNbN6PBDZeVUrd6J2-rwN87lRCvVvhZ1cNTlW-s1SqE",
+      "device_id": "90dca91648c25e15622e8606fa983b07f2dbef230cbf8640ab6b015e7ec5f021",
+      "fingerprint": "90DC-A916-48C2"
+    }
+  },
+  "invalid_public_keys": [
+    {
+      "public_key": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA",
+      "why": "64 bytes"
+    },
+    {
+      "public_key": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "why": "compressed prefix"
+    },
+    {
+      "public_key": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "why": "66 bytes"
+    }
+  ]
+}

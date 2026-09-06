@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/PAIR_REQUEST.json",
+  "type": "object",
+  "required": ["public_key", "device_name", "device_type", "pairing_session_id", "proof"],
+  "properties": {
+    "public_key": { "$ref": "https://prc.local/schemas/common.json#/$defs/publicKey" },
+    "device_name": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceName" },
+    "device_type": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceType" },
+    "pairing_session_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "proof": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes32" }
+  }
+}

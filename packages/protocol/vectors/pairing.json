@@ -1,0 +1,9 @@
+{
+  "description": "HMAC-SHA256 proof of QR possession. Deterministic.",
+  "pairing_code": "3q2-7wECAwQFBgcICQoLDA",
+  "pairing_session_id": "EBESExQVFhcYGRobHB0eHw",
+  "controller_device_id": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "proof_input": "prc-pairing-v1\nEBESExQVFhcYGRobHB0eHw\nff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "proof": "qw7lxAKneN8QD0t0vKiUchaADFwOqI77Gb44l7xAjaE",
+  "wrong_code": "AQEBAQEBAQEBAQEBAQEBAQ"
+}

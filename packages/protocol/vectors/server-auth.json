@@ -1,0 +1,10 @@
+{
+  "description": "Signature a device presents to the rendezvous server. Verify with public_key; must fail for wrong_origin.",
+  "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "origin": "prc.example.com",
+  "device_id": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "public_key": "BBC10UuiGwHuszh6P5QHlxuWXI9aXsEPVY_wozf0aTePwKmfZ0FlbiGlGvUJBbJqoFw8Bl8F8IVBSy7UiMzmAkM",
+  "signing_input": "prc-server-auth-v1\nAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\nprc.example.com\nff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "signature": "tRvPiOhPxkRpngssq92F9TO7pB_-rBX8YVRv07mNEHEdCvrUaMNsfk2KcPcD1Y--hd_Ux3sDbv8LT9Bc6g8wxQ",
+  "wrong_origin": "evil.example.com"
+}

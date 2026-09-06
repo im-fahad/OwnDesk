@@ -1,0 +1,38 @@
+{
+  "warning": "TEST KEYS ONLY. Never load these into a real device.",
+  "keys": {
+    "host": {
+      "key_ops": [
+        "sign"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "kSqTXLFyhhO5IVJY_3iSIAqwRiuqNwFS8V6FxUInk74",
+      "y": "ZwIBi1c530ivTJ6Z08phWSXOseb4A0ZTD23f-Hsc9zQ",
+      "crv": "P-256",
+      "d": "6FLEPiBaZlEyCy6MhJvnGIsoIHRyA70iZZ0gjFp7I9k"
+    },
+    "controller": {
+      "key_ops": [
+        "sign"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "ELXRS6IbAe6zOHo_lAeXG5Zcj1pewQ9Vj_CjN_RpN48",
+      "y": "wKmfZ0FlbiGlGvUJBbJqoFw8Bl8F8IVBSy7UiMzmAkM",
+      "crv": "P-256",
+      "d": "pS-_d4UQK17bcV2tP1HUTxW9_DyTa5kTFAt26II2p_4"
+    },
+    "stranger": {
+      "key_ops": [
+        "sign"
+      ],
+      "ext": true,
+      "kty": "EC",
+      "x": "pPod11JuZa0TvDzoGF5MZUsLDiKaN_NIbPXv6Nd9lOg",
+      "y": "dNbN6PBDZeVUrd6J2-rwN87lRCvVvhZ1cNTlW-s1SqE",
+      "crv": "P-256",
+      "d": "Rbbe8zsyXGxVBh-Di74pxgB2VOp8zUJ6-EGqeulgwTA"
+    }
+  }
+}

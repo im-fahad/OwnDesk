@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/datachannel/hello.json",
+  "type": "object",
+  "required": ["v", "type", "ts", "versions", "app", "app_version"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "hello" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "versions": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" } },
+    "app": { "type": "string", "enum": ["mac-agent", "mac-controller", "android-controller", "web-harness"] },
+    "app_version": { "type": "string", "minLength": 1, "maxLength": 32 }
+  }
+}

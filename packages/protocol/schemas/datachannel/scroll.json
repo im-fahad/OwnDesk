@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/datachannel/scroll.json",
+  "type": "object",
+  "required": ["v", "type", "ts", "dx", "dy", "precise"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "scroll" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "dx": { "type": "number", "minimum": -10000, "maximum": 10000 },
+    "dy": { "type": "number", "minimum": -10000, "maximum": 10000 },
+    "precise": { "type": "boolean" },
+    "phase": { "type": "string", "enum": ["began", "changed", "ended", "momentum"] }
+  }
+}

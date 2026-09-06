@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/SESSION_REQUEST.json",
+  "type": "object",
+  "required": ["client_nonce", "versions", "path", "capabilities"],
+  "properties": {
+    "client_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "versions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" }
+    },
+    "path": { "type": "string", "enum": ["lan", "cloud"] },
+    "capabilities": {
+      "type": "object",
+      "required": ["codecs", "max_height", "max_fps"],
+      "properties": {
+        "codecs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "type": "string", "enum": ["H264"] }
+        },
+        "max_height": { "type": "integer", "minimum": 360, "maximum": 4320 },
+        "max_fps": { "type": "integer", "minimum": 5, "maximum": 120 }
+      }
+    }
+  }
+}

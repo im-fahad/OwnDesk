@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/datachannel/display_info.json",
+  "type": "object",
+  "required": ["v", "type", "ts", "display_id", "width_px", "height_px", "scale"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "display_info" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "display_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "width_px": { "type": "integer", "minimum": 1, "maximum": 16384 },
+    "height_px": { "type": "integer", "minimum": 1, "maximum": 16384 },
+    "scale": { "type": "number", "minimum": 0.5, "maximum": 4 }
+  }
+}

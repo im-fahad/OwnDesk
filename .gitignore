@@ -1,0 +1,24 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Swift
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserdata/
+xcuserdata/
+
+# Android
+*.apk
+*.aab
+.gradle/
+local.properties
+
+# macOS
+.DS_Store
+
+# Secrets and local config
+.env
+*.local.json

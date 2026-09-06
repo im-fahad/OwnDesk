@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/SESSION_AUTH.json",
+  "type": "object",
+  "required": ["client_nonce", "host_nonce"],
+  "properties": {
+    "client_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "host_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" }
+  }
+}

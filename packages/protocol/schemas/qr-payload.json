@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/qr-payload.json",
+  "title": "Pairing QR payload",
+  "type": "object",
+  "required": ["v", "kind", "host_device_id", "host_key_hash", "host_name", "addresses", "pairing_session_id", "pairing_code", "expires_at"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "kind": { "const": "prc-pair" },
+    "host_device_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+    "host_key_hash": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+    "host_name": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceName" },
+    "addresses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 3, "maxLength": 128 }
+    },
+    "rendezvous_url": {
+      "anyOf": [ { "type": "null" }, { "$ref": "https://prc.local/schemas/common.json#/$defs/wsUrl" } ]
+    },
+    "pairing_session_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "pairing_code": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "expires_at": { "$ref": "https://prc.local/schemas/common.json#/$defs/timestampMs" }
+  }
+}

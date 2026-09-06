@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/server/trust_sync.json",
+  "type": "object",
+  "required": ["kind", "controllers"],
+  "properties": {
+    "kind": { "const": "trust_sync" },
+    "controllers": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["device_id", "public_key", "name"],
+        "properties": {
+          "device_id": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceId" },
+          "public_key": { "$ref": "https://prc.local/schemas/common.json#/$defs/publicKey" },
+          "name": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceName" }
+        }
+      }
+    }
+  }
+}

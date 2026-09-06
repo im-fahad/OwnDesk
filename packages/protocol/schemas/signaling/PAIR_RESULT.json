@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/signaling/PAIR_RESULT.json",
+  "type": "object",
+  "required": ["approved", "reason", "host_public_key", "host_name", "rendezvous_url"],
+  "properties": {
+    "approved": { "type": "boolean" },
+    "reason": {
+      "anyOf": [ { "type": "null" }, { "type": "string", "enum": ["denied", "expired", "bad_proof", "busy"] } ]
+    },
+    "host_public_key": { "$ref": "https://prc.local/schemas/common.json#/$defs/publicKey" },
+    "host_name": { "$ref": "https://prc.local/schemas/common.json#/$defs/deviceName" },
+    "rendezvous_url": { "anyOf": [ { "type": "null" }, { "$ref": "https://prc.local/schemas/common.json#/$defs/wsUrl" } ] }
+  }
+}

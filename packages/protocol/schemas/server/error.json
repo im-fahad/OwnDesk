@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/server/error.json",
+  "type": "object",
+  "required": ["kind", "code", "message"],
+  "properties": {
+    "kind": { "const": "error" },
+    "code": { "type": "string", "enum": ["peer_offline", "not_allowed", "rate_limited", "malformed", "internal"] },
+    "message": { "type": "string", "maxLength": 256 }
+  }
+}

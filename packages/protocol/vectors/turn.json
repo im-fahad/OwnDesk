@@ -1,0 +1,10 @@
+{
+  "description": "coturn use-auth-secret credentials: username = expiry:device_id, credential = base64(HMAC-SHA1(secret, username)).",
+  "secret": "test-turn-secret",
+  "device_id": "ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "now_ms": 1757203200000,
+  "ttl_s": 7200,
+  "username": "1757210400:ff2884b11f62e5323fd04efe3039f6abb0c55396055f0eb1271fb402cf7152cf",
+  "credential": "mkbN8rfaBR16zd9HoLpSC0HQ5Kk=",
+  "expires_at": 1757210400000
+}
