@@ -55,7 +55,8 @@ public final class SignalingServer: SignalingTransport, @unchecked Sendable {
         ws.autoReplyPing = true
         ws.maximumMessageSize = SignalingServer.maxMessageBytes
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
-        params.allowLocalEndpointReuse = true
+        // No port sharing: a second agent must fail to bind rather than silently split traffic.
+        params.allowLocalEndpointReuse = false
 
         let port: NWEndpoint.Port = requestedPort == 0 ? .any : NWEndpoint.Port(rawValue: requestedPort)!
         let listener = try NWListener(using: params, on: port)

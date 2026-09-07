@@ -72,6 +72,10 @@ struct MenuPanelView: View {
                 Button("Open Settings") { model.openPrivacySettings("Privacy_Accessibility") }.font(.caption)
             }
         }
+        if !model.screenRecording || !model.accessibility {
+            Text("If the switch in System Settings is already on, it belongs to a previous build: remove PRC Agent from that list with −, grant again when asked, then Quit here so it relaunches.")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     private var sessionSection: some View {

@@ -24,8 +24,11 @@ swift run prc-controller --file-identity
 | `--data-dir <path>` | Where paired hosts live. Default `~/Library/Application Support/PRC Controller` |
 | `--file-identity` | **Development only.** Software identity in `<data-dir>/identity.key` instead of the Keychain and Secure Enclave, so rebuilt ad-hoc binaries do not prompt for Keychain access. |
 
-No macOS permissions are needed. `scripts/build-apps.sh` at the repo root produces
-`dist/PRC Controller.app`, ad-hoc signed; no certificate is needed for personal use.
+No macOS permissions are needed. From the repo root, `scripts/build-apps.sh controller` produces
+`dist/PRC Controller.app` (ad-hoc signed; no certificate is needed for personal use) and
+`scripts/install-controller.sh` copies it to `~/Applications`. An ad-hoc signed build keeps its
+Secure Enclave backed identity in its data folder rather than the Keychain, so rebuilds do not
+prompt; see the agent README for the reasoning.
 
 ## Using it
 
@@ -60,6 +63,18 @@ relative mouse move out and back when `--probe-input` is given, and a clean disc
 It is how the two-device test was run: the agent on the Mac Mini, the CLI on a MacBook over SSH,
 with the pairing fingerprint compared on both sides before approval. Keep `--data-dir` outside any
 folder you sync to the other machine.
+
+## Driving the app from a script
+
+Like the agent, the app opens a same-user control channel (`control.json` in its data folder).
+`prc-controller-cli app` talks to it:
+
+```sh
+prc-controller-cli app status
+prc-controller-cli app pair @payload.json [address]   # the app sends PAIR_REQUEST; approve on the host
+prc-controller-cli app connect <host name | id prefix> [address]
+prc-controller-cli app disconnect | hosts | forget <host> | quit
+```
 
 ## Reconnection
 

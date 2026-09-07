@@ -27,8 +27,8 @@ let package = Package(
             ],
             swiftSettings: mode
         ),
-        .executableTarget(name: "prc-agent", dependencies: ["PRCAgentCore"], swiftSettings: mode),
-        .executableTarget(name: "prc-agent-app", dependencies: ["PRCAgentCore"], swiftSettings: mode),
+        .executableTarget(name: "prc-agent", dependencies: ["PRCAgentCore", .product(name: "PRCLocalControl", package: "PRCSwift")], swiftSettings: mode),
+        .executableTarget(name: "prc-agent-app", dependencies: ["PRCAgentCore", .product(name: "PRCLocalControl", package: "PRCSwift")], swiftSettings: mode),
         .testTarget(name: "PRCAgentCoreTests", dependencies: ["PRCAgentCore", .product(name: "WebRTC", package: "WebRTC")], swiftSettings: mode),
     ]
 )

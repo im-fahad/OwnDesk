@@ -7,10 +7,13 @@ let package = Package(
     products: [
         .library(name: "PRCIdentity", targets: ["PRCIdentity"]),
         .library(name: "PRCProtocol", targets: ["PRCProtocol"]),
+        .library(name: "PRCLocalControl", targets: ["PRCLocalControl"]),
     ],
     targets: [
         .target(name: "PRCIdentity"),
         .target(name: "PRCProtocol", dependencies: ["PRCIdentity"]),
+        .target(name: "PRCLocalControl"),
         .testTarget(name: "PRCProtocolTests", dependencies: ["PRCProtocol", "PRCIdentity"]),
+        .testTarget(name: "PRCLocalControlTests", dependencies: ["PRCLocalControl", "PRCIdentity"]),
     ]
 )

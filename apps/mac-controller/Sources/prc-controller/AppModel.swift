@@ -4,6 +4,7 @@ import Foundation
 import Network
 import PRCControllerCore
 import PRCIdentity
+import PRCLocalControl
 import PRCProtocol
 import WebRTC
 
@@ -28,6 +29,7 @@ final class AppModel: ObservableObject {
     let identity: any SigningIdentity
     let store: HostStore
     private let discovery: HostDiscovery
+    private var control: LocalControlServer?
     private var session: SessionClient?
     private var eventsTask: Task<Void, Never>?
     private var pendingRenderer: RTCVideoRenderer?
@@ -62,6 +64,9 @@ final class AppModel: ObservableObject {
         do {
             if let file = config.identityFile {
                 identity = try FileIdentityStore.loadOrCreate(at: file)
+            } else if CodeSigning.isAdHocSigned {
+                // Each ad-hoc build has a new signature; a Keychain item would prompt after every rebuild.
+                identity = try FileBackedIdentityStore.loadOrCreate(at: config.dataDirectory.appendingPathComponent("identity.json"))
             } else {
                 identity = try IdentityStore.loadOrCreate(service: config.keychainService)
             }
@@ -77,6 +82,83 @@ final class AppModel: ObservableObject {
         }
         discovery.start()
         append("identity \(identity.fingerprint) ready")
+
+        let server = LocalControlServer(controlFile: config.dataDirectory.appendingPathComponent("control.json")) { [weak self] request in
+            guard let self else { return .failure("app is shutting down") }
+            return await self.handleControl(request)
+        }
+        try? server.start()
+        control = server
+    }
+
+    // MARK: Local control (prc-controller-cli app …)
+
+    private func waitUntil(_ ms: Int, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(Double(ms) / 1000)
+        while Date() < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return condition()
+    }
+
+    var statusData: [String: String] {
+        var d: [String: String] = [
+            "state": Self.describe(state),
+            "fingerprint": fingerprint,
+            "device_id": identity.deviceId,
+            "hosts": String(hosts.count),
+            "nearby": discovered.map(\.name).joined(separator: ","),
+        ]
+        if let rtt { d["rtt_ms"] = String(Int(rtt)) }
+        if let display { d["display"] = "\(display.width_px)x\(display.height_px)" }
+        if let id = selectedHostId, let h = store.host(id) { d["selected"] = h.name }
+        return d
+    }
+
+    func handleControl(_ request: ControlRequest) async -> ControlResponse {
+        switch request.command {
+        case "status":
+            return ControlResponse(ok: true, message: Self.describe(state), data: statusData)
+        case "hosts":
+            let lines = hosts.map { "\($0.fingerprint)  \($0.name)  \($0.deviceId)  \(discoveredHost(for: $0.deviceId) != nil ? "nearby" : "")" }
+            return ControlResponse(ok: true, message: lines.isEmpty ? "none" : lines.joined(separator: "\n"), data: ["count": String(hosts.count)])
+        case "pair":
+            guard var text = request.args.first else { return .failure("pair needs the payload text or @file") }
+            if text.hasPrefix("@") { text = (try? String(contentsOfFile: String(text.dropFirst()), encoding: .utf8)) ?? "" }
+            guard !isPairing else { return .failure("a pairing is already in progress") }
+            pairingText = text
+            pairingAddress = request.args.count > 1 ? request.args[1] : ""
+            pair()
+            guard isPairing else { return .failure(pairingStatus) }
+            _ = await waitUntil(135_000, { !isPairing })
+            return ControlResponse(ok: pairingStatus.hasPrefix("Paired"), message: pairingStatus, data: ["fingerprint": fingerprint])
+        case "connect":
+            guard let needle = request.args.first else { return .failure("connect needs a host name or id prefix") }
+            guard let host = hosts.first(where: { $0.deviceId.hasPrefix(needle.lowercased()) || $0.name == needle || $0.fingerprint.hasPrefix(needle.uppercased()) }) else {
+                return .failure("no paired host matches \(needle)")
+            }
+            selectedHostId = host.deviceId
+            manualAddress = request.args.count > 1 ? request.args[1] : ""
+            connect()
+            _ = await waitUntil(30_000, { if case .connected = state { return true }; if case .ended = state { return true }; return false })
+            return ControlResponse(ok: isConnected, message: Self.describe(state), data: statusData)
+        case "disconnect":
+            disconnect()
+            _ = await waitUntil(5000, { !isBusy })
+            return ControlResponse(ok: !isBusy, message: Self.describe(state), data: statusData)
+        case "forget":
+            guard let needle = request.args.first else { return .failure("forget needs a host id or fingerprint prefix") }
+            let matches = hosts.filter { $0.deviceId.hasPrefix(needle.lowercased()) || $0.fingerprint.hasPrefix(needle.uppercased()) }
+            guard matches.count == 1 else { return .failure("\(matches.count) hosts match") }
+            forget(matches[0].deviceId)
+            return ControlResponse(ok: true, message: "forgot \(matches[0].name) \(matches[0].fingerprint)", data: ["hosts": String(hosts.count)])
+        case "quit":
+            Task { NSApp.terminate(nil) }
+            return ControlResponse(ok: true, message: "quitting")
+        default:
+            return .failure("unknown command \(request.command)")
+        }
     }
 
     func append(_ line: String) {
@@ -98,6 +180,9 @@ final class AppModel: ObservableObject {
 
     func connect() {
         guard let id = selectedHostId, let host = store.host(id), !isBusy else { return }
+        state = .connecting
+        rtt = nil
+        display = nil
         Task { await self.connect(host: host) }
     }
 
@@ -117,12 +202,10 @@ final class AppModel: ObservableObject {
             url = Endpoints.url(for: first)
             addressUsed = first
         }
-        guard let url else { append("no address for \(host.name); enter one"); return }
+        guard let url else { append("no address for \(host.name); enter one"); state = .ended("no address"); return }
         append("connecting to \(host.name) at \(url.absoluteString)")
         let session = SessionClient(.init(identity: identity, host: host, config: config))
         self.session = session
-        rtt = nil
-        display = nil
         let stream = session.events
         eventsTask?.cancel()
         eventsTask = Task { [weak self] in

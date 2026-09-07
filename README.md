@@ -45,9 +45,11 @@ npm run e2e                                # headless end to end against the rea
 Real use, as apps:
 
 ```sh
-scripts/build-apps.sh              # dist/PRC Agent.app (menu bar) and dist/PRC Controller.app, no certificate needed
-scripts/install-launch-agent.sh    # agent starts at login on the Mac mini
+scripts/build-apps.sh agent && scripts/install-launch-agent.sh        # on the Mac mini: starts at login
+scripts/build-apps.sh controller && scripts/install-controller.sh     # on the MacBook: ~/Applications/PRC Controller.app
 ```
+
+No certificate is needed. Both apps are ad-hoc signed.
 
 After a rebuild, macOS asks for the agent's Screen Recording and Accessibility permissions again
 (ad-hoc signatures change per build). The optional `scripts/make-signing-identity.sh` avoids that.

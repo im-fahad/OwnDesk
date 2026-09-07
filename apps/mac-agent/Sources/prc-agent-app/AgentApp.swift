@@ -1,3 +1,4 @@
+import AppKit
 import PRCAgentCore
 import SwiftUI
 
@@ -6,6 +7,21 @@ import SwiftUI
 @main
 struct AgentApp: App {
     @StateObject private var model = AgentAppModel()
+
+    init() {
+        AgentApp.exitIfAlreadyRunning()
+    }
+
+    /// One agent per user session. A second copy, for example the LaunchAgent's plus one opened from
+    /// Finder, would load the same identity and advertise twice, splitting connections between them.
+    static func exitIfAlreadyRunning() {
+        guard let bundleId = Bundle.main.bundleIdentifier else { return }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        guard !others.isEmpty else { return }
+        others.first?.activate()
+        exit(0)
+    }
 
     var body: some Scene {
         MenuBarExtra {

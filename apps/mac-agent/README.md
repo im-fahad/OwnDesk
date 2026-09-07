@@ -73,12 +73,35 @@ identity (no Apple involvement) and `PRC_SIGN_IDENTITY="PRC Local Signing" scrip
 signs with it, after which the grants survive rebuilds. Optional.
 
 The LaunchAgent uses `RunAtLoad` and `KeepAlive`, so the agent starts at login and restarts after a
-crash (spec section 18). Logs go to `~/Library/Logs/PRC`. `scripts/uninstall-launch-agent.sh`
+crash (spec section 18). Once installed this way, do not also open the app from Finder: launchd
+already runs it, and a second copy exits immediately. To restart it after granting a permission,
+quit it from its menu bar panel and launchd brings it back, or run
+`launchctl kickstart -k gui/$(id -u)/com.prc.agent`. Logs go to `~/Library/Logs/PRC`. `scripts/uninstall-launch-agent.sh`
 removes it and leaves trusted devices and settings in place.
 
-The bundled app keeps its identity in the Keychain, backed by the Secure Enclave when available.
-Trusted devices and settings live in `~/Library/Application Support/PRC`. Settings are in the panel's
-Settings section and apply after a relaunch.
+The bundled app keeps its identity backed by the Secure Enclave when available. An ad-hoc signed
+build stores the enclave key's opaque representation in `~/Library/Application Support/PRC/identity.json`
+(mode 0600; the blob is useless on any other device and the private key never leaves the enclave),
+because a Keychain item would prompt after every rebuild. A build signed with a stable identity uses
+the Keychain instead. Trusted devices and settings live in the same folder. Settings are in the
+panel's Settings section and apply after a relaunch.
+
+## Driving the menu bar app from a script
+
+The app opens a same-user control channel: a loopback port plus a random token in
+`~/Library/Application Support/PRC/control.json` (mode 0600). `prc-agent ctl` talks to it:
+
+```sh
+prc-agent ctl status                 # remote access, session, pending pairing request, permissions
+prc-agent ctl pair                   # open the pairing window; prints the payload text
+prc-agent ctl pending [timeout ms]   # wait for a request; prints the controller's fingerprint
+prc-agent ctl approve | deny         # answer it, after comparing fingerprints
+prc-agent ctl devices | revoke <prefix> | end | access on|off | cancel | quit
+```
+
+Every command is a button the panel already has; nothing here reaches the network or runs
+commands. It exists so pairing and connecting can be scripted, for example from a second Mac
+over SSH, which is how the two-app test in this repo was run.
 
 ## Permissions
 
@@ -87,9 +110,15 @@ Settings section and apply after a relaunch.
 | Screen Recording | capture | the process that runs the binary. From Terminal, that is Terminal.app. |
 | Accessibility | input injection | same |
 
-The agent asks for both on start when they are missing and prints their state. After granting one,
-restart the agent. Without Screen Recording, a controller that authenticates gets
+The agent asks for both on start when they are missing and prints their state. After granting
+Screen Recording, restart the agent. Without it, a controller that authenticates gets
 `SESSION_REJECT host_error` and the agent prints a warning.
+
+If System Settings shows the switch already on while the agent still reports the permission as
+missing, the entry belongs to a previous build: macOS binds each grant to the app's signature, and
+an ad-hoc signature changes per build. `scripts/install-launch-agent.sh` clears the stale entries
+with `tccutil reset` on every reinstall; by hand, remove PRC Agent from the list with the minus
+button, let it ask again, grant, and restart it.
 
 ## First end-to-end test with the browser harness
 

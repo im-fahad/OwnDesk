@@ -2,6 +2,7 @@ import Foundation
 import Network
 import PRCControllerCore
 import PRCIdentity
+import PRCLocalControl
 import PRCProtocol
 import WebRTC
 
@@ -26,6 +27,9 @@ enum ControllerCLI {
       connect <host id prefix | name> [--address a] [--seconds N] [--probe-input]
                                                    authenticate, receive video, measure RTT, then disconnect
       hosts                                        list paired hosts
+      app <command> [args]                         drive the running PRC Controller app:
+                                                   status | hosts | pair <payload|@file> [address] |
+                                                   connect <host> [address] | disconnect | forget <host> | quit
 
     Options: --data-dir <path>  --name <text>  --keychain (use the Keychain instead of <data-dir>/identity.key)
     """
@@ -92,6 +96,10 @@ enum ControllerCLI {
         var args = Array(CommandLine.arguments.dropFirst())
         guard !args.isEmpty else { print(usage); exit(2) }
         let command = args.removeFirst()
+        if command == "app" {
+            await controlApp(args)
+            return
+        }
 
         var config = ControllerConfig.standard()
         var positional: [String] = []
@@ -151,6 +159,29 @@ enum ControllerCLI {
             print(usage); exit(2)
         }
         exit(failures == 0 ? 0 : 1)
+    }
+
+    /// `prc-controller-cli app …`: drives the running PRC Controller app through its local control channel.
+    static func controlApp(_ argsIn: [String]) async {
+        var args = argsIn
+        var dataDir = ControllerConfig.standard().dataDirectory
+        if let i = args.firstIndex(of: "--data-dir"), i + 1 < args.count {
+            dataDir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
+            args.removeSubrange(i...(i + 1))
+        }
+        guard let command = args.first else { print(usage); exit(2) }
+        do {
+            let response = try await LocalControlClient.send(ControlRequest(command: command, args: Array(args.dropFirst())), controlFile: dataDir.appendingPathComponent("control.json"), timeoutMs: 140_000)
+            print(response.message)
+            for key in response.data.keys.sorted() { print("  \(key): \(response.data[key]!)") }
+            exit(response.ok ? 0 : 1)
+        } catch LocalControlError.notRunning {
+            print("PRC Controller is not running (no control.json in \(dataDir.path))")
+            exit(3)
+        } catch {
+            print("control error: \(error)")
+            exit(3)
+        }
     }
 
     static func discover(config: ControllerConfig, seconds: Int) async {
