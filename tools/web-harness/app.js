@@ -278,11 +278,21 @@ async function selectedPath() {
   stats.forEach((s) => { if (s.type === 'transport' && s.selectedCandidatePairId) pairId = s.selectedCandidatePairId; });
   const pair = pairId && stats.get(pairId);
   if (!pair) return 'Direct';
-  const local = stats.get(pair.localCandidateId)?.candidateType;
-  const remote = stats.get(pair.remoteCandidateId)?.candidateType;
-  if (local === 'relay' || remote === 'relay') return 'Relayed';
-  if (local === 'host' && remote === 'host') return 'Direct (LAN)';
+  const local = stats.get(pair.localCandidateId), remote = stats.get(pair.remoteCandidateId);
+  if (local?.candidateType === 'relay' || remote?.candidateType === 'relay') return 'Relayed';
+  if (local?.candidateType === 'host' && remote?.candidateType === 'host') return 'Direct (LAN)';
+  if (local?.candidateType === 'host' && isPrivate(local?.address ?? local?.ip)) return 'Direct (LAN)';
+  if (remote?.candidateType === 'host' && isPrivate(remote?.address ?? remote?.ip)) return 'Direct (LAN)';
+  if (isPrivate(local?.address ?? local?.ip) && isPrivate(remote?.address ?? remote?.ip)) return 'Direct (LAN)';
   return 'Direct (Internet)';
+}
+
+function isPrivate(address = '') {
+  const a = address.toLowerCase();
+  if (/^(10\.|192\.168\.|169\.254\.|127\.)/.test(a)) return true;
+  const m = a.match(/^(172|100)\.(\d+)\./);
+  if (m) { const n = Number(m[2]); return m[1] === '172' ? n >= 16 && n <= 31 : n >= 64 && n <= 127; }
+  return /^(fc|fd|fe80)/.test(a) || a === '::1';
 }
 
 function sendData(type, fields) {

@@ -531,6 +531,8 @@ From the selected candidate pair:
 | srflx or prflx | any non-relay | Direct (Internet) |
 | relay | any | Relayed |
 
+A peer on the same LAN can show up as peer-reflexive when its candidate is learned from a connectivity check before its trickled candidate arrives, and libwebrtc reports no address for such a remote candidate. So a pair selected through one of our own host candidates on a private address, including Tailscale's CGNAT range, is also reported as Direct (LAN).
+
 ### 9.4 Alternative: private overlay network instead of the rendezvous server
 
 For a zero-cost deployment the three devices can join a Tailscale tailnet on the free plan. The agent's embedded endpoint is then reachable over the tailnet from anywhere, so controllers use the `lan` signaling path against the stored tailnet address, ICE gathers host candidates on the tailnet interface, and Tailscale's own relays replace TURN. No rendezvous server, TURN, VPS, or domain is needed. Signed envelopes still protect against the overlay operator exactly as they protect against the rendezvous server. The apps do not change: the controller keeps a list of known host addresses to try after Bonjour fails, and the rendezvous path remains available for later.

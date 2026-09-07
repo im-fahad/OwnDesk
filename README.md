@@ -21,6 +21,7 @@ apps/mac-controller    MacBook controller (Swift)                  [pending]
 apps/android-controller Android controller (Kotlin)                [pending]
 services/rendezvous    Cloud signaling relay (Node, TypeScript)    [pending]
 tools/web-harness      Browser test client, development only
+tools/e2e              Headless end-to-end test driving the real agent from Node
 infra/                 Docker, coturn, reverse proxy               [pending]
 ```
 
@@ -35,6 +36,7 @@ npm run typecheck
 
 cd packages/swift && swift test            # Swift package against the same vectors
 cd apps/mac-agent && swift test            # agent: flows, WebSocket server, WebRTC loopback
+npm run e2e                                # headless end to end against the real agent binary
 ```
 
 Run the agent and try it from a browser (see [apps/mac-agent/README.md](apps/mac-agent/README.md)):

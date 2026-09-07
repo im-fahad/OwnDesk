@@ -4,12 +4,14 @@
   "description": "Personal Remote Control System: private, self-hosted remote control for a Mac Mini.",
   "workspaces": [
     "packages/protocol",
-    "tools/web-harness"
+    "tools/web-harness",
+    "tools/e2e"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "harness": "node tools/web-harness/serve.js"
+    "harness": "node tools/web-harness/serve.js",
+    "e2e": "node tools/e2e/run.ts"
   },
   "engines": {
     "node": ">=24"

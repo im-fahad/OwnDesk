@@ -16,6 +16,7 @@ enum PRCAgentCLI {
       --no-input          Never inject input, just validate it
       --no-bonjour        Do not advertise on the LAN
       --file-identity     DEV ONLY: keep the identity key in <data-dir>/identity.key instead of the Keychain
+      --synthetic-screen  TEST ONLY: stream a generated pattern instead of the screen (no Screen Recording needed)
       --help
 
     Commands while running:
@@ -31,6 +32,8 @@ enum PRCAgentCLI {
     """
 
     static func main() async throws {
+        // Line-buffer stdout so a parent process (the headless test, a UI wrapper) sees events as they happen.
+        setlinebuf(stdout)
         var config = AgentConfig.standard()
         var useFileIdentity = false
         var args = Array(CommandLine.arguments.dropFirst())
@@ -44,6 +47,7 @@ enum PRCAgentCLI {
             case "--no-input": config.inputEnabled = false
             case "--no-bonjour": config.advertiseBonjour = false
             case "--file-identity": useFileIdentity = true
+            case "--synthetic-screen": config.syntheticScreen = true
             case "--help", "-h": print(usage); return
             default: print("unknown option \(arg)\n\(usage)"); exit(2)
             }
@@ -61,7 +65,8 @@ enum PRCAgentCLI {
         print("  media        \(config.mediaEnabled ? "on" : "off")   input \(config.inputEnabled ? "on" : "off")   bonjour \(config.advertiseBonjour ? "on" : "off")")
         print("  identity     \(config.identityFile == nil ? "Keychain / Secure Enclave" : "DEV FILE \(config.identityFile!.path)")")
         printPermissions(config)
-        if config.mediaEnabled, !Permissions.screenRecordingGranted {
+        if config.syntheticScreen { print("  screen        SYNTHETIC PATTERN (test only)") }
+        if config.mediaEnabled, !config.syntheticScreen, !Permissions.screenRecordingGranted {
             print("  requesting Screen Recording permission (grant it in System Settings > Privacy & Security, then restart)")
             Permissions.requestScreenRecording()
         }

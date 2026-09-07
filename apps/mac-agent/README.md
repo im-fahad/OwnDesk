@@ -27,6 +27,7 @@ Options:
 | `--no-input` | Validate input messages but never inject them |
 | `--no-bonjour` | Do not advertise on the LAN |
 | `--file-identity` | **Development only.** Keep the identity as a software key in `<data-dir>/identity.key` instead of the Keychain and Secure Enclave. |
+| `--synthetic-screen` | **Test only.** Stream a generated 720p pattern instead of the screen. No Screen Recording needed. |
 
 Why `--file-identity` exists: a `swift build` binary is ad-hoc signed, and its signature changes on
 every rebuild. The Keychain ties an item to the signature, so each rebuilt binary would prompt for
@@ -93,6 +94,26 @@ plain http so it can open the agent's `ws://` endpoint.
 | `InputInjector.swift` | CGEvent posting with rate limits, click counting, drag, scroll phases, Unicode text |
 | `TrustStore.swift` | Trusted controllers on disk, owner-only permissions |
 | `Agent.swift` | Wiring and the dev file identity store |
+
+## Headless end-to-end test
+
+```sh
+npm run e2e                      # from the repo root, after `swift build` here
+npm run e2e -- --real-screen     # capture the real screen; needs Screen Recording for your terminal
+npm run e2e -- --no-media        # signaling and authentication only
+npm run e2e -- --input           # also inject one harmless mouse move on this Mac
+PRC_E2E_VERBOSE=1 npm run e2e    # echo the agent's output
+```
+
+[tools/e2e/run.ts](../../tools/e2e/run.ts) spawns the real `prc-agent` binary and acts as a
+controller from Node with werift, an independent WebRTC implementation. It pairs with proof and
+approval, checks the fingerprint the host shows, authenticates, verifies a stranger is rejected,
+negotiates H.264 and the three data channels, checks ping and display info, sends a wrong-channel
+and a forbidden message, counts video RTP, ends the session, and shuts the agent down. Sixteen
+steps, about fifteen seconds, no permissions, no browser, no display.
+
+By default the agent streams a generated pattern (`--synthetic-screen`) so video can be verified
+anywhere. That flag exists only for testing and is never on unless asked for.
 
 ## Tests
 

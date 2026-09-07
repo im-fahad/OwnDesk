@@ -135,6 +135,8 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
     }
 
     /// "Direct (LAN)", "Direct (Internet)", or "Relayed" from the selected candidate pair (spec section 9.3).
+    /// Candidate type alone misclassifies a LAN peer whose candidate was learned as peer-reflexive,
+    /// so a pair of private addresses also counts as LAN.
     public func selectedPath(_ completion: @escaping @Sendable (String?) -> Void) {
         pc.statistics { report in
             let stats = report.statistics
@@ -143,13 +145,42 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
                   let pair = stats[pairId],
                   let localId = pair.values["localCandidateId"] as? String,
                   let remoteId = pair.values["remoteCandidateId"] as? String,
-                  let local = stats[localId]?.values["candidateType"] as? String,
-                  let remote = stats[remoteId]?.values["candidateType"] as? String
+                  let local = stats[localId], let remote = stats[remoteId],
+                  let localType = local.values["candidateType"] as? String,
+                  let remoteType = remote.values["candidateType"] as? String
             else { completion(nil); return }
-            if local == "relay" || remote == "relay" { completion("Relayed") }
-            else if local == "host" && remote == "host" { completion("Direct (LAN)") }
-            else { completion("Direct (Internet)") }
+            let localAddress = (local.values["address"] as? String) ?? (local.values["ip"] as? String) ?? ""
+            let remoteAddress = (remote.values["address"] as? String) ?? (remote.values["ip"] as? String) ?? ""
+            completion(WebRTCSession.classifyPath(localType: localType, remoteType: remoteType, localAddress: localAddress, remoteAddress: remoteAddress))
         }
+    }
+
+    /// libwebrtc reports no address for a peer-reflexive remote candidate. A pair that was selected
+    /// through one of our own host candidates on a private address was reached directly on that
+    /// network, so it is LAN regardless of what the remote side looks like.
+    static func classifyPath(localType: String, remoteType: String, localAddress: String, remoteAddress: String) -> String {
+        if localType == "relay" || remoteType == "relay" { return "Relayed" }
+        if localType == "host" && remoteType == "host" { return "Direct (LAN)" }
+        if localType == "host" && isPrivateAddress(localAddress) { return "Direct (LAN)" }
+        if remoteType == "host" && isPrivateAddress(remoteAddress) { return "Direct (LAN)" }
+        if isPrivateAddress(localAddress) && isPrivateAddress(remoteAddress) { return "Direct (LAN)" }
+        return "Direct (Internet)"
+    }
+
+    /// RFC 1918, link-local, loopback, unique-local IPv6, and the CGNAT range Tailscale uses.
+    static func isPrivateAddress(_ address: String) -> Bool {
+        let a = address.lowercased()
+        if a.hasPrefix("10.") || a.hasPrefix("192.168.") || a.hasPrefix("169.254.") || a.hasPrefix("127.") { return true }
+        if a.hasPrefix("172.") {
+            let parts = a.split(separator: ".")
+            if parts.count > 1, let second = Int(parts[1]), (16...31).contains(second) { return true }
+        }
+        if a.hasPrefix("100.") {
+            let parts = a.split(separator: ".")
+            if parts.count > 1, let second = Int(parts[1]), (64...127).contains(second) { return true }
+        }
+        if a.hasPrefix("fc") || a.hasPrefix("fd") || a.hasPrefix("fe80") || a == "::1" { return true }
+        return false
     }
 
     // MARK: RTCPeerConnectionDelegate

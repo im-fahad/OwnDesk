@@ -227,3 +227,17 @@ final class RecordingWebRTCDelegate: WebRTCSessionDelegate, @unchecked Sendable 
 extension WebRTCSession {
     func answerOfferForTest(_ offer: String) async throws -> String { try await answer(offerSDP: offer) }
 }
+
+@Suite struct PathClassificationTests {
+    @Test func classifiesByTypeAndAddress() {
+        #expect(WebRTCSession.classifyPath(localType: "host", remoteType: "host", localAddress: "192.168.1.2", remoteAddress: "192.168.1.3") == "Direct (LAN)")
+        #expect(WebRTCSession.classifyPath(localType: "host", remoteType: "prflx", localAddress: "192.168.1.2", remoteAddress: "192.168.1.3") == "Direct (LAN)")
+        #expect(WebRTCSession.classifyPath(localType: "host", remoteType: "prflx", localAddress: "100.80.1.2", remoteAddress: "100.80.1.3") == "Direct (LAN)")
+        #expect(WebRTCSession.classifyPath(localType: "srflx", remoteType: "srflx", localAddress: "203.0.113.5", remoteAddress: "198.51.100.7") == "Direct (Internet)")
+        #expect(WebRTCSession.classifyPath(localType: "host", remoteType: "prflx", localAddress: "192.168.1.2", remoteAddress: "") == "Direct (LAN)", "prflx remote without an address, reached on our private host candidate")
+        #expect(WebRTCSession.classifyPath(localType: "srflx", remoteType: "prflx", localAddress: "203.0.113.5", remoteAddress: "") == "Direct (Internet)")
+        #expect(WebRTCSession.classifyPath(localType: "relay", remoteType: "host", localAddress: "203.0.113.5", remoteAddress: "192.168.1.3") == "Relayed")
+        #expect(WebRTCSession.isPrivateAddress("172.20.0.1") && !WebRTCSession.isPrivateAddress("172.40.0.1"))
+        #expect(WebRTCSession.isPrivateAddress("fd7a:115c:a1e0::1") && !WebRTCSession.isPrivateAddress("2001:db8::1"))
+    }
+}

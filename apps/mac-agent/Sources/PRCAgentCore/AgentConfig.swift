@@ -22,6 +22,8 @@ public struct AgentConfig: Sendable {
     /// Development only. When set, the identity is a software key in this file instead of the Keychain,
     /// so every rebuilt ad-hoc-signed binary can read it without a Keychain prompt.
     public var identityFile: URL?
+    /// TEST ONLY. Stream a generated pattern instead of the screen, so no Screen Recording permission is needed.
+    public var syntheticScreen: Bool
 
     public static let defaultPort: UInt16 = 47500
     public static let serviceType = "_prc._tcp"
@@ -40,7 +42,8 @@ public struct AgentConfig: Sendable {
         maxLongEdge: Int = 1920,
         mediaEnabled: Bool = true,
         inputEnabled: Bool = true,
-        identityFile: URL? = nil
+        identityFile: URL? = nil,
+        syntheticScreen: Bool = false
     ) {
         self.hostName = hostName
         self.port = port
@@ -56,6 +59,7 @@ public struct AgentConfig: Sendable {
         self.mediaEnabled = mediaEnabled
         self.inputEnabled = inputEnabled
         self.identityFile = identityFile
+        self.syntheticScreen = syntheticScreen
     }
 
     public static func standard() -> AgentConfig {

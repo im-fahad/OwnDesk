@@ -40,7 +40,7 @@ public enum MediaError: Error, Sendable {
 public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unchecked Sendable {
     public weak var delegate: MediaSessionDelegate?
     private let webrtc: WebRTCSession
-    private var capturer: ScreenCapturer?
+    private var source: FrameSource?
     private let config: AgentConfig
     private var announcedConnected = false
 
@@ -51,16 +51,22 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     }
 
     public func start() async throws -> MediaDisplay {
-        guard Permissions.screenRecordingGranted else {
-            Permissions.requestScreenRecording()
-            throw MediaError.screenRecordingDenied
-        }
         let webrtc = self.webrtc
-        let capturer = ScreenCapturer { pixelBuffer, time in
+        let handler: ScreenCapturer.FrameHandler = { pixelBuffer, time in
             webrtc.deliver(pixelBuffer: pixelBuffer, time: time)
         }
-        self.capturer = capturer
-        return try await capturer.start(maxLongEdge: config.maxLongEdge, fps: config.maxFramerate)
+        let source: FrameSource
+        if config.syntheticScreen {
+            source = SyntheticFrameSource(frameHandler: handler)
+        } else {
+            guard Permissions.screenRecordingGranted else {
+                Permissions.requestScreenRecording()
+                throw MediaError.screenRecordingDenied
+            }
+            source = ScreenCapturer(frameHandler: handler)
+        }
+        self.source = source
+        return try await source.start(maxLongEdge: config.maxLongEdge, fps: config.maxFramerate)
     }
 
     public func answer(offer: String) async throws -> String {
@@ -76,8 +82,8 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     }
 
     public func stop() async {
-        await capturer?.stop()
-        capturer = nil
+        await source?.stop()
+        source = nil
         webrtc.close()
     }
 
