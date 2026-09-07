@@ -807,8 +807,8 @@ These are the operational facts that decide whether the Mac Mini is reachable wh
 - **Display**: ScreenCaptureKit requires an attached display. A headless Mac Mini needs an HDMI dummy plug or a virtual display. Without one there is nothing to capture.
 - **Login session**: the agent runs as a LaunchAgent inside the logged-in user's session. It is not running at the login window. After a reboot you cannot log in remotely unless automatic login is enabled. Automatic login is incompatible with FileVault. Decide one way; see section 31.
 - **Sleep**: enable "Prevent automatic sleeping when the display is off" and "Wake for network access" in System Settings. The agent additionally holds `kIOPMAssertionTypePreventUserIdleSystemSleep` while a session is active. Enable "Start up automatically after a power failure".
-- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity. Ad-hoc signatures change every build and the grants vanish. Use a persistent signing identity from the first day, ideally a Developer ID, or at minimum a self-signed certificate created once in Keychain Access and reused. Notarization is only needed if the app is distributed.
-- **LaunchAgent**: `KeepAlive` true, `RunAtLoad` true, so the agent survives crashes and comes back after login.
+- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity. Ad-hoc signatures change every build and the grants vanish. Use a persistent signing identity from the first day, ideally a Developer ID, or at minimum a self-signed certificate created once and reused. `scripts/make-signing-identity.sh` creates one and `scripts/build-apps.sh` signs with it. Notarization is only needed if the app is distributed.
+- **LaunchAgent**: `KeepAlive` true, `RunAtLoad` true, so the agent survives crashes and comes back after login. `scripts/install-launch-agent.sh` installs it.
 
 ---
 

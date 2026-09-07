@@ -3,18 +3,25 @@
 The host side of PRC: embedded signaling endpoint, pairing, mutual session authentication,
 ScreenCaptureKit into libwebrtc, and CGEvent input injection. Spec sections 4.1, 7, 8, 12 to 15, 20, 21.
 
-Two targets:
+Three targets:
 
-- `PRCAgentCore`: everything, as a library the menu bar app will link later.
-- `prc-agent`: a headless development runner that prints events and takes commands on stdin.
+- `PRCAgentCore`: everything, as a library.
+- `prc-agent-app`: the menu bar app (spec section 19). Remote Access switch, active session with
+  Disconnect, trusted devices with Revoke, a pairing window with QR code and fingerprint approval,
+  permission warnings with links to System Settings, notifications when bundled.
+- `prc-agent`: a headless runner that prints events and takes commands on stdin, for development,
+  the browser harness, and `npm run e2e`.
 
 ## Build and run
 
 ```sh
 cd apps/mac-agent
 swift build
-swift run prc-agent --file-identity
+swift run prc-agent-app --file-identity      # menu bar app, development mode
+swift run prc-agent --file-identity          # headless runner
 ```
+
+For daily use build a real app bundle instead; see "App bundle, signing, and start at login" below.
 
 Options:
 
@@ -47,6 +54,31 @@ end               end the active session
 status            permissions, remote access, session, port
 quit
 ```
+
+## App bundle and start at login
+
+```sh
+scripts/build-apps.sh              # dist/PRC Agent.app and dist/PRC Controller.app, ad-hoc signed
+scripts/install-launch-agent.sh    # copies the agent to ~/Applications and starts it at login
+```
+
+No certificate, Apple account, or notarization is involved: this is personal use and the apps
+never leave your machines. The one consequence of ad-hoc signing is that macOS remembers the
+Screen Recording and Accessibility grants by code signature, and an ad-hoc signature changes with
+every build. After you rebuild and reinstall the agent, grant both permissions again; the panel
+shows a warning with a button to the right System Settings pane until you do.
+
+If that chore ever gets old, `scripts/make-signing-identity.sh` creates a free local self-signed
+identity (no Apple involvement) and `PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh`
+signs with it, after which the grants survive rebuilds. Optional.
+
+The LaunchAgent uses `RunAtLoad` and `KeepAlive`, so the agent starts at login and restarts after a
+crash (spec section 18). Logs go to `~/Library/Logs/PRC`. `scripts/uninstall-launch-agent.sh`
+removes it and leaves trusted devices and settings in place.
+
+The bundled app keeps its identity in the Keychain, backed by the Secure Enclave when available.
+Trusted devices and settings live in `~/Library/Application Support/PRC`. Settings are in the panel's
+Settings section and apply after a relaunch.
 
 ## Permissions
 
@@ -128,7 +160,6 @@ messages both ways. No permission is needed for any of them, so they run anywher
 
 ## Known limits at this step
 
-- No menu bar UI yet. Approval and the kill switch are stdin commands.
 - No rendezvous client. LAN and Tailscale paths only.
 - The cursor is baked into the video. Local cursor rendering is Phase 2.
 - One display, the main one.

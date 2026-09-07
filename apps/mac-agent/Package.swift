@@ -11,6 +11,7 @@ let package = Package(
     products: [
         .library(name: "PRCAgentCore", targets: ["PRCAgentCore"]),
         .executable(name: "prc-agent", targets: ["prc-agent"]),
+        .executable(name: "prc-agent-app", targets: ["prc-agent-app"]),
     ],
     dependencies: [
         .package(name: "PRCSwift", path: "../../packages/swift"),
@@ -27,6 +28,7 @@ let package = Package(
             swiftSettings: mode
         ),
         .executableTarget(name: "prc-agent", dependencies: ["PRCAgentCore"], swiftSettings: mode),
+        .executableTarget(name: "prc-agent-app", dependencies: ["PRCAgentCore"], swiftSettings: mode),
         .testTarget(name: "PRCAgentCoreTests", dependencies: ["PRCAgentCore", .product(name: "WebRTC", package: "WebRTC")], swiftSettings: mode),
     ]
 )

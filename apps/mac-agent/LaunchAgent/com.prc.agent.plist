@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.prc.agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__APP_PATH__/Contents/MacOS/prc-agent-app</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>__LOG_DIR__/prc-agent.log</string>
+  <key>StandardErrorPath</key><string>__LOG_DIR__/prc-agent.err.log</string>
+</dict>
+</plist>

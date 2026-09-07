@@ -16,13 +16,14 @@ packages/swift         Swift package used by the Mac agent and Mac controller
   PRCIdentity          P-256 keys in Secure Enclave or Keychain, signing, encodings
   PRCProtocol          Envelope signing and receiver rules, typed payloads, pairing, server auth
 apps/mac-agent         Mac Mini agent (Swift): signaling server, pairing, sessions,
-                       ScreenCaptureKit + libwebrtc, input injection, headless CLI
+                       ScreenCaptureKit + libwebrtc, input injection, menu bar app, headless CLI
 apps/mac-controller    MacBook controller (Swift): discovery, pairing, session with
                        reconnection, WebRTC receiver, input capture, SwiftUI app
 apps/android-controller Android controller (Kotlin)                [pending]
 services/rendezvous    Cloud signaling relay (Node, TypeScript)    [pending]
 tools/web-harness      Browser test client, development only
 tools/e2e              Headless end-to-end test driving the real agent from Node
+scripts/               App bundles, signing identity, LaunchAgent install
 infra/                 Docker, coturn, reverse proxy               [pending]
 ```
 
@@ -40,6 +41,16 @@ cd apps/mac-agent && swift test            # agent: flows, WebSocket server, Web
 cd apps/mac-controller && swift test       # controller, including an in-process agent round trip with video
 npm run e2e                                # headless end to end against the real agent binary
 ```
+
+Real use, as apps:
+
+```sh
+scripts/build-apps.sh              # dist/PRC Agent.app (menu bar) and dist/PRC Controller.app, no certificate needed
+scripts/install-launch-agent.sh    # agent starts at login on the Mac mini
+```
+
+After a rebuild, macOS asks for the agent's Screen Recording and Accessibility permissions again
+(ad-hoc signatures change per build). The optional `scripts/make-signing-identity.sh` avoids that.
 
 Two real machines: run the agent on one, then on the other
 `swift run prc-controller-cli discover`, `pair`, and `connect` (see the controller README).

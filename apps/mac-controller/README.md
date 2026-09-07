@@ -24,8 +24,8 @@ swift run prc-controller --file-identity
 | `--data-dir <path>` | Where paired hosts live. Default `~/Library/Application Support/PRC Controller` |
 | `--file-identity` | **Development only.** Software identity in `<data-dir>/identity.key` instead of the Keychain and Secure Enclave, so rebuilt ad-hoc binaries do not prompt for Keychain access. |
 
-No macOS permissions are needed. The window is a plain SwiftUI app; a signed `.app` bundle comes
-with the menu bar work in a later step.
+No macOS permissions are needed. `scripts/build-apps.sh` at the repo root produces
+`dist/PRC Controller.app`, ad-hoc signed; no certificate is needed for personal use.
 
 ## Using it
 
@@ -99,4 +99,3 @@ rejected and an unreachable host ends cleanly. About one second, no permissions.
 - Video shows the host's cursor baked into the stream. Local cursor rendering is Phase 2.
 - Cmd+Tab and other OS-level shortcuts cannot be captured; use the toolbar.
 - No rendezvous client. LAN, direct addresses, and Tailscale only.
-- Not yet a signed `.app` bundle.

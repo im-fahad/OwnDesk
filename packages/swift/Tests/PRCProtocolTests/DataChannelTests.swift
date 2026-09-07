@@ -96,7 +96,7 @@ import Testing
 }
 
 @Suite struct KeyCodeTableTests {
-    @Test func bundledTableMatchesProtocolPackage() throws {
+    @Test func generatedTableMatchesProtocolPackage() throws {
         struct File: Decodable { let codes: [String: UInt16] }
         let source = Vectors.directory.deletingLastPathComponent().appendingPathComponent("keycodes/w3c-to-macos.json")
         let expected = try JSONDecoder().decode(File.self, from: Data(contentsOf: source)).codes
