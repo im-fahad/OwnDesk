@@ -42,6 +42,8 @@ Run the agent and try it from a browser (see [apps/mac-agent/README.md](apps/mac
 ```sh
 cd apps/mac-agent && swift run prc-agent --file-identity   # terminal 1
 npm run harness                                             # terminal 2, then open http://127.0.0.1:8080/
+npm run harness -- --host 0.0.0.0                           # instead, to open it from another machine
+                                                            # at the LAN URL the server prints
 ```
 
 Regenerate test vectors and generated types after changing a schema:

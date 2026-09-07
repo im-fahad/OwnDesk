@@ -3,7 +3,8 @@
   "private": true,
   "description": "Personal Remote Control System: private, self-hosted remote control for a Mac Mini.",
   "workspaces": [
-    "packages/protocol"
+    "packages/protocol",
+    "tools/web-harness"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",

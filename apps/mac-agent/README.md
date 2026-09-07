@@ -62,8 +62,12 @@ restart the agent. Without Screen Recording, a controller that authenticates get
 
 1. Start the agent: `swift run prc-agent --file-identity`. Note the fingerprint it prints.
 2. Serve the harness from the repo root: `npm run harness`, then open http://127.0.0.1:8080/ in Safari
-   or Chrome. To test from another machine on the LAN, use `npm run harness -- --host 0.0.0.0` and open
-   the page from that machine.
+   or Chrome on this Mac.
+
+   To test from another machine on the LAN, start it with `npm run harness -- --host 0.0.0.0`. The
+   server prints this Mac's LAN URLs, for example `http://192.168.1.50:8080/`. Open one of those on
+   the other machine. `0.0.0.0` is the listen address and cannot be browsed to. If the page does not
+   load from the other machine, allow `node` in System Settings > Network > Firewall on this Mac.
 3. In the agent, type `pair`. Copy the JSON line it prints into the harness's QR payload box and click Pair.
 4. The agent prints the controller's fingerprint. The harness shows its own fingerprint. If they match,
    type `y` in the agent.
@@ -72,6 +76,10 @@ restart the agent. Without Screen Recording, a controller that authenticates get
 6. Move the mouse over the video and click. Type with the video focused. Send a text event.
 
 `pair` payloads expire after 120 seconds and after one attempt.
+
+The harness does its signing with the pure-JavaScript noble libraries rather than WebCrypto, because
+browsers disable WebCrypto on plain `http://` pages that are not localhost, and the page has to stay
+plain http so it can open the agent's `ws://` endpoint.
 
 ## What is where
 

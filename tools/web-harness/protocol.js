@@ -1,9 +1,16 @@
-// Browser port of the protocol essentials. Development harness only: the identity key is an
-// extractable WebCrypto key persisted as JWK in localStorage, which a real controller must never do.
+// Browser port of the protocol essentials. Development harness only: the identity key is a plain
+// 32-byte scalar persisted in localStorage, which a real controller must never do.
+//
+// Crypto comes from the audited pure-JavaScript noble libraries instead of WebCrypto, because
+// browsers switch WebCrypto off on plain http:// pages that are not localhost, and the harness
+// must load over plain http from other machines on the LAN (an https page could not open the
+// agent's ws:// endpoint).
+import { p256 } from '@noble/curves/p256.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hmac } from '@noble/hashes/hmac.js';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const subtle = crypto.subtle;
 
 export const PROTOCOL_VERSION = 1;
 export const SIGNALING_CONTEXT = 'prc-signaling-v1';
@@ -28,13 +35,18 @@ export function hex(bytes) {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function sha256(bytes) {
-  return new Uint8Array(await subtle.digest('SHA-256', bytes));
+export function unhex(s) {
+  if (!/^([0-9a-f]{2})*$/.test(s)) throw new Error('invalid hex');
+  return Uint8Array.from(s.match(/../g) ?? [], (h) => parseInt(h, 16));
+}
+
+export async function sha256Bytes(bytes) {
+  return sha256(bytes);
 }
 
 export async function deviceIdFromPublicKey(raw) {
   if (raw.length !== 65 || raw[0] !== 4) throw new Error('invalid public key');
-  return hex(await sha256(raw));
+  return hex(sha256(raw));
 }
 
 export function fingerprint(deviceId) {
@@ -42,27 +54,26 @@ export function fingerprint(deviceId) {
   return `${h.slice(0, 4)}-${h.slice(4, 8)}-${h.slice(8, 12)}`;
 }
 
-const KEY_PARAMS = { name: 'ECDSA', namedCurve: 'P-256' };
-const SIGN_PARAMS = { name: 'ECDSA', hash: 'SHA-256' };
-
+/** Public keys are passed around as the raw 65-byte X9.63 point. This validates and returns it. */
 export async function importPublicKey(raw) {
-  return subtle.importKey('raw', raw, KEY_PARAMS, true, ['verify']);
+  if (raw.length !== 65 || raw[0] !== 4) throw new Error('invalid public key');
+  p256.ProjectivePoint.fromHex(raw); // throws if the point is not on the curve
+  return raw;
 }
 
 export async function loadIdentity(storageKey = 'prc.identity') {
-  let jwk = null;
-  try { jwk = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch { jwk = null; }
-  if (!jwk) {
-    const kp = await subtle.generateKey(KEY_PARAMS, true, ['sign', 'verify']);
-    jwk = await subtle.exportKey('jwk', kp.privateKey);
-    localStorage.setItem(storageKey, JSON.stringify(jwk));
+  let priv = null;
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (stored && /^[0-9a-f]{64}$/.test(stored)) priv = unhex(stored);
+  } catch { priv = null; }
+  if (!priv) {
+    priv = p256.utils.randomPrivateKey();
+    localStorage.setItem(storageKey, hex(priv));
   }
-  const { d, key_ops, ...pub } = jwk;
-  const privateKey = await subtle.importKey('jwk', { ...jwk, key_ops: ['sign'] }, KEY_PARAMS, false, ['sign']);
-  const publicKey = await subtle.importKey('jwk', { ...pub, key_ops: ['verify'] }, KEY_PARAMS, true, ['verify']);
-  const publicKeyRaw = new Uint8Array(await subtle.exportKey('raw', publicKey));
+  const publicKeyRaw = p256.getPublicKey(priv, false);
   const deviceId = await deviceIdFromPublicKey(publicKeyRaw);
-  return { privateKey, publicKey, publicKeyRaw, publicKeyB64: b64url(publicKeyRaw), deviceId, fingerprint: fingerprint(deviceId) };
+  return { privateKey: priv, publicKey: publicKeyRaw, publicKeyRaw, publicKeyB64: b64url(publicKeyRaw), deviceId, fingerprint: fingerprint(deviceId) };
 }
 
 export function resetIdentity(storageKey = 'prc.identity') {
@@ -81,26 +92,35 @@ export function decodePayload(payload) {
   return JSON.parse(dec.decode(unb64url(payload)));
 }
 
-export async function signEnvelope(unsigned, privateKey) {
-  const sig = new Uint8Array(await subtle.sign(SIGN_PARAMS, privateKey, signingInput(unsigned)));
-  return { ...unsigned, sig: b64url(sig) };
+/** ECDSA P-256 over SHA-256, raw r||s. Low-S is not required by the protocol, so verify accepts both. */
+export function sign(privateKey, data) {
+  return p256.sign(sha256(data), privateKey).toCompactRawBytes();
 }
 
-export async function verifyEnvelope(env, publicKey) {
+export function verify(publicKeyRaw, data, signature) {
+  if (signature.length !== 64) return false;
+  try {
+    return p256.verify(signature, sha256(data), publicKeyRaw, { lowS: false });
+  } catch {
+    return false;
+  }
+}
+
+export async function signEnvelope(unsigned, privateKey) {
+  return { ...unsigned, sig: b64url(sign(privateKey, signingInput(unsigned))) };
+}
+
+export async function verifyEnvelope(env, publicKeyRaw) {
   try {
     const { sig, ...unsigned } = env;
-    const bytes = unb64url(sig);
-    if (bytes.length !== 64) return false;
-    return await subtle.verify(SIGN_PARAMS, publicKey, bytes, signingInput(unsigned));
+    return verify(publicKeyRaw, signingInput(unsigned), unb64url(sig));
   } catch {
     return false;
   }
 }
 
 export async function pairingProof(codeBytes, pairingSessionId, controllerDeviceId) {
-  const key = await subtle.importKey('raw', codeBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = new Uint8Array(await subtle.sign('HMAC', key, enc.encode(`${PAIRING_CONTEXT}\n${pairingSessionId}\n${controllerDeviceId}`)));
-  return b64url(mac);
+  return b64url(hmac(sha256, codeBytes, enc.encode(`${PAIRING_CONTEXT}\n${pairingSessionId}\n${controllerDeviceId}`)));
 }
 
 export function randomB64url(n = 16) {
