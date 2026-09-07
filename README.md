@@ -17,7 +17,8 @@ packages/swift         Swift package used by the Mac agent and Mac controller
   PRCProtocol          Envelope signing and receiver rules, typed payloads, pairing, server auth
 apps/mac-agent         Mac Mini agent (Swift): signaling server, pairing, sessions,
                        ScreenCaptureKit + libwebrtc, input injection, headless CLI
-apps/mac-controller    MacBook controller (Swift)                  [pending]
+apps/mac-controller    MacBook controller (Swift): discovery, pairing, session with
+                       reconnection, WebRTC receiver, input capture, SwiftUI app
 apps/android-controller Android controller (Kotlin)                [pending]
 services/rendezvous    Cloud signaling relay (Node, TypeScript)    [pending]
 tools/web-harness      Browser test client, development only
@@ -36,14 +37,26 @@ npm run typecheck
 
 cd packages/swift && swift test            # Swift package against the same vectors
 cd apps/mac-agent && swift test            # agent: flows, WebSocket server, WebRTC loopback
+cd apps/mac-controller && swift test       # controller, including an in-process agent round trip with video
 npm run e2e                                # headless end to end against the real agent binary
 ```
+
+Two real machines: run the agent on one, then on the other
+`swift run prc-controller-cli discover`, `pair`, and `connect` (see the controller README).
+Measured on a Wi-Fi LAN between a Mac mini and a MacBook Pro: 1920x1080 within two seconds,
+52 to 56 fps, 8 to 12 ms round trip.
 
 Run the agent and try it from a browser (see [apps/mac-agent/README.md](apps/mac-agent/README.md)):
 
 ```sh
-cd apps/mac-agent && swift run prc-agent --file-identity   # terminal 1
-npm run harness                                             # terminal 2, then open http://127.0.0.1:8080/
+cd apps/mac-agent && swift run prc-agent --file-identity          # terminal 1, on the host
+cd apps/mac-controller && swift run prc-controller --file-identity # terminal 2, on the MacBook
+```
+
+Or from a browser instead of the controller app (see [apps/mac-agent/README.md](apps/mac-agent/README.md)):
+
+```sh
+npm run harness                                             # then open http://127.0.0.1:8080/
 npm run harness -- --host 0.0.0.0                           # instead, to open it from another machine
                                                             # at the LAN URL the server prints
 ```

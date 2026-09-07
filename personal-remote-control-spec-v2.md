@@ -780,6 +780,8 @@ Expected results:
 
 The controller may send `stream_settings` to lower the caps, for instance on a metered mobile connection. Phase 2 can add an explicit quality policy on top of the stats API if the defaults prove insufficient.
 
+The bandwidth estimator starts near zero and ramps slowly, which measured as thirty seconds at 640x360 on a LAN. The host therefore seeds the estimate from the path the controller declared in `SESSION_REQUEST`: 6 Mbps start with a 20 Mbps cap on the `lan` path, 1.5 Mbps start with an 8 Mbps cap on the `cloud` path. With the seed a LAN session reaches 1920x1080 within about two seconds.
+
 ---
 
 ## 17. LAN discovery

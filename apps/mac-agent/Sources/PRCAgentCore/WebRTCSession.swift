@@ -29,9 +29,26 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
     private let capturer: RTCVideoCapturer
     private let videoTrack: RTCVideoTrack
     private let videoSender: RTCRtpSender
-    private let maxBitrateBps: Int
+    private var maxBitrateBps: Int
     private let maxFramerate: Int
+    private var startBitrateBps: Int
     private var channels: [ChannelLabel: RTCDataChannel] = [:]
+
+    /// Spec section 15: 20 Mbps cap on the LAN path, 8 Mbps on the cloud path. The start bitrate seeds
+    /// libwebrtc's bandwidth estimate so a LAN session does not spend half a minute at 640x360.
+    public static func bitrates(for path: ConnectionPath, cap: Int) -> (start: Int, max: Int) {
+        switch path {
+        case .lan: return (min(6_000_000, cap), cap)
+        case .cloud: return (min(1_500_000, cap, 8_000_000), min(cap, 8_000_000))
+        }
+    }
+
+    public func setPath(_ path: ConnectionPath) {
+        let b = WebRTCSession.bitrates(for: path, cap: configuredMaxBitrateBps)
+        startBitrateBps = b.start
+        maxBitrateBps = b.max
+    }
+    private let configuredMaxBitrateBps: Int
     private let lock = NSLock()
 
     public weak var delegate: WebRTCSessionDelegate?
@@ -54,7 +71,10 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
         // Adding the track before the offer arrives lets libwebrtc bind it to the offer's video m-line.
         guard let sender = pc.add(videoTrack, streamIds: ["screen"]) else { throw WebRTCError.peerConnectionUnavailable }
         videoSender = sender
-        self.maxBitrateBps = maxBitrateBps
+        self.configuredMaxBitrateBps = maxBitrateBps
+        let b = WebRTCSession.bitrates(for: .lan, cap: maxBitrateBps)
+        self.startBitrateBps = b.start
+        self.maxBitrateBps = b.max
         self.maxFramerate = maxFramerate
         super.init()
         pc.delegate = self
@@ -118,6 +138,7 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
         }
         params.degradationPreference = NSNumber(value: RTCDegradationPreference.balanced.rawValue)
         videoSender.parameters = params
+        pc.setBweMinBitrateBps(nil, currentBitrateBps: NSNumber(value: startBitrateBps), maxBitrateBps: NSNumber(value: maxBitrateBps))
     }
 
     // MARK: Data out

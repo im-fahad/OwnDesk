@@ -32,6 +32,7 @@ public actor SessionCoordinator {
         let clientNonce: String
         let hostNonce: String
         let expiresAt: Int64
+        let path: ConnectionPath
         var state: SessionState
         var connection: ConnectionID?
         var signalingUp = true
@@ -269,7 +270,7 @@ public actor SessionCoordinator {
         let t = now()
         session = HostSession(
             id: sessionId, deviceId: env.from, deviceName: device.name, clientNonce: p.client_nonce, hostNonce: hostNonce,
-            expiresAt: t + Int64(Limits.sessionLifetimeHours) * 3_600_000, state: .challenged, connection: connection,
+            expiresAt: t + Int64(Limits.sessionLifetimeHours) * 3_600_000, path: p.path, state: .challenged, connection: connection,
             lastActivity: t, lastInput: t, media: nil, display: MediaDisplay.main(), malformedWindowStart: t
         )
         let challenge = SessionChallengePayload(host_nonce: hostNonce, client_nonce: p.client_nonce, session_id: sessionId, version: Envelope.protocolVersion, expires_at: session!.expiresAt)
@@ -306,6 +307,7 @@ public actor SessionCoordinator {
             do {
                 let media = try factory()
                 media.delegate = mediaBridge
+                media.setPath(s.path)
                 s.display = try await media.start()
                 s.media = media
             } catch {
@@ -577,23 +579,24 @@ public actor SessionCoordinator {
     }
 }
 
-/// Hops media callbacks from WebRTC threads into the actor.
+/// Hops media callbacks from WebRTC threads into the actor, preserving their order.
 final class MediaBridge: MediaSessionDelegate, @unchecked Sendable {
     weak var coordinator: SessionCoordinator?
+    private let queue = OrderedExecutor()
 
     func media(didGenerateCandidate candidate: IceCandidatePayload) {
-        Task { await coordinator?.mediaCandidate(candidate) }
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaCandidate(candidate) }
     }
     func media(didChangeState state: MediaConnectionState) {
-        Task { await coordinator?.mediaState(state) }
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaState(state) }
     }
     func media(didOpenChannel label: ChannelLabel) {
-        Task { await coordinator?.mediaChannelOpened(label) }
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaChannelOpened(label) }
     }
     func media(didReceive frame: DataChannelFrame, on label: ChannelLabel) {
-        Task { await coordinator?.mediaFrame(frame, on: label) }
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaFrame(frame, on: label) }
     }
     func media(didRejectMessage error: DataChannelError) {
-        Task { await coordinator?.mediaRejected(error) }
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaRejected(error) }
     }
 }

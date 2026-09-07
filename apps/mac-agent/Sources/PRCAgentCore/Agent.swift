@@ -60,17 +60,21 @@ public final class Agent: @unchecked Sendable {
 
 final class ServerBridge: SignalingServerDelegate, @unchecked Sendable {
     let coordinator: SessionCoordinator
+    private let queue = OrderedExecutor()
     init(coordinator: SessionCoordinator) { self.coordinator = coordinator }
 
     func signaling(_ server: SignalingServer, didOpen id: ConnectionID, remote: String) {
         Log.signaling.info("connection from \(remote, privacy: .public)")
-        Task { await coordinator.connectionOpened(id) }
+        let coordinator = self.coordinator
+        queue.enqueue { await coordinator.connectionOpened(id) }
     }
     func signaling(_ server: SignalingServer, didReceive text: String, from id: ConnectionID) {
-        Task { await coordinator.handleText(text, from: id) }
+        let coordinator = self.coordinator
+        queue.enqueue { await coordinator.handleText(text, from: id) }
     }
     func signaling(_ server: SignalingServer, didClose id: ConnectionID) {
-        Task { await coordinator.connectionClosed(id) }
+        let coordinator = self.coordinator
+        queue.enqueue { await coordinator.connectionClosed(id) }
     }
 }
 

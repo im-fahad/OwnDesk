@@ -78,6 +78,7 @@ import Testing
         #expect(accept.resume_window_s == 600)
         let media = try #require(h.media.get())
         #expect(media.started)
+        #expect(media.path == .lan)
         #expect(h.input.displays.last?.displayID == 7)
 
         let answers = try await h.send(.sdpOffer(SdpOfferPayload(sdp: "v=0\r\noffer\r\n", ice_restart: false)), session: sessionId)

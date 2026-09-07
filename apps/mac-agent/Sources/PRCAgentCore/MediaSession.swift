@@ -22,6 +22,8 @@ public protocol MediaSessionDelegate: AnyObject, Sendable {
 /// The coordinator's view of screen capture plus WebRTC. Injected so tests can run without either.
 public protocol MediaSession: AnyObject, Sendable {
     var delegate: MediaSessionDelegate? { get set }
+    /// The path the controller declared in SESSION_REQUEST. Sets bitrate limits (spec section 15).
+    func setPath(_ path: ConnectionPath)
     /// Starts capture and prepares the peer connection. Returns the display being streamed.
     func start() async throws -> MediaDisplay
     func answer(offer: String) async throws -> String
@@ -48,6 +50,10 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
         self.config = config
         webrtc = try WebRTCSession(iceServers: [], maxBitrateBps: config.maxBitrateBps, maxFramerate: config.maxFramerate)
         webrtc.delegate = self
+    }
+
+    public func setPath(_ path: ConnectionPath) {
+        webrtc.setPath(path)
     }
 
     public func start() async throws -> MediaDisplay {

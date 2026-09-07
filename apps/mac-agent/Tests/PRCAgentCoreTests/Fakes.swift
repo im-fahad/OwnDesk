@@ -33,6 +33,9 @@ final class FakeMediaSession: MediaSession, @unchecked Sendable {
     var candidates: [IceCandidatePayload] = []
     var sent: [DataChannelMessage] = []
     var failStart = false
+    var path: ConnectionPath?
+
+    func setPath(_ path: ConnectionPath) { lock.withLock { self.path = path } }
 
     static let display = MediaDisplay(displayID: 7, pointBounds: CGRect(x: 0, y: 0, width: 1920, height: 1080), scale: 2, pixelSize: CGSize(width: 3840, height: 2160), captureSize: CGSize(width: 1920, height: 1080))
 

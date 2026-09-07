@@ -28,10 +28,15 @@ public enum NetworkInterfaces {
                 out.append("[\(ip)]:\(port)")
             }
         }
-        // IPv4 first: it is what most people will type or scan.
+        // Local network first, then overlay networks such as Tailscale's 100.64/10, then IPv6.
+        func rank(_ address: String) -> Int {
+            if address.hasPrefix("[") { return 2 }
+            if address.hasPrefix("100."), let second = Int(address.split(separator: ".")[1]), (64...127).contains(second) { return 1 }
+            return 0
+        }
         return out.sorted { a, b in
-            let a4 = !a.hasPrefix("["), b4 = !b.hasPrefix("[")
-            return a4 != b4 ? a4 : a < b
+            let ra = rank(a), rb = rank(b)
+            return ra != rb ? ra < rb : a < b
         }
     }
 }
