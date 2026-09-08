@@ -15,7 +15,10 @@ public final class Agent: @unchecked Sendable {
     public var events: AsyncStream<AgentEvent> { coordinator.events }
     public var port: UInt16 { server.port }
 
-    public init(config: AgentConfig, identity: (any SigningIdentity)? = nil, mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil) throws {
+    /// `peers` is injected by the merged app so the hosting and controlling halves share one list.
+    /// When it is nil the agent owns its own and imports any legacy stores.
+    public init(config: AgentConfig, identity: (any SigningIdentity)? = nil, peers: PeerStore? = nil,
+                mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil) throws {
         self.config = config
         if let identity {
             self.identity = identity
@@ -24,10 +27,16 @@ public final class Agent: @unchecked Sendable {
         } else {
             self.identity = try IdentityStore.loadOrCreate(service: config.keychainService)
         }
-        peers = try PeerStore(directory: config.dataDirectory)
-        // A device that used to run the separate agent and controller apps keeps its pairings.
-        PeerMigration.importLegacy(into: peers, agentDirectory: config.dataDirectory, controllerDirectory: config.legacyControllerDirectory, now: nowMs())
+        if let peers {
+            self.peers = peers
+        } else {
+            let store = try PeerStore(directory: config.dataDirectory)
+            // A device that used to run the separate agent and controller apps keeps its pairings.
+            PeerMigration.importLegacy(into: store, agentDirectory: config.dataDirectory, controllerDirectory: config.legacyControllerDirectory, now: nowMs())
+            self.peers = store
+        }
 
+        let peers = self.peers
         let advertisement: SignalingServer.Advertisement? = config.advertiseBonjour
             ? .init(name: config.hostName, type: config.serviceType, txt: ["id": self.identity.deviceId, "name": config.hostName, "proto": String(Envelope.protocolVersion)])
             : nil

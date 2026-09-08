@@ -1,8 +1,8 @@
 #!/bin/bash
 # Builds "PRC Agent.app" and "PRC Controller.app" into dist/.
 #
-#   scripts/build-apps.sh                       both apps, release build, ad-hoc signature
-#   scripts/build-apps.sh controller            just one of them (agent | controller | all)
+#   scripts/build-apps.sh                       the merged app, release build, ad-hoc signature
+#   scripts/build-apps.sh all                   also the two older split apps (prc | agent | controller | all)
 #   PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh
 #   CONFIG=debug scripts/build-apps.sh
 #
@@ -69,17 +69,23 @@ PLIST
   echo "built $app  [$signer]"
 }
 
-WHAT="${1:-all}"
+WHAT="${1:-prc}"
 case "$WHAT" in
-  agent|controller|all) ;;
-  *) echo "usage: $0 [agent|controller|all]"; exit 2 ;;
+  prc|agent|controller|all) ;;
+  *) echo "usage: $0 [prc|agent|controller|all]"; exit 2 ;;
 esac
 
-if [ "$WHAT" != "controller" ]; then
+if [ "$WHAT" = "prc" ] || [ "$WHAT" = "all" ]; then
+  build apps/prc prc
+  # LSUIElement: it lives in the menu bar and only claims a Dock icon while a window is open.
+  bundle "PRC" prc apps/prc com.prc.app true
+fi
+
+if [ "$WHAT" = "agent" ] || [ "$WHAT" = "all" ]; then
   build apps/mac-agent prc-agent-app
   bundle "PRC Agent" prc-agent-app apps/mac-agent com.prc.agent true
 fi
-if [ "$WHAT" != "agent" ]; then
+if [ "$WHAT" = "controller" ] || [ "$WHAT" = "all" ]; then
   build apps/mac-controller prc-controller
   bundle "PRC Controller" prc-controller apps/mac-controller com.prc.controller false
 fi
