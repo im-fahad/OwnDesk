@@ -21,7 +21,40 @@ enum Theme {
     static let warn = Color(hex: 0xD29922)
     static let danger = Color(hex: 0xF85149)
 
-    static let mono = Font.system(.caption, design: .monospaced)
+    // Sizes follow an editor's chrome: 13 for primary UI, 12 for secondary, 11 for status and
+    // section headings. Smaller than this reads as cramped on a Retina display.
+    static let ui = Font.system(size: 13)
+    static let uiMedium = Font.system(size: 13, weight: .medium)
+    static let uiSecondary = Font.system(size: 12)
+    static let uiSmall = Font.system(size: 11)
+    static let section = Font.system(size: 11, weight: .semibold)
+    static let mono = Font.system(size: 12, design: .monospaced)
+    static let monoSmall = Font.system(size: 11, design: .monospaced)
+    static let monoLarge = Font.system(size: 15, design: .monospaced)
+
+    /// Height of the unified title bar. Room for the traffic lights plus a control.
+    static let headerHeight: CGFloat = 40
+    /// Left inset that keeps content clear of the traffic lights.
+    static let trafficLightInset: CGFloat = 78
+}
+
+/// Makes the window's title bar part of the content, so the header is the title bar rather than a
+/// second row beneath an empty one.
+struct WindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
+            window.backgroundColor = NSColor(Theme.content)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 extension Color {
@@ -47,9 +80,9 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(isOn ? Theme.text : Theme.textDim)
-                .frame(width: 26, height: 24)
+                .frame(width: 28, height: 26)
                 .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)
