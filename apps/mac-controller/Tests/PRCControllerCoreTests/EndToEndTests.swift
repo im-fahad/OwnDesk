@@ -129,6 +129,34 @@ enum E2E {
         await agent.stop()
     }
 
+    /// A duplicate or late SDP_ANSWER used to end the session with "Called in wrong state: stable".
+    /// On a lossy relay the reconnect loop could issue a second offer before the first was answered,
+    /// so this happened in ordinary use.
+    @Test func aSecondAnswerDoesNotKillTheSession() async throws {
+        let (agent, _) = try await E2E.startAgent(media: true)
+        let identity = SoftwareIdentity()
+        let qr = await agent.coordinator.openPairing()
+        let outcome = try await PairingClient(identity: identity, deviceName: "T").pair(qr: qr, preferredAddress: "127.0.0.1:\(agent.port)")
+
+        let session = SessionClient(.init(identity: identity, host: outcome.host, config: ControllerConfig(deviceName: "T", dataDirectory: E2E.tempDir())))
+        let states = Box<[SessionClient.State]>([])
+        let stream = session.events
+        Task { for await e in stream { if case .state(let s) = e { states.update { $0.append(s) } } } }
+        await session.connect(url: Endpoints.url(for: "127.0.0.1:\(agent.port)")!)
+        try await E2E.waitUntil(timeoutMs: 20000, "connected") {
+            states.get().contains { if case .connected = $0 { return true } else { return false } }
+        }
+
+        // Replay the answer the host already sent. The old code applied it and ended the session.
+        await session.replayLastAnswerForTest()
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        if case .connected = await session.state {} else {
+            Issue.record("a duplicate answer ended the session: \(await session.state)")
+        }
+        await session.disconnect()
+        await agent.stop()
+    }
+
     @Test func unpairedControllerIsRejected() async throws {
         let (agent, _) = try await E2E.startAgent(media: false)
         let identity = SoftwareIdentity()

@@ -60,6 +60,11 @@ public actor SessionClient {
     private var reconnectTask: Task<Void, Never>?
     private var reconnectStartedAt: Int64?
     private var handshakeTask: Task<Void, Never>?
+    /// True from sending an offer until its answer arrives. Renegotiating while one is outstanding
+    /// produces a second answer for an offer already applied, which libwebrtc rejects outright.
+    private var offerInFlight = false
+    private var offerSentAt: Int64 = 0
+    private var lastAnswerSdp: String?
     private var mediaStartedAt: Int64 = 0
     public private(set) var state: State = .idle
 
@@ -229,7 +234,7 @@ public actor SessionClient {
                 }
             case .sdpAnswer(let a):
                 guard env.session == sessionId else { return }
-                do { try await webrtc?.setAnswer(a.sdp) } catch { end("answer rejected: \(error)") }
+                await applyAnswer(a.sdp)
             case .iceCandidate(let c):
                 guard env.session == sessionId else { return }
                 webrtc?.add(candidate: c)
@@ -259,6 +264,33 @@ public actor SessionClient {
 
     // MARK: Media
 
+    /// A duplicate or late answer arrives when a lossy link made us renegotiate, or simply when the
+    /// host retransmitted. Applying one to a peer connection that is already stable throws, so treat
+    /// it as noise rather than a reason to drop a working session.
+    func applyAnswer(_ sdp: String) async {
+        offerInFlight = false
+        guard let webrtc, webrtc.isAwaitingAnswer else {
+            log("ignoring an answer we are no longer waiting for")
+            return
+        }
+        lastAnswerSdp = sdp
+        do { try await webrtc.setAnswer(sdp) } catch {
+            log("answer rejected: \(error)")
+            scheduleReconnect("answer rejected")
+        }
+    }
+
+    /// Test hook: re-deliver the answer the host already sent, as a lossy link can.
+    func replayLastAnswerForTest() async {
+        guard let sdp = lastAnswerSdp else { return }
+        await applyAnswer(sdp)
+    }
+
+    /// An offer is outstanding only while its answer could still arrive; after that a retry is fair.
+    private var offerOutstanding: Bool {
+        offerInFlight && now() - offerSentAt < 10_000
+    }
+
     private func startMedia() async {
         do {
             let client = try WebRTCClient(iceServers: deps.iceServerURLs.isEmpty ? [] : [RTCIceServer(urlStrings: deps.iceServerURLs)])
@@ -268,6 +300,8 @@ public actor SessionClient {
             for r in pendingRenderers { client.attach(renderer: r) }
             pendingRenderers.removeAll()
             let sdp = try await client.offer(iceRestart: false)
+            offerInFlight = true
+            offerSentAt = now()
             send(.sdpOffer(SdpOfferPayload(sdp: sdp, ice_restart: false)), session: sessionId)
         } catch {
             end("webrtc failed: \(error)")
@@ -276,8 +310,11 @@ public actor SessionClient {
 
     private func restartIce() async {
         guard let webrtc else { await startMedia(); return }
+        guard !offerOutstanding else { return }
         do {
             let sdp = try await webrtc.offer(iceRestart: true)
+            offerInFlight = true
+            offerSentAt = now()
             send(.sdpOffer(SdpOfferPayload(sdp: sdp, ice_restart: true)), session: sessionId)
         } catch {
             log("ice restart failed: \(error)")
@@ -289,6 +326,7 @@ public actor SessionClient {
         webrtc?.close()
         webrtc = nil
         mediaUp = false
+        offerInFlight = false
     }
 
     private func elapsed() -> Int64 { max(0, now() - mediaStartedAt) }
@@ -392,7 +430,7 @@ public actor SessionClient {
     }
 
     private func reconnectLoop() async {
-        var delayMs: UInt64 = 500
+        var delayMs: UInt64 = 2000
         while !ended, !Task.isCancelled {
             if let started = reconnectStartedAt, now() - started > Int64(deps.config.reconnectWindowSeconds) * 1000 {
                 end("could not reconnect within \(deps.config.reconnectWindowSeconds) s")

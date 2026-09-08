@@ -92,6 +92,8 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
     }
 
     public var connectionState: RTCPeerConnectionState { pc.connectionState }
+    /// `haveLocalOffer` means an answer is still expected. Anything else means one already arrived.
+    public var isAwaitingAnswer: Bool { pc.signalingState == .haveLocalOffer }
 
     // MARK: Data
 
