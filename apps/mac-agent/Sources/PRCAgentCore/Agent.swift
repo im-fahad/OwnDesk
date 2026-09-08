@@ -19,7 +19,7 @@ public final class Agent: @unchecked Sendable {
         if let identity {
             self.identity = identity
         } else if let file = config.identityFile {
-            self.identity = try FileIdentityStore.loadOrCreate(at: file)
+            self.identity = try FileBackedIdentityStore.loadOrCreate(at: file)
         } else {
             self.identity = try IdentityStore.loadOrCreate(service: config.keychainService)
         }
@@ -75,19 +75,5 @@ final class ServerBridge: SignalingServerDelegate, @unchecked Sendable {
     func signaling(_ server: SignalingServer, didClose id: ConnectionID) {
         let coordinator = self.coordinator
         queue.enqueue { await coordinator.connectionClosed(id) }
-    }
-}
-
-/// Development-only identity persistence: a raw P-256 scalar in a 0600 file. Production uses IdentityStore.
-public enum FileIdentityStore {
-    public static func loadOrCreate(at url: URL) throws -> any SigningIdentity {
-        if let data = try? Data(contentsOf: url) {
-            return try SoftwareIdentity(rawRepresentation: data)
-        }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let identity = SoftwareIdentity()
-        try identity.rawRepresentation.write(to: url, options: [.atomic])
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        return identity
     }
 }

@@ -20,7 +20,7 @@ enum PRCAgentCLI {
       --no-media          Signaling and sessions only, no capture or WebRTC
       --no-input          Never inject input, just validate it
       --no-bonjour        Do not advertise on the LAN
-      --file-identity     DEV ONLY: keep the identity key in <data-dir>/identity.key instead of the Keychain
+      --file-identity     DEV ONLY: keep the identity in <data-dir>/identity.json instead of the Keychain
       --synthetic-screen  TEST ONLY: stream a generated pattern instead of the screen (no Screen Recording needed)
       --help
 
@@ -63,7 +63,7 @@ enum PRCAgentCLI {
         }
 
         // Resolved after parsing so --data-dir applies regardless of flag order.
-        if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.key") }
+        if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
 
         let agent = try Agent(config: config)
         print("PRC agent")

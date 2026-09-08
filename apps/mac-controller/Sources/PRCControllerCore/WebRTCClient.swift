@@ -137,6 +137,67 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
         pc.close()
     }
 
+    /// What is actually arriving. Two samples a second apart, so the bitrate is measured rather than
+    /// guessed: it tells a bandwidth-limited stream from an encoder that is spending its bits on
+    /// frames instead of pixels.
+    public struct InboundVideoStats: Sendable {
+        public var kbps: Double
+        public var fps: Double
+        public var width: Int
+        public var height: Int
+        public var packetsLost: Int
+        public var freezeCount: Int
+    }
+
+    public func inboundVideoStats(sampleMs: Int = 1000, _ completion: @escaping @Sendable (InboundVideoStats?) -> Void) {
+        sampleInboundVideo { first in
+            guard let first else { completion(nil); return }
+            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(sampleMs)) { [weak self] in
+                guard let self else { completion(nil); return }
+                self.sampleInboundVideo { second in
+                    guard let second else { completion(nil); return }
+                    let seconds = max(second.timestampUs - first.timestampUs, 1) / 1_000_000
+                    let bits = Double(max(second.bytes - first.bytes, 0)) * 8
+                    let frames = Double(max(second.frames - first.frames, 0))
+                    completion(InboundVideoStats(
+                        kbps: bits / seconds / 1000,
+                        fps: frames / seconds,
+                        width: second.width,
+                        height: second.height,
+                        packetsLost: second.packetsLost,
+                        freezeCount: second.freezeCount))
+                }
+            }
+        }
+    }
+
+    private struct InboundSample {
+        var timestampUs: Double
+        var bytes: Int
+        var frames: Int
+        var width: Int
+        var height: Int
+        var packetsLost: Int
+        var freezeCount: Int
+    }
+
+    private func sampleInboundVideo(_ completion: @escaping @Sendable (InboundSample?) -> Void) {
+        pc.statistics { report in
+            guard let s = report.statistics.values.first(where: { $0.type == "inbound-rtp" && ($0.values["kind"] as? String) == "video" }) else {
+                completion(nil); return
+            }
+            let int = { (key: String) -> Int in (s.values[key] as? NSNumber)?.intValue ?? 0 }
+            completion(InboundSample(
+                timestampUs: s.timestamp_us,
+                bytes: int("bytesReceived"),
+                frames: int("framesDecoded"),
+                width: int("frameWidth"),
+                height: int("frameHeight"),
+                packetsLost: int("packetsLost"),
+                freezeCount: int("freezeCount")))
+        }
+    }
+
     /// Same rule as the agent (spec section 9.3).
     public func selectedPath(_ completion: @escaping @Sendable (String?) -> Void) {
         pc.statistics { report in

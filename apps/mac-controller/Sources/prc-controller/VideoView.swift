@@ -12,6 +12,7 @@ struct VideoView: NSViewRepresentable {
     func makeNSView(context: Context) -> VideoContainerView {
         let view = VideoContainerView()
         view.onMessage = { [weak model] message in model?.send(message) }
+        view.onVideoSize = { [weak model] size in model?.videoSize = size }
         model.attach(renderer: view.renderer)
         return view
     }
@@ -25,6 +26,8 @@ final class VideoContainerView: NSView, RTCVideoViewDelegate {
     var onMessage: ((DataChannelMessage) -> Void)? {
         didSet { overlay.onMessage = onMessage }
     }
+    /// The encoded size actually arriving, which is what "blurry" means: far below the host's display.
+    var onVideoSize: ((CGSize) -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -47,7 +50,10 @@ final class VideoContainerView: NSView, RTCVideoViewDelegate {
     }
 
     func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
-        DispatchQueue.main.async { self.overlay.geometry.videoSize = size }
+        DispatchQueue.main.async {
+            self.overlay.geometry.videoSize = size
+            self.onVideoSize?(size)
+        }
     }
 }
 

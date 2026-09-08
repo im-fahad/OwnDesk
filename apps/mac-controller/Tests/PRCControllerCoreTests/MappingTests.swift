@@ -59,6 +59,16 @@ import Testing
         #expect(!PathClassifier.isOverlay("100.128.0.1") && !PathClassifier.isOverlay("100.63.0.1") && !PathClassifier.isOverlay("192.168.1.1"))
     }
 
+    @Test func declaredPathTellsTheHostHowMuchBandwidthToAssume() {
+        // Tailscale addresses are private but may be relayed, so they must not claim LAN bandwidth.
+        #expect(SessionClient.path(forHost: "192.168.1.50") == .lan)
+        #expect(SessionClient.path(forHost: "10.0.0.5") == .lan)
+        #expect(SessionClient.path(forHost: "100.64.0.10") == .cloud)
+        #expect(SessionClient.path(forHost: "fd7a:115c:a1e0::a") == .cloud)
+        #expect(SessionClient.path(forHost: "203.0.113.5") == .cloud)
+        #expect(SessionClient.path(forHost: nil) == .cloud)
+    }
+
     @Test func endpointParsing() {
         #expect(Endpoints.url(for: "192.168.1.20:47500")?.absoluteString == "ws://192.168.1.20:47500/")
         #expect(Endpoints.url(for: "[fd7a:115c:a1e0::1]:47500")?.absoluteString == "ws://[fd7a:115c:a1e0::1]:47500/")

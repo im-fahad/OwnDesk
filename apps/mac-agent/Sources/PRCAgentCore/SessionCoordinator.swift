@@ -431,7 +431,7 @@ public actor SessionCoordinator {
         case .mouseMove, .mouseMoveRel, .mouseDown, .mouseUp, .scroll, .keyDown, .keyUp, .text:
             s.lastInput = t
             session = s
-            if deps.config.inputEnabled { deps.input?.inject(frame.message, now: t) }
+            if deps.config.inputEnabled { deps.input?.inject(frame.message, sentAt: frame.ts, now: t) }
         }
     }
 

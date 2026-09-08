@@ -43,6 +43,7 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     public weak var delegate: MediaSessionDelegate?
     private let webrtc: WebRTCSession
     private var source: FrameSource?
+    private var path: ConnectionPath = .lan
     private let config: AgentConfig
     private var announcedConnected = false
 
@@ -53,6 +54,7 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     }
 
     public func setPath(_ path: ConnectionPath) {
+        self.path = path
         webrtc.setPath(path)
     }
 
@@ -72,7 +74,8 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
             source = ScreenCapturer(frameHandler: handler)
         }
         self.source = source
-        return try await source.start(maxLongEdge: config.maxLongEdge, fps: config.maxFramerate)
+        // Capturing at the rate we intend to send saves encode work and keeps pacing honest.
+        return try await source.start(maxLongEdge: config.maxLongEdge, fps: WebRTCSession.framerate(for: path, cap: config.maxFramerate))
     }
 
     public func answer(offer: String) async throws -> String {

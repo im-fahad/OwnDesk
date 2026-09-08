@@ -76,17 +76,3 @@ public final class HostStore: @unchecked Sendable {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 }
-
-/// Development-only identity persistence, same as the agent's.
-public enum FileIdentityStore {
-    public static func loadOrCreate(at url: URL) throws -> any SigningIdentity {
-        if let data = try? Data(contentsOf: url) {
-            return try SoftwareIdentity(rawRepresentation: data)
-        }
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let identity = SoftwareIdentity()
-        try identity.rawRepresentation.write(to: url, options: [.atomic])
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        return identity
-    }
-}

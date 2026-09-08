@@ -59,7 +59,7 @@ final class RecordingInput: InputSink, @unchecked Sendable {
     var displays: [MediaDisplay] = []
     var released = 0
     func configure(display: MediaDisplay) { lock.lock(); displays.append(display); lock.unlock() }
-    func inject(_ message: DataChannelMessage, now: Int64) -> Bool { lock.lock(); injected.append(message); lock.unlock(); return true }
+    func inject(_ message: DataChannelMessage, sentAt: Int64, now: Int64) -> Bool { lock.lock(); injected.append(message); lock.unlock(); return true }
     func releaseAll() { lock.lock(); released += 1; lock.unlock() }
 }
 

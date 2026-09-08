@@ -30,23 +30,36 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
     private let videoTrack: RTCVideoTrack
     private let videoSender: RTCRtpSender
     private var maxBitrateBps: Int
-    private let maxFramerate: Int
+    private var minBitrateBps: Int
+    private var maxFramerate: Int
+    private let configuredMaxFramerate: Int
     private var startBitrateBps: Int
     private var channels: [ChannelLabel: RTCDataChannel] = [:]
 
     /// Spec section 15: 20 Mbps cap on the LAN path, 8 Mbps on the cloud path. The start bitrate seeds
     /// libwebrtc's bandwidth estimate so a LAN session does not spend half a minute at 640x360.
-    public static func bitrates(for path: ConnectionPath, cap: Int) -> (start: Int, max: Int) {
+    public static func bitrates(for path: ConnectionPath, cap: Int) -> (min: Int, start: Int, max: Int) {
         switch path {
-        case .lan: return (min(6_000_000, cap), cap)
-        case .cloud: return (min(1_500_000, cap, 8_000_000), min(cap, 8_000_000))
+        case .lan: return (min(1_000_000, cap), min(6_000_000, cap), cap)
+        case .cloud: return (min(600_000, cap), min(1_500_000, cap, 8_000_000), min(cap, 8_000_000))
+        }
+    }
+
+    /// Spec section 16 targets 1080p at 30 on a good Internet link. Half the frames means twice the
+    /// bits per frame, which is what makes a relayed picture sharp instead of soft.
+    public static func framerate(for path: ConnectionPath, cap: Int) -> Int {
+        switch path {
+        case .lan: return cap
+        case .cloud: return min(cap, 30)
         }
     }
 
     public func setPath(_ path: ConnectionPath) {
         let b = WebRTCSession.bitrates(for: path, cap: configuredMaxBitrateBps)
+        minBitrateBps = b.min
         startBitrateBps = b.start
         maxBitrateBps = b.max
+        maxFramerate = WebRTCSession.framerate(for: path, cap: configuredMaxFramerate)
     }
     private let configuredMaxBitrateBps: Int
     private let lock = NSLock()
@@ -73,9 +86,11 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
         videoSender = sender
         self.configuredMaxBitrateBps = maxBitrateBps
         let b = WebRTCSession.bitrates(for: .lan, cap: maxBitrateBps)
+        self.minBitrateBps = b.min
         self.startBitrateBps = b.start
         self.maxBitrateBps = b.max
         self.maxFramerate = maxFramerate
+        self.configuredMaxFramerate = maxFramerate
         super.init()
         pc.delegate = self
     }
@@ -136,9 +151,16 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
             encoding.maxBitrateBps = NSNumber(value: maxBitrateBps)
             encoding.maxFramerate = NSNumber(value: maxFramerate)
         }
-        params.degradationPreference = NSNumber(value: RTCDegradationPreference.balanced.rawValue)
+        // A desktop is mostly text, and text survives a low frame rate far better than a low
+        // resolution. An idle screen also sends almost nothing, which starves the bandwidth
+        // estimate; under `balanced` the encoder answers that by shrinking the picture, so a still
+        // desktop ends up permanently soft while using a few kbps. Keep the pixels, spend the
+        // frames.
+        params.degradationPreference = NSNumber(value: RTCDegradationPreference.maintainResolution.rawValue)
         videoSender.parameters = params
-        pc.setBweMinBitrateBps(nil, currentBitrateBps: NSNumber(value: startBitrateBps), maxBitrateBps: NSNumber(value: maxBitrateBps))
+        // A floor under the estimate, so resolution and quality decisions are not made from the
+        // near-zero traffic of a still screen.
+        pc.setBweMinBitrateBps(NSNumber(value: minBitrateBps), currentBitrateBps: NSNumber(value: startBitrateBps), maxBitrateBps: NSNumber(value: maxBitrateBps))
     }
 
     // MARK: Data out

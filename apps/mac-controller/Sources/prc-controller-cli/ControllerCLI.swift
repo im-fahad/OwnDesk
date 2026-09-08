@@ -29,7 +29,8 @@ enum ControllerCLI {
       hosts                                        list paired hosts
       app <command> [args]                         drive the running PRC Controller app:
                                                    status | hosts | pair <payload|@file> [address] |
-                                                   connect <host> [address] | disconnect | forget <host> | quit
+                                                   connect <host> [address] | disconnect | stats |
+                                                   forget <host> | quit
 
     Options: --data-dir <path>  --name <text>  --keychain (use the Keychain instead of <data-dir>/identity.key)
     """
@@ -122,10 +123,10 @@ enum ControllerCLI {
             default: positional.append(a)
             }
         }
-        if !useKeychain { config.identityFile = config.dataDirectory.appendingPathComponent("identity.key") }
+        if !useKeychain { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
         let identity: any SigningIdentity
         if let file = config.identityFile {
-            identity = try FileIdentityStore.loadOrCreate(at: file)
+            identity = try FileBackedIdentityStore.loadOrCreate(at: file)
         } else {
             identity = try IdentityStore.loadOrCreate(service: config.keychainService)
         }

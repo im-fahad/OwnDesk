@@ -94,6 +94,22 @@ tailnet, **Direct (Internet)**, or **Relayed**. Tailscale may itself relay throu
 neither side can be reached directly, which shows up as a round trip of a few hundred milliseconds
 rather than the ~10 ms of a LAN.
 
+## When the picture is soft
+
+`prc-controller-cli app stats` reports what is actually arriving: resolution, frame rate, kilobits
+per second, and lost packets. That distinguishes the two causes.
+
+A desktop keeps its full resolution and gives up frame rate under pressure, because text stays
+readable at 10 fps and unreadable at half resolution. So a soft picture usually means the stream
+really is being downscaled, which points at the declared path or the host's caps. A picture that is
+sharp but choppy means the link is simply narrow.
+
+Tailscale relays through a DERP server whenever it cannot connect the two machines directly, and a
+relay can be far away and slow. One measured example: 0.92 Mbit/s with a 600 ms round trip between a
+home Mac and a MacBook on mobile data. Nothing in the encoder can make full-motion video good at
+that rate; still screens and text remain sharp. `tailscale status` names the relay when one is in
+use, and `tailscale ping <host>` says whether a direct connection was established.
+
 ## Reconnection
 
 Media loss triggers an ICE restart on the existing session. Signaling loss reconnects and sends

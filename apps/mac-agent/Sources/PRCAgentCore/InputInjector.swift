@@ -5,10 +5,27 @@ import PRCProtocol
 /// Receives validated input messages and applies them to the session.
 public protocol InputSink: AnyObject, Sendable {
     func configure(display: MediaDisplay)
-    /// Returns false when the message was dropped by a rate limit.
+    /// `sentAt` is the sender's monotonic timestamp from the message header, used to discard
+    /// reordered absolute moves. Returns false when the message was dropped.
     @discardableResult
-    func inject(_ message: DataChannelMessage, now: Int64) -> Bool
+    func inject(_ message: DataChannelMessage, sentAt: Int64, now: Int64) -> Bool
     func releaseAll()
+}
+
+/// Keeps absolute pointer moves monotonic in sender time. They ride an unordered channel with no
+/// retransmits (spec section 12.2), so on a relayed link a reordered pair would snap the cursor back
+/// to a stale position, which reads as shaking.
+struct MoveOrderGate {
+    private var lastSentAt: Int64 = .min
+
+    mutating func accept(_ sentAt: Int64) -> Bool {
+        guard sentAt >= lastSentAt else { return false }
+        lastSentAt = sentAt
+        return true
+    }
+
+    /// Sender timestamps restart at zero with each session.
+    mutating func reset() { lastSentAt = .min }
 }
 
 struct RateLimiter {
@@ -33,6 +50,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
     private let source = CGEventSource(stateID: .hidSystemState)
     private var pressed: Set<MouseButton> = []
     private var lastClick: (button: MouseButton, time: Int64, point: CGPoint, count: Int64)?
+    private var moveGate = MoveOrderGate()
     private var mouseLimiter = RateLimiter(perSecond: Limits.mouseEventsPerSecond)
     private var keyLimiter = RateLimiter(perSecond: Limits.keyEventsPerSecond)
     private var textLimiter = RateLimiter(perSecond: Limits.textEventsPerSecond)
@@ -40,15 +58,19 @@ public final class InputInjector: InputSink, @unchecked Sendable {
     public init() {}
 
     public func configure(display: MediaDisplay) {
-        lock.lock(); self.display = display; lock.unlock()
+        lock.lock()
+        self.display = display
+        moveGate.reset()
+        lock.unlock()
     }
 
     @discardableResult
-    public func inject(_ message: DataChannelMessage, now: Int64) -> Bool {
+    public func inject(_ message: DataChannelMessage, sentAt: Int64, now: Int64) -> Bool {
         lock.lock(); defer { lock.unlock() }
         switch message {
         case .mouseMove(_, let x, let y):
             guard mouseLimiter.allow(now: now) else { return false }
+            guard moveGate.accept(sentAt) else { return false }
             let b = display.pointBounds
             move(to: CGPoint(x: b.origin.x + x * b.width, y: b.origin.y + y * b.height))
         case .mouseMoveRel(let dx, let dy):
@@ -84,6 +106,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         for button in pressed { press(button, down: false, now: nowMs()) }
         pressed.removeAll()
+        moveGate.reset()
     }
 
     // MARK: Mouse

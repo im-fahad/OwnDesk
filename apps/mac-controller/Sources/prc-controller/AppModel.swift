@@ -16,6 +16,8 @@ final class AppModel: ObservableObject {
     @Published var state: SessionClient.State = .idle
     @Published var rtt: Double?
     @Published var display: DisplayInfo?
+    /// Encoded size of the stream as received, as opposed to the host's display size.
+    @Published var videoSize: CGSize = .zero
     @Published var sendInput = true
     @Published var log: [String] = []
     @Published var manualAddress = ""
@@ -59,11 +61,11 @@ final class AppModel: ObservableObject {
             default: break
             }
         }
-        if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.key") }
+        if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
         self.config = config
         do {
             if let file = config.identityFile {
-                identity = try FileIdentityStore.loadOrCreate(at: file)
+                identity = try FileBackedIdentityStore.loadOrCreate(at: file)
             } else if CodeSigning.isAdHocSigned {
                 // Each ad-hoc build has a new signature; a Keychain item would prompt after every rebuild.
                 identity = try FileBackedIdentityStore.loadOrCreate(at: config.dataDirectory.appendingPathComponent("identity.json"))
@@ -112,6 +114,7 @@ final class AppModel: ObservableObject {
         ]
         if let rtt { d["rtt_ms"] = String(Int(rtt)) }
         if let display { d["display"] = "\(display.width_px)x\(display.height_px)" }
+        if videoSize != .zero { d["video"] = "\(Int(videoSize.width))x\(Int(videoSize.height))" }
         if let id = selectedHostId, let h = store.host(id) { d["selected"] = h.name }
         return d
     }
@@ -143,6 +146,22 @@ final class AppModel: ObservableObject {
             connect()
             _ = await waitUntil(30_000, { if case .connected = state { return true }; if case .ended = state { return true }; return false })
             return ControlResponse(ok: isConnected, message: Self.describe(state), data: statusData)
+        case "probe-input":
+            // Two absolute moves in sender order, then back. Proves input reaches the host and that
+            // the host's reordering gate is not rejecting everything.
+            guard let session, isConnected, let d = display else { return .failure("not connected") }
+            await session.send(.mouseMove(displayId: d.display_id, x: 0.5, y: 0.5))
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            await session.send(.mouseMove(displayId: d.display_id, x: 0.52, y: 0.5))
+            return ControlResponse(ok: true, message: "sent two absolute moves to the centre of \(d.display_id)")
+        case "stats":
+            guard let session, isConnected else { return .failure("not connected") }
+            guard let v = await session.videoStats() else { return .failure("no video statistics yet") }
+            return ControlResponse(ok: true,
+                message: "\(v.width)x\(v.height) at \(String(format: "%.0f", v.fps)) fps, \(String(format: "%.0f", v.kbps)) kbps",
+                data: ["width": String(v.width), "height": String(v.height), "fps": String(format: "%.1f", v.fps),
+                       "kbps": String(format: "%.0f", v.kbps), "packets_lost": String(v.packetsLost),
+                       "freezes": String(v.freezeCount), "rtt_ms": rtt.map { String(Int($0)) } ?? "-"])
         case "disconnect":
             disconnect()
             _ = await waitUntil(5000, { !isBusy })
@@ -213,6 +232,7 @@ final class AppModel: ObservableObject {
         append("connecting to \(host.name) \(host.fingerprint) at \(url.absoluteString)")
         let session = SessionClient(.init(identity: identity, host: host, config: config))
         self.session = session
+        videoSize = .zero
         let stream = session.events
         eventsTask?.cancel()
         eventsTask = Task { [weak self] in

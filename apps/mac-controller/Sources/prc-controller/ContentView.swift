@@ -74,7 +74,10 @@ struct ContentView: View {
             }
             Text(AppModel.describe(model.state)).foregroundStyle(.secondary)
             if let rtt = model.rtt { Text("RTT \(Int(rtt)) ms").font(.caption).foregroundStyle(.secondary) }
-            if let d = model.display { Text("\(d.width_px)×\(d.height_px)").font(.caption).foregroundStyle(.secondary) }
+            if let d = model.display {
+                let stream = model.videoSize == .zero ? "" : "  ← \(Int(model.videoSize.width))×\(Int(model.videoSize.height))"
+                Text("\(d.width_px)×\(d.height_px)\(stream)").font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             if model.isConnected {
                 Toggle("Send input", isOn: $model.sendInput).toggleStyle(.checkbox)

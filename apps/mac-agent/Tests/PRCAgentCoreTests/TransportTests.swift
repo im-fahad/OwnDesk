@@ -51,7 +51,7 @@ final class RecordingServerDelegate: SignalingServerDelegate, @unchecked Sendabl
         try await waitUntil("agent port") { agent.port != 0 }
 
         // A second Agent from the same directory must load the same identity.
-        #expect(try FileIdentityStore.loadOrCreate(at: config.identityFile!).deviceId == agent.identity.deviceId)
+        #expect(try FileBackedIdentityStore.loadOrCreate(at: config.identityFile!).deviceId == agent.identity.deviceId)
 
         let controller = TestController(hostPublicKey: agent.identity.publicKeyRaw, now: { nowMs() })
         try agent.trust.add(TrustedDevice(deviceId: controller.deviceId, publicKey: controller.identity.publicKeyB64, name: "T", type: .web, pairedAt: 0, lastSeen: nil))
@@ -226,6 +226,36 @@ final class RecordingWebRTCDelegate: WebRTCSessionDelegate, @unchecked Sendable 
 
 extension WebRTCSession {
     func answerOfferForTest(_ offer: String) async throws -> String { try await answer(offerSDP: offer) }
+}
+
+@Suite struct MediaPolicyTests {
+    @Test func relayedPathsGetAConservativeStartAndHalfTheFrames() {
+        // Seeding a LAN bitrate on a relayed link overshoots it: the encoder collapses to a soft
+        // picture and the queue adds latency. Declaring the real path is what prevents that.
+        let lan = WebRTCSession.bitrates(for: .lan, cap: 20_000_000)
+        let cloud = WebRTCSession.bitrates(for: .cloud, cap: 20_000_000)
+        #expect(lan.min == 1_000_000 && lan.start == 6_000_000 && lan.max == 20_000_000)
+        #expect(cloud.min == 600_000 && cloud.start == 1_500_000 && cloud.max == 8_000_000)
+        #expect(cloud.start < lan.start && cloud.max < lan.max)
+        #expect(cloud.min > 0, "a floor keeps a still screen from starving the estimate to nothing")
+
+        #expect(WebRTCSession.framerate(for: .lan, cap: 60) == 60)
+        #expect(WebRTCSession.framerate(for: .cloud, cap: 60) == 30)
+        #expect(WebRTCSession.framerate(for: .cloud, cap: 24) == 24, "never raise the configured cap")
+        let tiny = WebRTCSession.bitrates(for: .lan, cap: 3_000_000)
+        #expect(tiny.start == 3_000_000 && tiny.max == 3_000_000, "never exceed the cap")
+    }
+
+    @Test func moveGateDropsReorderedAbsoluteMoves() {
+        var gate = MoveOrderGate()
+        // Sender timestamps as they might arrive after reordering on a relayed link.
+        let accepted = [10, 20, 15, 19, 20, 21].map { gate.accept(Int64($0)) }
+        #expect(accepted == [true, true, false, false, true, true],
+                "15 and 19 left the controller before 20 and must not move the cursor backwards")
+        gate.reset()
+        let afterReset = gate.accept(1)
+        #expect(afterReset, "a new session restarts sender time at zero")
+    }
 }
 
 @Suite struct PathClassificationTests {

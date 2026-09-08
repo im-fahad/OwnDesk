@@ -685,7 +685,7 @@ Every message:
 
 | type | Fields | Notes |
 |---|---|---|
-| `mouse_move` | `display_id` string, `x` 0..1, `y` 0..1 | Absolute, normalized to the streamed display. Used by the MacBook and Android screen mode. |
+| `mouse_move` | `display_id` string, `x` 0..1, `y` 0..1 | Absolute, normalized to the streamed display. Used by the MacBook and Android screen mode. The host must ignore one whose `ts` is older than the newest already applied: this channel is unordered with no retransmits, so on a relayed link a reordered pair would otherwise snap the cursor back to a stale position, which reads as shaking. Relative moves need no such rule, being additive. |
 | `mouse_move_rel` | `dx`, `dy` in host points | Relative. Used by Android trackpad mode. Host applies its own acceleration curve. |
 | `mouse_down` | `button`: `left`, `right`, `middle` | Host computes click count from timing and position and sets `mouseEventClickState`. |
 | `mouse_up` | `button` | |
@@ -756,7 +756,8 @@ Encoder settings:
 - Codec H.264, Constrained Baseline or Main, whichever the controller offers first. Do not offer VP8 or VP9. Software encoding at 1080p60 will not hold on the host and burns battery on the controller.
 - `RTCRtpEncodingParameters.maxBitrateBps`: 20 Mbps on the LAN path, 8 Mbps on the cloud path.
 - `maxFramerate`: 60.
-- `degradationPreference`: `balanced`.
+- `degradationPreference`: `maintainResolution`. A desktop is mostly text, and text survives a low frame rate far better than a low resolution. An idle screen also sends almost nothing, which starves the bandwidth estimate; under `balanced` the encoder answers that by shrinking the picture, so a still desktop ends up permanently soft while using a few kbps. Measured over a relayed link: `balanced` settled at 960x540, `maintainResolution` at 1920x1080.
+- A minimum bitrate under the estimate (1 Mbps on the LAN path, 600 kbps on the cloud path), so quality decisions are not made from the near-zero traffic of a still screen.
 - Keyframe on request only. libwebrtc handles PLI and FIR.
 
 Static screens: ScreenCaptureKit delivers frames only on change. Re-submit the last frame at 2 fps so the encoder keeps a steady cadence and freshly connected decoders converge quickly.
@@ -777,6 +778,8 @@ Expected results:
 | Good Internet | 1080p at 30 fps |
 | Average Internet | 720p at 30 fps |
 | Poor Internet | 720p at 15 fps |
+
+The path in `SESSION_REQUEST` is what the host sizes all of this from, so the controller must declare the path it is actually using. An overlay address such as Tailscale's is private but may be relayed halfway around the world: declaring `lan` there seeds a bitrate the link cannot carry, and the encoder collapses.
 
 The controller may send `stream_settings` to lower the caps, for instance on a metered mobile connection. Phase 2 can add an explicit quality policy on top of the stats API if the defaults prove insufficient.
 

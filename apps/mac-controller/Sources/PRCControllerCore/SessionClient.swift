@@ -112,6 +112,14 @@ public actor SessionClient {
         webrtc?.send(message, ts: elapsed())
     }
 
+    /// Measured inbound video, for diagnosing a soft picture. Nil when no media is running.
+    public func videoStats() async -> WebRTCClient.InboundVideoStats? {
+        guard let webrtc else { return nil }
+        return await withCheckedContinuation { c in
+            webrtc.inboundVideoStats { c.resume(returning: $0) }
+        }
+    }
+
     public func attach(renderer: RTCVideoRenderer) {
         if let webrtc { webrtc.attach(renderer: renderer) } else { pendingRenderers.append(renderer) }
     }
@@ -161,12 +169,23 @@ public actor SessionClient {
         }
     }
 
+    /// The path the host uses to size its bitrate (spec section 16). An overlay address such as
+    /// Tailscale's is private but may be relayed halfway around the world, so it is `cloud`: seeding
+    /// a LAN bitrate there overshoots the link, and the encoder collapses to a blurry picture.
+    var declaredPath: ConnectionPath { SessionClient.path(forHost: url?.host) }
+
+    static func path(forHost host: String?) -> ConnectionPath {
+        guard let host else { return .cloud }
+        if PathClassifier.isOverlay(host) { return .cloud }
+        return PathClassifier.isPrivate(host) ? .lan : .cloud
+    }
+
     private func sendSessionRequest() {
         clientNonce = Base64URL.encode(Pairing.randomSecret())
         forgetAttempt()
         setState(.authenticating)
         startHandshakeWatchdog(seconds: deps.config.authTimeoutSeconds, phase: "authenticating")
-        let request = SessionRequestPayload(client_nonce: clientNonce, versions: Envelope.supportedVersions, path: .lan,
+        let request = SessionRequestPayload(client_nonce: clientNonce, versions: Envelope.supportedVersions, path: declaredPath,
                                             capabilities: SessionCapabilities(codecs: [.h264], max_height: 1080, max_fps: 60))
         send(.sessionRequest(request), session: "")
     }
