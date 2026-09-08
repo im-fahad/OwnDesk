@@ -181,11 +181,25 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
     /// network, so it is LAN regardless of what the remote side looks like.
     static func classifyPath(localType: String, remoteType: String, localAddress: String, remoteAddress: String) -> String {
         if localType == "relay" || remoteType == "relay" { return "Relayed" }
+        // Overlay addresses (Tailscale's 100.64/10) are private but may be relayed by the overlay
+        // itself, so name them rather than calling them LAN.
+        if isOverlayAddress(localAddress) || isOverlayAddress(remoteAddress) { return "Direct (Tailscale)" }
         if localType == "host" && remoteType == "host" { return "Direct (LAN)" }
         if localType == "host" && isPrivateAddress(localAddress) { return "Direct (LAN)" }
         if remoteType == "host" && isPrivateAddress(remoteAddress) { return "Direct (LAN)" }
         if isPrivateAddress(localAddress) && isPrivateAddress(remoteAddress) { return "Direct (LAN)" }
         return "Direct (Internet)"
+    }
+
+    /// Tailscale hands out IPv4 in the CGNAT range 100.64.0.0/10 and IPv6 under its ULA prefix
+    /// fd7a:115c:a1e0::/48. Both are private, but calling them LAN hides that the overlay may be
+    /// relaying through a DERP server, which is what a sudden half-second round trip means.
+    static func isOverlayAddress(_ address: String) -> Bool {
+        let a = address.lowercased()
+        if a.hasPrefix("fd7a:115c:a1e0") { return true }
+        let parts = a.split(separator: ".")
+        guard parts.count == 4, parts[0] == "100", let second = Int(parts[1]) else { return false }
+        return (64...127).contains(second)
     }
 
     /// RFC 1918, link-local, loopback, unique-local IPv6, and the CGNAT range Tailscale uses.

@@ -199,8 +199,20 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
 }
 
 public enum PathClassifier {
+    /// Tailscale hands out IPv4 in the CGNAT range 100.64.0.0/10 and IPv6 under its ULA prefix
+    /// fd7a:115c:a1e0::/48. Both are private, but calling them LAN hides that the overlay may be
+    /// relaying through a DERP server, which is what a sudden half-second round trip means.
+    public static func isOverlay(_ address: String) -> Bool {
+        let a = address.lowercased()
+        if a.hasPrefix("fd7a:115c:a1e0") { return true }
+        let parts = a.split(separator: ".")
+        guard parts.count == 4, parts[0] == "100", let second = Int(parts[1]) else { return false }
+        return (64...127).contains(second)
+    }
+
     public static func classify(localType: String, remoteType: String, localAddress: String, remoteAddress: String) -> String {
         if localType == "relay" || remoteType == "relay" { return "Relayed" }
+        if isOverlay(localAddress) || isOverlay(remoteAddress) { return "Direct (Tailscale)" }
         if localType == "host" && remoteType == "host" { return "Direct (LAN)" }
         if localType == "host" && isPrivate(localAddress) { return "Direct (LAN)" }
         if remoteType == "host" && isPrivate(remoteAddress) { return "Direct (LAN)" }

@@ -1,4 +1,5 @@
 import AppKit
+import Network
 import Foundation
 import PRCProtocol
 import Testing
@@ -50,6 +51,12 @@ import Testing
         #expect(PathClassifier.classify(localType: "srflx", remoteType: "srflx", localAddress: "203.0.113.5", remoteAddress: "198.51.100.7") == "Direct (Internet)")
         #expect(PathClassifier.classify(localType: "relay", remoteType: "host", localAddress: "203.0.113.5", remoteAddress: "192.168.1.3") == "Relayed")
         #expect(PathClassifier.isPrivate("100.100.1.1") && !PathClassifier.isPrivate("100.200.1.1"))
+        #expect(PathClassifier.classify(localType: "host", remoteType: "host", localAddress: "100.64.0.10", remoteAddress: "100.64.0.11") == "Direct (Tailscale)")
+        #expect(PathClassifier.isOverlay("100.64.0.1") && PathClassifier.isOverlay("100.127.255.254"))
+        #expect(PathClassifier.isOverlay("fd7a:115c:a1e0::a"), "Tailscale's IPv6 ULA prefix")
+        #expect(PathClassifier.classify(localType: "host", remoteType: "host", localAddress: "fd7a:115c:a1e0::1", remoteAddress: "fd7a:115c:a1e0::2") == "Direct (Tailscale)")
+        #expect(!PathClassifier.isOverlay("fd00::1"), "other unique-local IPv6 is not Tailscale")
+        #expect(!PathClassifier.isOverlay("100.128.0.1") && !PathClassifier.isOverlay("100.63.0.1") && !PathClassifier.isOverlay("192.168.1.1"))
     }
 
     @Test func endpointParsing() {
@@ -61,6 +68,27 @@ import Testing
         #expect(Endpoints.url(for: "[fd7a::1]") == nil)
         #expect(Endpoints.url(for: ":47500") == nil)
         #expect(Endpoints.url(for: "192.168.1.20:99999") == nil)
+    }
+
+    @Test func firstReachablePicksTheAddressThatAnswers() async throws {
+        // A listener on loopback stands in for the reachable address; a closed port and an
+        // unroutable address stand in for a home LAN seen from elsewhere.
+        let listener = try NWListener(using: .tcp, on: .any)
+        let ready = Box(UInt16(0))
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.update { $0 = listener.port?.rawValue ?? 0 } } }
+        listener.newConnectionHandler = { $0.cancel() }
+        listener.start(queue: DispatchQueue(label: "prc.test.listener"))
+        defer { listener.cancel() }
+        try await E2E.waitUntil(timeoutMs: 5000, "listener ready") { ready.get() != 0 }
+
+        let good = Endpoints.url(for: "127.0.0.1:\(ready.get())")!
+        let dead = Endpoints.url(for: "192.0.2.1:47500")!   // TEST-NET-1, never routable
+        let closed = Endpoints.url(for: "127.0.0.1:1")!
+
+        #expect(await Endpoints.firstReachable([dead, closed, good], timeoutMs: 3000) == good)
+        #expect(await Endpoints.firstReachable([good], timeoutMs: 3000) == good)
+        #expect(await Endpoints.firstReachable([dead, closed], timeoutMs: 2000) == nil)
+        #expect(await Endpoints.firstReachable([], timeoutMs: 1000) == nil)
     }
 
     @Test func resolvesHostPortEndpointsWithoutNetwork() async {

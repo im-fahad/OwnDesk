@@ -198,12 +198,19 @@ final class AppModel: ObservableObject {
             url = await Endpoints.resolve(found.endpoint)
             if url == nil { append("could not resolve \(host.name) on this network") }
         }
-        if url == nil, let first = host.addresses.first(where: { Endpoints.url(for: $0) != nil }) {
-            url = Endpoints.url(for: first)
-            addressUsed = first
+        if url == nil {
+            // Try every address the host advertised at pairing time at once and take the first that
+            // answers, so the same button works at home and away without typing anything.
+            let candidates = host.addresses.compactMap { Endpoints.url(for: $0) }
+            if candidates.count > 1 { append("trying \(candidates.count) known addresses") }
+            url = await Endpoints.firstReachable(candidates)
+            addressUsed = url.map { u in host.addresses.first { Endpoints.url(for: $0) == u } ?? u.absoluteString }
+            if url == nil, !candidates.isEmpty {
+                append("none of \(host.name)'s known addresses answered on this network")
+            }
         }
         guard let url else { append("no address for \(host.name); enter one"); state = .ended("no address"); return }
-        append("connecting to \(host.name) at \(url.absoluteString)")
+        append("connecting to \(host.name) \(host.fingerprint) at \(url.absoluteString)")
         let session = SessionClient(.init(identity: identity, host: host, config: config))
         self.session = session
         let stream = session.events

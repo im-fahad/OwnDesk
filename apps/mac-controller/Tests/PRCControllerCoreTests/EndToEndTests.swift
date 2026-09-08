@@ -144,6 +144,31 @@ enum E2E {
         await agent.stop()
     }
 
+    /// Connecting to a Mac other than the one we paired with: the agent drops every envelope as
+    /// wrong_recipient without replying, so only the handshake watchdog ends the attempt.
+    @Test func mismatchedHostIdentityTimesOutWithAdvice() async throws {
+        let (agent, _) = try await E2E.startAgent(media: false)
+        let identity = SoftwareIdentity()
+        let impostor = SoftwareIdentity()
+        // A paired host record whose device id is not the agent's.
+        let host = PairedHost(deviceId: impostor.deviceId, publicKey: impostor.publicKeyB64, name: "Wrong Mac", addresses: [], rendezvousURL: nil, pairedAt: 0)
+        let config = ControllerConfig(deviceName: "T", dataDirectory: E2E.tempDir(), authTimeoutSeconds: 2)
+        let session = SessionClient(.init(identity: identity, host: host, config: config))
+        let states = Box<[SessionClient.State]>([])
+        let stream = session.events
+        Task { for await e in stream { if case .state(let s) = e { states.update { $0.append(s) } } } }
+        await session.connect(url: Endpoints.url(for: "127.0.0.1:\(agent.port)")!)
+
+        try await E2E.waitUntil(timeoutMs: 12000, "handshake timeout") {
+            states.get().contains { if case .ended = $0 { return true } else { return false } }
+        }
+        #expect(states.get().contains(.authenticating), "the socket opens, so we do reach authenticating")
+        guard case .ended(let reason)? = states.get().last else { Issue.record("expected ended"); return }
+        #expect(reason.contains("did not answer"), "\(reason)")
+        #expect(reason.contains("Remote Access"), "the message should say what to check: \(reason)")
+        await agent.stop()
+    }
+
     @Test func unreachableHostEndsCleanly() async throws {
         let identity = SoftwareIdentity()
         let host = PairedHost(deviceId: String(repeating: "ab", count: 32), publicKey: String(repeating: "A", count: 87), name: "Ghost", addresses: [], rendezvousURL: nil, pairedAt: 0)

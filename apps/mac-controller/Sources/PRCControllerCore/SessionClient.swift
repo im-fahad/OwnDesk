@@ -59,6 +59,7 @@ public actor SessionClient {
     private var outstandingPings: [UInt32: Int64] = [:]
     private var reconnectTask: Task<Void, Never>?
     private var reconnectStartedAt: Int64?
+    private var handshakeTask: Task<Void, Never>?
     private var mediaStartedAt: Int64 = 0
     public private(set) var state: State = .idle
 
@@ -164,6 +165,7 @@ public actor SessionClient {
         clientNonce = Base64URL.encode(Pairing.randomSecret())
         forgetAttempt()
         setState(.authenticating)
+        startHandshakeWatchdog(seconds: deps.config.authTimeoutSeconds, phase: "authenticating")
         let request = SessionRequestPayload(client_nonce: clientNonce, versions: Envelope.supportedVersions, path: .lan,
                                             capabilities: SessionCapabilities(codecs: [.h264], max_height: 1080, max_fps: 60))
         send(.sessionRequest(request), session: "")
@@ -203,6 +205,7 @@ public actor SessionClient {
                     if mediaUp { setState(.connected(path: lastPath)) } else { await restartIce() }
                 } else {
                     setState(.negotiating)
+                    startHandshakeWatchdog(seconds: deps.config.negotiateTimeoutSeconds, phase: "negotiating")
                     await startMedia()
                 }
             case .sdpAnswer(let a):
@@ -281,6 +284,7 @@ public actor SessionClient {
         switch s {
         case .connected:
             mediaUp = true
+            cancelHandshakeWatchdog()
             reconnectTask?.cancel()
             reconnectTask = nil
             reconnectStartedAt = nil
@@ -388,9 +392,40 @@ public actor SessionClient {
         reconnectStartedAt = nil
     }
 
+    /// Without this a host that never answers leaves the controller in `authenticating` forever with
+    /// no way out. The commonest cause is connecting to a Mac other than the one this controller is
+    /// paired with: the agent drops messages addressed to a different device id without replying.
+    private func startHandshakeWatchdog(seconds: Int, phase: String) {
+        cancelHandshakeWatchdog()
+        let deadline = UInt64(max(seconds, 1)) * 1_000_000_000
+        handshakeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: deadline)
+            guard !Task.isCancelled else { return }
+            await self?.handshakeTimedOut(phase: phase, seconds: seconds)
+        }
+    }
+
+    private func cancelHandshakeWatchdog() {
+        handshakeTask?.cancel()
+        handshakeTask = nil
+    }
+
+    private func handshakeTimedOut(phase: String, seconds: Int) {
+        guard !ended, !mediaUp else { return }
+        switch state {
+        case .authenticating:
+            end("\(deps.host.name) did not answer within \(seconds) s. Check that this address is the Mac you paired with, that it is awake, and that Remote Access is on.")
+        case .negotiating:
+            end("connected to \(deps.host.name) but the video link did not come up within \(seconds) s.")
+        default:
+            break
+        }
+    }
+
     private func end(_ reason: String) {
         guard !ended else { return }
         ended = true
+        cancelHandshakeWatchdog()
         reconnectTask?.cancel()
         reconnectTask = nil
         closeMedia()

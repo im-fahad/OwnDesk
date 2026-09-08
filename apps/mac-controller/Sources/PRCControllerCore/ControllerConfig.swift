@@ -12,6 +12,12 @@ public struct ControllerConfig: Sendable {
     public var pingIntervalMs: Int
     public var missedPongsBeforeReconnect: Int
     public var reconnectWindowSeconds: Int
+    /// How long to wait for the host's SESSION_CHALLENGE and SESSION_ACCEPT. A host that is not the
+    /// one we paired with drops our messages silently (spec section 6 rule 3), so only a timeout
+    /// distinguishes that from a slow network.
+    public var authTimeoutSeconds: Int
+    /// How long to wait for WebRTC to connect once the host has accepted.
+    public var negotiateTimeoutSeconds: Int
 
     public init(
         deviceName: String,
@@ -21,7 +27,9 @@ public struct ControllerConfig: Sendable {
         serviceType: String = "_prc._tcp",
         pingIntervalMs: Int = Limits.pingIntervalMs,
         missedPongsBeforeReconnect: Int = Limits.missedPongsBeforeReconnect,
-        reconnectWindowSeconds: Int = 60
+        reconnectWindowSeconds: Int = 60,
+        authTimeoutSeconds: Int = 15,
+        negotiateTimeoutSeconds: Int = 30
     ) {
         self.deviceName = deviceName
         self.dataDirectory = dataDirectory
@@ -31,6 +39,8 @@ public struct ControllerConfig: Sendable {
         self.pingIntervalMs = pingIntervalMs
         self.missedPongsBeforeReconnect = missedPongsBeforeReconnect
         self.reconnectWindowSeconds = reconnectWindowSeconds
+        self.authTimeoutSeconds = authTimeoutSeconds
+        self.negotiateTimeoutSeconds = negotiateTimeoutSeconds
     }
 
     public static func standard() -> ControllerConfig {

@@ -70,6 +70,59 @@ public enum Endpoints {
         }
     }
 
+    /// Opens a TCP connection to every candidate at once and returns the first that answers, so a
+    /// controller carrying both a home LAN address and an overlay address connects from anywhere
+    /// without the user picking one. Losers are cancelled as soon as a winner appears.
+    public static func firstReachable(_ urls: [URL], timeoutMs: Int = 4000) async -> URL? {
+        let candidates = urls.filter { $0.host != nil }
+        guard !candidates.isEmpty else { return nil }
+        if candidates.count == 1 { return await isReachable(candidates[0], timeoutMs: timeoutMs) ? candidates[0] : nil }
+
+        return await withTaskGroup(of: URL?.self) { group in
+            for url in candidates {
+                group.addTask { await isReachable(url, timeoutMs: timeoutMs) ? url : nil }
+            }
+            for await result in group {
+                if let result {
+                    group.cancelAll()
+                    return result
+                }
+            }
+            return nil
+        }
+    }
+
+    /// A plain TCP connect. It proves the port is open, not that the right host is behind it;
+    /// the signed handshake decides that.
+    public static func isReachable(_ url: URL, timeoutMs: Int = 4000) async -> Bool {
+        guard let host = url.host, let port = NWEndpoint.Port(rawValue: UInt16(url.port ?? 0)) else { return false }
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: port, using: .tcp)
+        let queue = DispatchQueue(label: "prc.probe")
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+                let done = Locked(false)
+                let finish: @Sendable (Bool) -> Void = { ok in
+                    guard !done.get() else { return }
+                    done.set(true)
+                    connection.cancel()
+                    c.resume(returning: ok)
+                }
+                connection.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready: finish(true)
+                    case .failed, .cancelled: finish(false)
+                    case .waiting: finish(false)
+                    default: break
+                    }
+                }
+                connection.start(queue: queue)
+                queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { finish(false) }
+            }
+        } onCancel: {
+            connection.cancel()
+        }
+    }
+
     public static func describe(_ endpoint: NWEndpoint) -> String {
         switch endpoint {
         case .hostPort(let host, let port): return "\(host):\(port)"

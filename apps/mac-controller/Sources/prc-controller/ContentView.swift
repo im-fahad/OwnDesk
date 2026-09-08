@@ -22,13 +22,17 @@ struct ContentView: View {
                     ForEach(model.hosts) { host in
                         HStack {
                             Circle().fill(model.discoveredHost(for: host.deviceId) != nil ? Color.green : Color.gray).frame(width: 8, height: 8)
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(host.name)
-                                Text(model.discoveredHost(for: host.deviceId) != nil ? "on this network" : host.addresses.first ?? "no address").font(.caption).foregroundStyle(.secondary)
+                                // The fingerprint is what tells two entries for the same Mac apart.
+                                // Without it, forgetting the live one instead of a stale one is easy.
+                                Text(host.fingerprint).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary)
+                                Text(model.discoveredHost(for: host.deviceId) != nil ? "on this network" : host.addresses.first ?? "no address")
+                                    .font(.caption2).foregroundStyle(.tertiary)
                             }
                         }
                         .tag(host.deviceId)
-                        .contextMenu { Button("Forget", role: .destructive) { model.forget(host.deviceId) } }
+                        .contextMenu { Button("Forget \(host.fingerprint)", role: .destructive) { model.forget(host.deviceId) } }
                     }
                 }
                 if !model.discovered.filter({ d in !model.hosts.contains { $0.deviceId == d.deviceId } }).isEmpty {
@@ -64,6 +68,7 @@ struct ContentView: View {
         HStack(spacing: 12) {
             if let id = model.selectedHostId, let host = model.store.host(id) {
                 Text(host.name).font(.headline)
+                Text(host.fingerprint).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
             } else {
                 Text("No host selected").foregroundStyle(.secondary)
             }

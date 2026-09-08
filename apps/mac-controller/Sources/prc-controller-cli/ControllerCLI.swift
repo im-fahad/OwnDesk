@@ -218,9 +218,11 @@ enum ControllerCLI {
                 print("  not advertised here; falling back to stored addresses")
             }
         }
-        if url == nil, let first = host.addresses.first(where: { Endpoints.url(for: $0) != nil }) {
-            url = Endpoints.url(for: first)
-            via = first
+        if url == nil {
+            let candidates = host.addresses.compactMap { Endpoints.url(for: $0) }
+            url = await Endpoints.firstReachable(candidates)
+            via = url.map { u in host.addresses.first { Endpoints.url(for: $0) == u } ?? u.absoluteString } ?? ""
+            check(url != nil, "reachable address among \(candidates.count) known", via)
         }
         guard let url else { check(false, "no usable address for \(host.name)"); return }
         print("connecting to \(host.name) at \(url.absoluteString) (\(via))")

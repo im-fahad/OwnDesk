@@ -76,6 +76,24 @@ prc-controller-cli app connect <host name | id prefix> [address]
 prc-controller-cli app disconnect | hosts | forget <host> | quit
 ```
 
+## Choosing an address
+
+**Connect** needs no address in the normal case. The controller opens a TCP connection to every
+address the host advertised at pairing time at once and uses the first that answers, so the same
+button works at home on the LAN and away over Tailscale. Bonjour is tried first when the host is on
+the current network. The address field only overrides that.
+
+If the host never answers, the attempt ends after 15 seconds rather than hanging: an agent drops
+envelopes addressed to a different device id without replying (spec section 6 rule 3), so a silent
+host usually means this controller is paired with a *different* Mac than the one at that address.
+Each host row shows its fingerprint for exactly this reason: two entries for the same Mac are
+otherwise indistinguishable, and forgetting the live one leaves a stale entry that can never connect.
+
+The status line names the path: **Direct (LAN)** on the same network, **Direct (Tailscale)** over the
+tailnet, **Direct (Internet)**, or **Relayed**. Tailscale may itself relay through a DERP server when
+neither side can be reached directly, which shows up as a round trip of a few hundred milliseconds
+rather than the ~10 ms of a LAN.
+
 ## Reconnection
 
 Media loss triggers an ICE restart on the existing session. Signaling loss reconnects and sends

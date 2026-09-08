@@ -531,7 +531,7 @@ From the selected candidate pair:
 | srflx or prflx | any non-relay | Direct (Internet) |
 | relay | any | Relayed |
 
-A peer on the same LAN can show up as peer-reflexive when its candidate is learned from a connectivity check before its trickled candidate arrives, and libwebrtc reports no address for such a remote candidate. So a pair selected through one of our own host candidates on a private address, including Tailscale's CGNAT range, is also reported as Direct (LAN).
+A peer on the same LAN can show up as peer-reflexive when its candidate is learned from a connectivity check before its trickled candidate arrives, and libwebrtc reports no address for such a remote candidate. So a pair selected through one of our own host candidates on a private address is also reported as Direct (LAN). Addresses in Tailscale's ranges, IPv4 100.64.0.0/10 and IPv6 fd7a:115c:a1e0::/48, are reported as Direct (Tailscale) instead: they are private, but the overlay may be relaying them through a DERP server, which shows up as a round trip of several hundred milliseconds.
 
 ### 9.4 Alternative: private overlay network instead of the rendezvous server
 
