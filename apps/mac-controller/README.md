@@ -30,6 +30,24 @@ No macOS permissions are needed. From the repo root, `scripts/build-apps.sh cont
 Secure Enclave backed identity in its data folder rather than the Keychain, so rebuilds do not
 prompt; see the agent README for the reasoning.
 
+## Layout
+
+An editor-style window: a header, panels that come and go, and the remote screen filling whatever is
+left. Only the screen is permanent.
+
+| Control | What it does |
+|---|---|
+| Sidebar button, ⌘B | Paired hosts, nearby hosts, this Mac's fingerprint, and pairing |
+| Log button, ⌘J | Event log along the bottom |
+| Quality menu | Resolution cap and the sharp-text or smooth-motion trade-off |
+| Keys menu | Shortcuts macOS never lets a window see, plus the text sender |
+| Pointer button | Pauses input without disconnecting |
+| ⌘K | Connect or disconnect |
+
+The keyboard shortcuts only reach the app when the pointer is off the video: while it is over the
+stream every key belongs to the host, deliberately. `prc-controller-cli app panels [sidebar|log|text]`
+reports or toggles the panels for scripted use.
+
 ## Using it
 
 1. On the Mac Mini, run the agent and type `pair`. Copy the JSON line it prints.

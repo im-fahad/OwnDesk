@@ -48,6 +48,10 @@ final class AppModel: ObservableObject {
     /// Encoded size of the stream as received, as opposed to the host's display size.
     @Published var videoSize: CGSize = .zero
     @Published var sendInput = true
+    /// Panel visibility. Only the remote screen is permanent.
+    @Published var showSidebar = true
+    @Published var showLog = false
+    @Published var showTextField = false
     @Published var quality: QualityPreset = .auto { didSet { applyStreamSettings() } }
     /// Sharp text is the default. Smooth motion lets the picture soften to keep the frame rate up.
     @Published var smoothMotion = false { didSet { applyStreamSettings() } }
@@ -73,6 +77,38 @@ final class AppModel: ObservableObject {
 
     var fingerprint: String { identity.fingerprint }
     var isConnected: Bool { if case .connected = state { return true } else { return false } }
+
+    /// Short enough for a header or a status bar.
+    var stateSummary: String {
+        switch state {
+        case .idle: "idle"
+        case .connecting: "connecting"
+        case .authenticating: "authenticating"
+        case .negotiating: "negotiating"
+        case .connected(let path): path
+        case .reconnecting: "reconnecting"
+        case .ended: "disconnected"
+        }
+    }
+
+    var placeholderTitle: String {
+        switch state {
+        case .connected: "Connected"
+        case .idle: hosts.isEmpty ? "No hosts paired yet" : "Not connected"
+        case .ended: "Disconnected"
+        default: Self.describe(state)
+        }
+    }
+
+    /// The reason a session ended is the one thing worth showing prominently when nothing is on screen.
+    var placeholderDetail: String? {
+        switch state {
+        case .ended(let reason): reason
+        case .reconnecting(let why): why
+        case .idle where hosts.isEmpty: "Pair with the Mac you want to control, using the button in the sidebar."
+        default: nil
+        }
+    }
     var isBusy: Bool {
         switch state {
         case .idle, .ended: return false
@@ -186,6 +222,17 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 150_000_000)
             await session.send(.mouseMove(displayId: d.display_id, x: 0.52, y: 0.5))
             return ControlResponse(ok: true, message: "sent two absolute moves to the centre of \(d.display_id)")
+        case "panels":
+            guard let arg = request.args.first else {
+                return ControlResponse(ok: true, message: panelSummary, data: ["sidebar": String(showSidebar), "log": String(showLog), "text": String(showTextField)])
+            }
+            switch arg {
+            case "sidebar": showSidebar.toggle()
+            case "log": showLog.toggle()
+            case "text": showTextField.toggle()
+            default: return .failure("unknown panel \(arg)")
+            }
+            return ControlResponse(ok: true, message: panelSummary, data: ["sidebar": String(showSidebar), "log": String(showLog), "text": String(showTextField)])
         case "quality":
             guard let arg = request.args.first, let preset = QualityPreset(rawValue: arg) ?? QualityPreset.allCases.first(where: { $0.label.lowercased() == arg.lowercased() }) else {
                 return .failure("quality needs one of: \(QualityPreset.allCases.map(\.rawValue).joined(separator: ", "))")
@@ -323,6 +370,10 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: Input
+
+    var panelSummary: String {
+        "sidebar \(showSidebar ? "on" : "off"), log \(showLog ? "on" : "off"), text \(showTextField ? "on" : "off")"
+    }
 
     /// Sent whenever the choice changes and again on every connect, since a new session starts at
     /// the host's defaults.
