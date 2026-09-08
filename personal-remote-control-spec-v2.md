@@ -702,7 +702,7 @@ Every message:
 |---|---|---|---|
 | `hello` | both | `versions`, `app`, `app_version` | First message on `control`. Version mismatch closes the session with `bye`. |
 | `display_info` | host to controller | `display_id`, `width_px`, `height_px`, `scale` | Sent on open and whenever the streamed display changes. Controllers must handle a change mid-session. |
-| `stream_settings` | controller to host | `max_height`, `max_fps`, `prefer`: `latency` or `quality` | Hints. Host clamps to its own limits. |
+| `stream_settings` | controller to host | `max_height`, `max_fps`, `prefer`: `latency` or `quality` | Hints. Host clamps to its own limits. `max_height` becomes a `scaleResolutionDownBy` divisor and never upscales; a missing field restores automatic behaviour. `prefer: quality` keeps the resolution and spends frames, `latency` does the reverse. Sent again on every connect, since a new session starts at the host's defaults. |
 | `ping` / `pong` | both | `nonce` | Every 5 s. Three missed pongs trigger RECONNECTING. |
 | `bye` | both | `reason` | Same reasons as `SESSION_END`. |
 

@@ -35,7 +35,12 @@ final class FakeMediaSession: MediaSession, @unchecked Sendable {
     var failStart = false
     var path: ConnectionPath?
 
+    var streamSettings: (maxHeight: Int?, maxFps: Int?, preferLatency: Bool)?
+
     func setPath(_ path: ConnectionPath) { lock.withLock { self.path = path } }
+    func applyStreamSettings(maxHeight: Int?, maxFps: Int?, preferLatency: Bool) {
+        lock.withLock { streamSettings = (maxHeight, maxFps, preferLatency) }
+    }
 
     static let display = MediaDisplay(displayID: 7, pointBounds: CGRect(x: 0, y: 0, width: 1920, height: 1080), scale: 2, pixelSize: CGSize(width: 3840, height: 2160), captureSize: CGSize(width: 1920, height: 1080))
 

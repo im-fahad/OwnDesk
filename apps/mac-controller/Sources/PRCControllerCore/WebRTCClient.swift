@@ -149,6 +149,11 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
         public var height: Int
         public var packetsLost: Int
         public var freezeCount: Int
+        /// How long an average frame waited in the jitter buffer before being shown. This is the
+        /// delay a user feels on top of the network round trip, and it grows when the link cannot
+        /// carry the frames being produced.
+        public var jitterBufferMs: Double
+        public var jitterMs: Double
     }
 
     public func inboundVideoStats(sampleMs: Int = 1000, _ completion: @escaping @Sendable (InboundVideoStats?) -> Void) {
@@ -161,13 +166,20 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
                     let seconds = max(second.timestampUs - first.timestampUs, 1) / 1_000_000
                     let bits = Double(max(second.bytes - first.bytes, 0)) * 8
                     let frames = Double(max(second.frames - first.frames, 0))
+                    let emitted = second.jitterBufferEmittedCount - first.jitterBufferEmittedCount
+                    let bufferedSeconds = second.jitterBufferDelay - first.jitterBufferDelay
+                    // Over the interval, not since the session began, so a spike is visible.
+                    let jitterBufferMs = emitted > 0 ? bufferedSeconds / Double(emitted) * 1000
+                                                     : (second.jitterBufferEmittedCount > 0 ? second.jitterBufferDelay / Double(second.jitterBufferEmittedCount) * 1000 : 0)
                     completion(InboundVideoStats(
                         kbps: bits / seconds / 1000,
                         fps: frames / seconds,
                         width: second.width,
                         height: second.height,
                         packetsLost: second.packetsLost,
-                        freezeCount: second.freezeCount))
+                        freezeCount: second.freezeCount,
+                        jitterBufferMs: jitterBufferMs,
+                        jitterMs: second.jitter * 1000))
                 }
             }
         }
@@ -181,6 +193,9 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
         var height: Int
         var packetsLost: Int
         var freezeCount: Int
+        var jitterBufferDelay: Double
+        var jitterBufferEmittedCount: Int
+        var jitter: Double
     }
 
     private func sampleInboundVideo(_ completion: @escaping @Sendable (InboundSample?) -> Void) {
@@ -189,6 +204,7 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
                 completion(nil); return
             }
             let int = { (key: String) -> Int in (s.values[key] as? NSNumber)?.intValue ?? 0 }
+            let double = { (key: String) -> Double in (s.values[key] as? NSNumber)?.doubleValue ?? 0 }
             completion(InboundSample(
                 timestampUs: s.timestamp_us,
                 bytes: int("bytesReceived"),
@@ -196,7 +212,10 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
                 width: int("frameWidth"),
                 height: int("frameHeight"),
                 packetsLost: int("packetsLost"),
-                freezeCount: int("freezeCount")))
+                freezeCount: int("freezeCount"),
+                jitterBufferDelay: double("jitterBufferDelay"),
+                jitterBufferEmittedCount: int("jitterBufferEmittedCount"),
+                jitter: double("jitter")))
         }
     }
 

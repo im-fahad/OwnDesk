@@ -80,6 +80,22 @@ struct ContentView: View {
             }
             Spacer()
             if model.isConnected {
+                Menu {
+                    Picker("Resolution", selection: $model.quality) {
+                        ForEach(QualityPreset.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    Divider()
+                    Picker("Trade-off", selection: $model.smoothMotion) {
+                        Text("Sharp text").tag(false)
+                        Text("Smooth motion").tag(true)
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Text(model.quality == .auto ? "Quality" : model.quality.label)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 Toggle("Send input", isOn: $model.sendInput).toggleStyle(.checkbox)
                 Button("⌘Tab") { model.sendShortcut("Tab", modifiers: [.meta]) }
                 Button("⌘Space") { model.sendShortcut("Space", modifiers: [.meta]) }

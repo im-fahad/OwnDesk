@@ -112,6 +112,23 @@ import Testing
         try await waitUntil("session ended event") { h.events.get().contains { if case .sessionEnded(.user) = $0 { return true } else { return false } } }
     }
 
+    @Test func streamSettingsReachTheEncoder() async throws {
+        let h = Harness()
+        h.trustController()
+        _ = try await h.authenticate()
+        let media = try #require(h.media.get())
+
+        await h.coordinator.mediaFrame(DataChannelFrame(ts: 1, message: .streamSettings(maxHeight: 720, maxFps: 30, prefer: .latency)), on: .control)
+        #expect(media.streamSettings?.maxHeight == 720)
+        #expect(media.streamSettings?.maxFps == 30)
+        #expect(media.streamSettings?.preferLatency == true)
+
+        // Automatic again: nils clear the caps rather than being ignored.
+        await h.coordinator.mediaFrame(DataChannelFrame(ts: 2, message: .streamSettings(maxHeight: nil, maxFps: nil, prefer: .quality)), on: .control)
+        #expect(media.streamSettings?.maxHeight == nil)
+        #expect(media.streamSettings?.preferLatency == false)
+    }
+
     @Test func unknownDeviceGetsOneSignedRejectPerMinute() async throws {
         let h = Harness()
         let first = try await h.send(Harness.request)

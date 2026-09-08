@@ -424,8 +424,10 @@ public actor SessionCoordinator {
             s.media?.send(.pong(nonce: nonce), ts: t)
         case .pong, .displayInfo:
             session = s
-        case .streamSettings:
+        case .streamSettings(let maxHeight, let maxFps, let prefer):
             session = s
+            s.media?.applyStreamSettings(maxHeight: maxHeight, maxFps: maxFps, preferLatency: prefer == .latency)
+            emit(.info("stream settings: \(maxHeight.map { "\($0)p" } ?? "auto height"), \(maxFps.map { "\($0) fps" } ?? "auto fps"), \(prefer?.rawValue ?? "auto")"))
         case .bye(let reason):
             await tearDown(reason: reason, notify: false)
         case .mouseMove, .mouseMoveRel, .mouseDown, .mouseUp, .scroll, .keyDown, .keyUp, .text:

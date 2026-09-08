@@ -32,6 +32,11 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
     private var maxBitrateBps: Int
     private var minBitrateBps: Int
     private var maxFramerate: Int
+    /// A ceiling the controller asked for, in captured pixels. Nil means let the link decide.
+    private var requestedMaxHeight: Int?
+    private var requestedMaxFramerate: Int?
+    private var preferLatency = false
+    private var captureHeight: Int = 0
     private let configuredMaxFramerate: Int
     private var startBitrateBps: Int
     private var channels: [ChannelLabel: RTCDataChannel] = [:]
@@ -145,18 +150,44 @@ public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataCh
         }
     }
 
+    /// The size actually being captured, so a requested ceiling can be turned into a scale factor.
+    public func setCaptureHeight(_ height: Int) {
+        captureHeight = height
+        applyEncodingParameters()
+    }
+
+    /// A `stream_settings` message from the controller (spec section 13.2). Caps are hints the host
+    /// clamps to its own limits; nil restores automatic behaviour.
+    public func applyStreamSettings(maxHeight: Int?, maxFps: Int?, preferLatency: Bool) {
+        requestedMaxHeight = maxHeight
+        requestedMaxFramerate = maxFps
+        self.preferLatency = preferLatency
+        applyEncodingParameters()
+    }
+
+    /// libwebrtc scales by a divisor rather than to a target, so turn the requested height into one.
+    /// Never below 1: we do not upscale.
+    static func scaleFactor(captureHeight: Int, maxHeight: Int?) -> Double {
+        guard let maxHeight, maxHeight > 0, captureHeight > maxHeight else { return 1 }
+        return Double(captureHeight) / Double(maxHeight)
+    }
+
     private func applyEncodingParameters() {
         let params = videoSender.parameters
+        let scale = WebRTCSession.scaleFactor(captureHeight: captureHeight, maxHeight: requestedMaxHeight)
+        let fps = min(maxFramerate, requestedMaxFramerate ?? maxFramerate)
         for encoding in params.encodings {
             encoding.maxBitrateBps = NSNumber(value: maxBitrateBps)
-            encoding.maxFramerate = NSNumber(value: maxFramerate)
+            encoding.maxFramerate = NSNumber(value: fps)
+            encoding.scaleResolutionDownBy = NSNumber(value: scale)
         }
         // A desktop is mostly text, and text survives a low frame rate far better than a low
         // resolution. An idle screen also sends almost nothing, which starves the bandwidth
         // estimate; under `balanced` the encoder answers that by shrinking the picture, so a still
         // desktop ends up permanently soft while using a few kbps. Keep the pixels, spend the
         // frames.
-        params.degradationPreference = NSNumber(value: RTCDegradationPreference.maintainResolution.rawValue)
+        // Asking for smooth motion means the opposite trade: let the picture soften to keep frames.
+        params.degradationPreference = NSNumber(value: (preferLatency ? RTCDegradationPreference.balanced : .maintainResolution).rawValue)
         videoSender.parameters = params
         // A floor under the estimate, so resolution and quality decisions are not made from the
         // near-zero traffic of a still screen.

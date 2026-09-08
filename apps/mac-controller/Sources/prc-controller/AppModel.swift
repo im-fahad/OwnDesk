@@ -8,6 +8,35 @@ import PRCLocalControl
 import PRCProtocol
 import WebRTC
 
+/// What the user can ask for when the link cannot carry everything. Fewer pixels per frame is the
+/// most direct way to cut delay on a narrow link: a 1080p frame at 0.9 Mbit/s takes a noticeable
+/// fraction of a second to arrive.
+enum QualityPreset: String, CaseIterable, Identifiable {
+    case auto, p1080, p720, p540, p360
+
+    var id: String { rawValue }
+
+    var maxHeight: Int? {
+        switch self {
+        case .auto: nil
+        case .p1080: 1080
+        case .p720: 720
+        case .p540: 540
+        case .p360: 360
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .auto: "Automatic"
+        case .p1080: "1080p"
+        case .p720: "720p"
+        case .p540: "540p"
+        case .p360: "360p"
+        }
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var hosts: [PairedHost] = []
@@ -19,6 +48,9 @@ final class AppModel: ObservableObject {
     /// Encoded size of the stream as received, as opposed to the host's display size.
     @Published var videoSize: CGSize = .zero
     @Published var sendInput = true
+    @Published var quality: QualityPreset = .auto { didSet { applyStreamSettings() } }
+    /// Sharp text is the default. Smooth motion lets the picture soften to keep the frame rate up.
+    @Published var smoothMotion = false { didSet { applyStreamSettings() } }
     @Published var log: [String] = []
     @Published var manualAddress = ""
     @Published var pairingText = ""
@@ -154,14 +186,24 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 150_000_000)
             await session.send(.mouseMove(displayId: d.display_id, x: 0.52, y: 0.5))
             return ControlResponse(ok: true, message: "sent two absolute moves to the centre of \(d.display_id)")
+        case "quality":
+            guard let arg = request.args.first, let preset = QualityPreset(rawValue: arg) ?? QualityPreset.allCases.first(where: { $0.label.lowercased() == arg.lowercased() }) else {
+                return .failure("quality needs one of: \(QualityPreset.allCases.map(\.rawValue).joined(separator: ", "))")
+            }
+            quality = preset
+            if request.args.count > 1 { smoothMotion = request.args[1] == "smooth" }
+            return ControlResponse(ok: true, message: "quality \(preset.label)\(smoothMotion ? ", smooth motion" : ", sharp text")")
         case "stats":
             guard let session, isConnected else { return .failure("not connected") }
             guard let v = await session.videoStats() else { return .failure("no video statistics yet") }
             return ControlResponse(ok: true,
-                message: "\(v.width)x\(v.height) at \(String(format: "%.0f", v.fps)) fps, \(String(format: "%.0f", v.kbps)) kbps",
+                message: "\(v.width)x\(v.height) at \(String(format: "%.0f", v.fps)) fps, \(String(format: "%.0f", v.kbps)) kbps, buffered \(String(format: "%.0f", v.jitterBufferMs)) ms",
                 data: ["width": String(v.width), "height": String(v.height), "fps": String(format: "%.1f", v.fps),
                        "kbps": String(format: "%.0f", v.kbps), "packets_lost": String(v.packetsLost),
-                       "freezes": String(v.freezeCount), "rtt_ms": rtt.map { String(Int($0)) } ?? "-"])
+                       "freezes": String(v.freezeCount), "rtt_ms": rtt.map { String(Int($0)) } ?? "-",
+                       "jitter_buffer_ms": String(format: "%.0f", v.jitterBufferMs),
+                       "jitter_ms": String(format: "%.1f", v.jitterMs),
+                       "quality": quality.label])
         case "disconnect":
             disconnect()
             _ = await waitUntil(5000, { !isBusy })
@@ -242,7 +284,11 @@ final class AppModel: ObservableObject {
                 case .state(let s):
                     self.state = s
                     self.append(Self.describe(s))
-                    if case .connected = s { self.store.touch(host.deviceId, at: nowMs(), address: addressUsed); self.hosts = self.store.all }
+                    if case .connected = s {
+                        self.store.touch(host.deviceId, at: nowMs(), address: addressUsed)
+                        self.hosts = self.store.all
+                        self.applyStreamSettings()
+                    }
                 case .rtt(let ms): self.rtt = ms
                 case .display(let d): self.display = d
                 case .remoteVideo: self.append("video track received")
@@ -277,6 +323,17 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: Input
+
+    /// Sent whenever the choice changes and again on every connect, since a new session starts at
+    /// the host's defaults.
+    func applyStreamSettings() {
+        guard let session, isConnected else { return }
+        let height = quality.maxHeight
+        let fps = smoothMotion ? 30 : nil
+        let prefer: StreamPreference? = smoothMotion ? .latency : .quality
+        append("quality: \(quality.label)\(smoothMotion ? ", smooth motion" : "")")
+        Task { await session.send(.streamSettings(maxHeight: height, maxFps: fps, prefer: prefer)) }
+    }
 
     func send(_ message: DataChannelMessage) {
         guard sendInput, isConnected, let session else { return }

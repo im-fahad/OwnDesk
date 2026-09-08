@@ -24,6 +24,8 @@ public protocol MediaSession: AnyObject, Sendable {
     var delegate: MediaSessionDelegate? { get set }
     /// The path the controller declared in SESSION_REQUEST. Sets bitrate limits (spec section 15).
     func setPath(_ path: ConnectionPath)
+    /// A `stream_settings` request from the controller.
+    func applyStreamSettings(maxHeight: Int?, maxFps: Int?, preferLatency: Bool)
     /// Starts capture and prepares the peer connection. Returns the display being streamed.
     func start() async throws -> MediaDisplay
     func answer(offer: String) async throws -> String
@@ -58,6 +60,10 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
         webrtc.setPath(path)
     }
 
+    public func applyStreamSettings(maxHeight: Int?, maxFps: Int?, preferLatency: Bool) {
+        webrtc.applyStreamSettings(maxHeight: maxHeight, maxFps: maxFps, preferLatency: preferLatency)
+    }
+
     public func start() async throws -> MediaDisplay {
         let webrtc = self.webrtc
         let handler: ScreenCapturer.FrameHandler = { pixelBuffer, time in
@@ -75,7 +81,9 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
         }
         self.source = source
         // Capturing at the rate we intend to send saves encode work and keeps pacing honest.
-        return try await source.start(maxLongEdge: config.maxLongEdge, fps: WebRTCSession.framerate(for: path, cap: config.maxFramerate))
+        let display = try await source.start(maxLongEdge: config.maxLongEdge, fps: WebRTCSession.framerate(for: path, cap: config.maxFramerate))
+        webrtc.setCaptureHeight(Int(display.captureSize.height))
+        return display
     }
 
     public func answer(offer: String) async throws -> String {

@@ -94,6 +94,19 @@ tailnet, **Direct (Internet)**, or **Relayed**. Tailscale may itself relay throu
 neither side can be reached directly, which shows up as a round trip of a few hundred milliseconds
 rather than the ~10 ms of a LAN.
 
+## Quality
+
+The **Quality** menu in the toolbar caps the resolution the host sends: Automatic, 1080p, 720p,
+540p, or 360p. It also chooses the trade-off when the link cannot carry everything:
+
+- **Sharp text** keeps the resolution and lets the frame rate fall. Text stays readable.
+- **Smooth motion** lets the picture soften to keep frames coming.
+
+Both are sent as `stream_settings` on the control channel and reapplied on every connect. Lower
+resolutions help when the link is the bottleneck, because a 1080p frame at a megabit takes a
+noticeable fraction of a second to arrive. They do not help when the delay comes from the network
+path itself; see below.
+
 ## When the picture is soft
 
 `prc-controller-cli app stats` reports what is actually arriving: resolution, frame rate, kilobits
@@ -109,6 +122,19 @@ relay can be far away and slow. One measured example: 0.92 Mbit/s with a 600 ms 
 home Mac and a MacBook on mobile data. Nothing in the encoder can make full-motion video good at
 that rate; still screens and text remain sharp. `tailscale status` names the relay when one is in
 use, and `tailscale ping <host>` says whether a direct connection was established.
+
+## When everything lags
+
+`prc-controller-cli app stats` also reports `jitter_ms` and `jitter_buffer_ms`. The receiver sizes
+its buffer from the jitter it sees, so an unsteady path costs delay directly: 130 ms of jitter
+measured on a relay produced a 580 ms buffer, on top of the round trip. Lowering the resolution does
+not help that, because the buffer is protecting against arrival timing rather than volume.
+
+The remedy is a direct path. `tailscale netcheck` on both machines shows why one is not available.
+`PortMapping` empty on the home side means the router offers no UPnP, NAT-PMP or PCP, so Tailscale
+cannot open a port; enabling one of those on the router is the single biggest improvement available.
+A phone or carrier network on the other side may block hole punching regardless, in which case Wi-Fi
+on the controller is the practical answer.
 
 ## Reconnection
 

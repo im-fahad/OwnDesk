@@ -246,6 +246,16 @@ extension WebRTCSession {
         #expect(tiny.start == 3_000_000 && tiny.max == 3_000_000, "never exceed the cap")
     }
 
+    @Test func requestedHeightBecomesAScaleFactor() {
+        // libwebrtc scales by a divisor, not to a target height.
+        #expect(WebRTCSession.scaleFactor(captureHeight: 1080, maxHeight: 540) == 2)
+        #expect(WebRTCSession.scaleFactor(captureHeight: 1080, maxHeight: 720) == 1.5)
+        #expect(WebRTCSession.scaleFactor(captureHeight: 1080, maxHeight: 1080) == 1)
+        #expect(WebRTCSession.scaleFactor(captureHeight: 1080, maxHeight: nil) == 1, "automatic")
+        #expect(WebRTCSession.scaleFactor(captureHeight: 720, maxHeight: 1080) == 1, "never upscale")
+        #expect(WebRTCSession.scaleFactor(captureHeight: 0, maxHeight: 540) == 1, "no capture size yet")
+    }
+
     @Test func moveGateDropsReorderedAbsoluteMoves() {
         var gate = MoveOrderGate()
         // Sender timestamps as they might arrive after reordering on a relayed link.
