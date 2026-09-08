@@ -44,6 +44,10 @@ struct PRCApp: App {
     static let windowID = "prc.main"
 }
 
+extension Notification.Name {
+    static let prcOpenWindow = Notification.Name("prc.openWindow")
+}
+
 /// Starts as an accessory so the copy launchd runs at login adds no Dock icon, and becomes a normal
 /// app while a window is open so it can take keyboard focus properly.
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -74,6 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Opening the app again, from Finder or the Dock, should show the window rather than do nothing.
+    /// The app is usually an accessory with its window closed, so there is nothing for AppKit to raise.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { NotificationCenter.default.post(name: .prcOpenWindow, object: nil) }
+        return true
+    }
 
     static func showInDock(_ show: Bool) {
         windowsOpen += show ? 1 : -1

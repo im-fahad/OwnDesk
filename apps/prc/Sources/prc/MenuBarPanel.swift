@@ -53,6 +53,9 @@ struct MenuBarPanel: View {
         }
         .padding(14)
         .frame(width: 320)
+        .onReceive(NotificationCenter.default.publisher(for: .prcOpenWindow)) { _ in
+            openWindow(id: PRCApp.windowID)
+        }
     }
 
     @ViewBuilder private var permissions: some View {

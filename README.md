@@ -15,10 +15,11 @@ packages/protocol      JSON Schemas, key code tables, signing test vectors,
 packages/swift         Swift package used by the Mac agent and Mac controller
   PRCIdentity          P-256 keys in Secure Enclave or Keychain, signing, encodings
   PRCProtocol          Envelope signing and receiver rules, typed payloads, pairing, server auth
-apps/mac-agent         Mac Mini agent (Swift): signaling server, pairing, sessions,
-                       ScreenCaptureKit + libwebrtc, input injection, menu bar app, headless CLI
-apps/mac-controller    MacBook controller (Swift): discovery, pairing, session with
-                       reconnection, WebRTC receiver, input capture, SwiftUI app
+apps/prc               The app: one per Mac, hosts and controls
+apps/mac-agent         Hosting half (Swift): signaling server, pairing, sessions,
+                       ScreenCaptureKit + libwebrtc, input injection, headless CLI
+apps/mac-controller    Controlling half (Swift): discovery, pairing, session with
+                       reconnection, WebRTC receiver, input capture, headless CLI
 apps/android-controller Android controller (Kotlin)                [pending]
 services/rendezvous    Cloud signaling relay (Node, TypeScript)    [pending]
 tools/web-harness      Browser test client, development only
@@ -45,11 +46,12 @@ npm run e2e                                # headless end to end against the rea
 Real use, as apps:
 
 ```sh
-scripts/build-apps.sh agent && scripts/install-launch-agent.sh        # on the Mac mini: starts at login
-scripts/build-apps.sh controller && scripts/install-controller.sh     # on the MacBook: ~/Applications/PRC Controller.app
+scripts/build-apps.sh prc && scripts/install-prc.sh    # on each Mac: ~/Applications/PRC.app, menu bar, starts at login
 ```
 
-No certificate is needed. Both apps are ad-hoc signed.
+One app per Mac, able to control and be controlled. Hosting is off until you switch it on, so
+installing it never makes a Mac remotely controllable on its own. No certificate is needed; the app
+is ad-hoc signed. See [apps/prc/README.md](apps/prc/README.md).
 
 After a rebuild, macOS asks for the agent's Screen Recording and Accessibility permissions again
 (ad-hoc signatures change per build). The optional `scripts/make-signing-identity.sh` avoids that.
