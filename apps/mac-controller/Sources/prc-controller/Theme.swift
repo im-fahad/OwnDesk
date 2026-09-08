@@ -32,8 +32,10 @@ enum Theme {
     static let monoSmall = Font.system(size: 11, design: .monospaced)
     static let monoLarge = Font.system(size: 15, design: .monospaced)
 
-    /// Height of the unified title bar. Room for the traffic lights plus a control.
-    static let headerHeight: CGFloat = 40
+    /// Height of the unified title bar. macOS centres the traffic lights at y=15.5 regardless of what
+    /// we draw, so the header is sized to share that centre line: measured, our controls land within
+    /// a point of the lights. Shorter than about 33 and SwiftUI stops drawing the icon buttons.
+    static let headerHeight: CGFloat = 34
     /// Left inset that keeps content clear of the traffic lights.
     static let trafficLightInset: CGFloat = 78
 }
@@ -80,9 +82,9 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
                 .foregroundStyle(isOn ? Theme.text : Theme.textDim)
-                .frame(width: 28, height: 26)
+                .frame(width: 26, height: 22)
                 .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)

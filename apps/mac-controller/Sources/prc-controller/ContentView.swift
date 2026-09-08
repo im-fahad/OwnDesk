@@ -33,6 +33,9 @@ struct ContentView: View {
             HRule()
             StatusBar()
         }
+        // Without this SwiftUI keeps a safe area where the title bar used to be, and the header
+        // renders as a second row below the traffic lights instead of beside them.
+        .ignoresSafeArea(.container, edges: .top)
         .background(Theme.content)
         .background(WindowChrome())
         .preferredColorScheme(.dark)
@@ -59,36 +62,42 @@ struct HeaderBar: View {
     @Binding var showPairing: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            // Room for the traffic lights, which now sit inside this row.
-            Spacer().frame(width: Theme.trafficLightInset)
-
-            IconButton(systemName: "sidebar.leading", help: "Toggle hosts (⌘B)", isOn: model.showSidebar) {
-                model.showSidebar.toggle()
-            }
-            IconButton(systemName: "text.alignleft", help: "Toggle log (⌘J)", isOn: model.showLog) {
-                model.showLog.toggle()
-            }
-
-            Divider().frame(height: 16).overlay(Theme.border)
-
+        ZStack {
+            // Centred title, as an editor puts its document name, laid over the controls so it stays
+            // centred in the window rather than in the gap between them.
             title
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 260)
 
-            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                // Room for the traffic lights, which share this row.
+                Spacer().frame(width: Theme.trafficLightInset)
 
-            if model.isConnected {
-                connectedControls
-            } else {
-                idleControls
+                IconButton(systemName: "sidebar.leading", help: "Toggle hosts (⌘B)", isOn: model.showSidebar) {
+                    model.showSidebar.toggle()
+                }
+                IconButton(systemName: "text.alignleft", help: "Toggle log (⌘J)", isOn: model.showLog) {
+                    model.showLog.toggle()
+                }
+
+                Spacer(minLength: 12)
+
+                if model.isConnected {
+                    connectedControls
+                } else {
+                    idleControls
+                }
             }
+            .padding(.trailing, 8)
         }
-        .padding(.trailing, 8)
         .frame(height: Theme.headerHeight)
+        .frame(maxWidth: .infinity)
         .background(Theme.header)
     }
 
     private var title: some View {
         HStack(spacing: 6) {
+            Spacer(minLength: 0)
             if let id = model.selectedHostId, let host = model.store.host(id) {
                 Circle()
                     .fill(model.isConnected ? Theme.online : (model.isBusy ? Theme.warn : Theme.textFaint))
@@ -99,8 +108,11 @@ struct HeaderBar: View {
                 Text("No host selected").font(Theme.ui).foregroundStyle(Theme.textDim)
             }
             Text(model.stateSummary).font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
+            Spacer(minLength: 0)
         }
         .lineLimit(1)
+        .truncationMode(.middle)
+        .allowsHitTesting(false)
     }
 
     private var connectedControls: some View {
@@ -152,7 +164,7 @@ struct HeaderBar: View {
                 .textFieldStyle(.plain)
                 .font(Theme.uiSecondary)
                 .foregroundStyle(Theme.text)
-                .padding(.horizontal, 8).padding(.vertical, 4)
+                .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Theme.content, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border))
                 .frame(width: 190)
@@ -172,7 +184,7 @@ struct HeaderButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(tint)
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, 10).padding(.vertical, 3)
             .background(hovering || configuration.isPressed ? tint.opacity(0.16) : tint.opacity(0.08),
                         in: RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(tint.opacity(0.35)))
