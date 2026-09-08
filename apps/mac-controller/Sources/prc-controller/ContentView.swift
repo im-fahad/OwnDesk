@@ -178,13 +178,15 @@ struct HeaderBar: View {
 
 struct HeaderButtonStyle: ButtonStyle {
     var tint: Color
+    /// The sidebar's buttons sit among smaller text and should not tower over it.
+    var compact = false
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: compact ? 11 : 12, weight: .medium))
             .foregroundStyle(tint)
-            .padding(.horizontal, 10).padding(.vertical, 3)
+            .padding(.horizontal, compact ? 8 : 10).padding(.vertical, compact ? 2 : 3)
             .background(hovering || configuration.isPressed ? tint.opacity(0.16) : tint.opacity(0.08),
                         in: RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(tint.opacity(0.35)))
@@ -214,7 +216,7 @@ struct SidebarPanel: View {
                     }
                     if model.hosts.isEmpty {
                         Text("No paired hosts yet.")
-                            .font(Theme.uiSecondary).foregroundStyle(Theme.textFaint)
+                            .font(Theme.sidebarSecondary).foregroundStyle(Theme.textFaint)
                             .padding(.horizontal, 12).padding(.vertical, 6)
                     }
                     let unpaired = model.discovered.filter { d in !model.hosts.contains { $0.deviceId == d.deviceId } }
@@ -222,7 +224,7 @@ struct SidebarPanel: View {
                         sectionHeader("Nearby, not paired").padding(.top, 8)
                         ForEach(unpaired) { d in
                             Text(d.name)
-                                .font(Theme.uiSecondary).foregroundStyle(Theme.textFaint)
+                                .font(Theme.sidebarSecondary).foregroundStyle(Theme.textFaint)
                                 .padding(.horizontal, 12).padding(.vertical, 3)
                         }
                     }
@@ -232,10 +234,10 @@ struct SidebarPanel: View {
             Spacer(minLength: 0)
             Rectangle().fill(Theme.border).frame(height: 1)
             VStack(alignment: .leading, spacing: 6) {
-                Text("THIS MAC").font(Theme.section).foregroundStyle(Theme.textFaint).tracking(0.5)
-                Text(model.fingerprint).font(Theme.monoLarge).foregroundStyle(Theme.text)
+                Text("THIS MAC").font(Theme.sidebarSection).foregroundStyle(Theme.textFaint).tracking(0.5)
+                Text(model.fingerprint).font(Theme.sidebarMonoLarge).foregroundStyle(Theme.text)
                 Button("Pair with a host…") { showPairing = true }
-                    .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
+                    .buttonStyle(HeaderButtonStyle(tint: Theme.accent, compact: true))
             }
             .padding(12)
         }
@@ -243,7 +245,7 @@ struct SidebarPanel: View {
 
     private func sectionHeader(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(Theme.section).tracking(0.5)
+            .font(Theme.sidebarSection).tracking(0.5)
             .foregroundStyle(Theme.textFaint)
             .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
     }
@@ -261,10 +263,10 @@ struct HostRow: View {
                 .fill(model.discoveredHost(for: host.deviceId) != nil ? Theme.online : Theme.textFaint)
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 1) {
-                Text(host.name).font(Theme.ui).foregroundStyle(Theme.text).lineLimit(1)
+                Text(host.name).font(Theme.sidebarItem).foregroundStyle(Theme.text).lineLimit(1)
                 // The fingerprint is what tells two entries for the same Mac apart, so it has to be
                 // readable rather than decorative.
-                Text(host.fingerprint).font(Theme.monoSmall).foregroundStyle(Theme.textDim)
+                Text(host.fingerprint).font(Theme.sidebarMono).foregroundStyle(Theme.textDim)
             }
             Spacer(minLength: 0)
         }

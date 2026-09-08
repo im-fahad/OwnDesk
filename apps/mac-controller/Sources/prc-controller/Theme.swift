@@ -32,6 +32,14 @@ enum Theme {
     static let monoSmall = Font.system(size: 11, design: .monospaced)
     static let monoLarge = Font.system(size: 15, design: .monospaced)
 
+    // The sidebar runs a notch smaller than the header. It is reference material you glance at,
+    // not the controls you reach for, so it should recede.
+    static let sidebarItem = Font.system(size: 12)
+    static let sidebarSecondary = Font.system(size: 11)
+    static let sidebarSection = Font.system(size: 10, weight: .semibold)
+    static let sidebarMono = Font.system(size: 10, design: .monospaced)
+    static let sidebarMonoLarge = Font.system(size: 13, design: .monospaced)
+
     /// Height of the unified title bar. macOS centres the traffic lights at y=15.5 regardless of what
     /// we draw, so the header is sized to share that centre line: measured, our controls land within
     /// a point of the lights. Shorter than about 33 and SwiftUI stops drawing the icon buttons.
