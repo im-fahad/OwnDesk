@@ -22,6 +22,8 @@ public struct AgentConfig: Sendable {
     /// Development only. When set, the identity is a software key in this file instead of the Keychain,
     /// so every rebuilt ad-hoc-signed binary can read it without a Keychain prompt.
     public var identityFile: URL?
+    /// Where the separate controller app used to keep its data, so its pairings can be imported once.
+    public var legacyControllerDirectory: URL?
     /// TEST ONLY. Stream a generated pattern instead of the screen, so no Screen Recording permission is needed.
     public var syntheticScreen: Bool
 
@@ -43,7 +45,8 @@ public struct AgentConfig: Sendable {
         mediaEnabled: Bool = true,
         inputEnabled: Bool = true,
         identityFile: URL? = nil,
-        syntheticScreen: Bool = false
+        syntheticScreen: Bool = false,
+        legacyControllerDirectory: URL? = nil
     ) {
         self.hostName = hostName
         self.port = port
@@ -60,12 +63,16 @@ public struct AgentConfig: Sendable {
         self.inputEnabled = inputEnabled
         self.identityFile = identityFile
         self.syntheticScreen = syntheticScreen
+        self.legacyControllerDirectory = legacyControllerDirectory
     }
 
     public static func standard() -> AgentConfig {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        return AgentConfig(hostName: Host.current().localizedName ?? "Mac", dataDirectory: support.appendingPathComponent("PRC", isDirectory: true))
+        return AgentConfig(
+            hostName: Host.current().localizedName ?? "Mac",
+            dataDirectory: support.appendingPathComponent("PRC", isDirectory: true),
+            legacyControllerDirectory: support.appendingPathComponent("PRC Controller", isDirectory: true))
     }
 }
 

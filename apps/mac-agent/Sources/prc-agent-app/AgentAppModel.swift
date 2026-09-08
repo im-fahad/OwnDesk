@@ -5,6 +5,7 @@ import Foundation
 import PRCAgentCore
 import PRCIdentity
 import PRCLocalControl
+import PRCPeers
 import PRCProtocol
 import UserNotifications
 
@@ -34,7 +35,7 @@ final class AgentAppModel: ObservableObject {
     @Published var remoteAccess = true
     @Published var port: UInt16 = 0
     @Published var addresses: [String] = []
-    @Published var devices: [TrustedDevice] = []
+    @Published var devices: [Peer] = []
     @Published var session: SessionInfo?
     @Published var pairing: PairingInfo?
     @Published var pendingRequest: PendingRequest?
@@ -97,7 +98,7 @@ final class AgentAppModel: ObservableObject {
             alert.runModal()
             exit(1)
         }
-        devices = agent.trust.all
+        devices = agent.peers.controllers
         remoteAccess = Self.defaults.object(forKey: "remoteAccessOnLaunch") as? Bool ?? true
 
         let stream = agent.events
@@ -225,7 +226,7 @@ final class AgentAppModel: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             notify("Pairing request", "\(name) wants to pair. Compare fingerprints, then approve or deny.")
         case .pairingCompleted(_, let name):
-            devices = agent.trust.all
+            devices = agent.peers.controllers
             pairingOutcome = "Paired with \(name)."
             pendingRequest = nil
         case .pairingFailed(let reason):
@@ -238,7 +239,7 @@ final class AgentAppModel: ObservableObject {
             session = SessionInfo(deviceName: name, phase: "authenticating", path: nil, since: Date())
         case .sessionAuthenticated(_, let name):
             session = SessionInfo(deviceName: name, phase: "negotiating", path: nil, since: session?.since ?? Date())
-            devices = agent.trust.all
+            devices = agent.peers.controllers
         case .sessionConnected(let name, let path):
             session = SessionInfo(deviceName: name, phase: "connected", path: path, since: session?.since ?? Date())
             notify("Remote session started", "\(name) is controlling this Mac (\(path)).")
@@ -251,7 +252,7 @@ final class AgentAppModel: ObservableObject {
             remoteAccess = on
             if !on { session = nil }
         case .deviceRevoked:
-            devices = agent.trust.all
+            devices = agent.peers.controllers
         case .warning(let text):
             lastMessage = text
         case .info(let text):

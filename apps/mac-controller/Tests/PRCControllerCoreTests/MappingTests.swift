@@ -1,5 +1,6 @@
 import AppKit
 import Network
+import PRCPeers
 import Foundation
 import PRCProtocol
 import Testing
@@ -107,17 +108,24 @@ import Testing
     }
 }
 
-@Suite struct HostStoreTests {
-    @Test func persistsAndTouches() throws {
+@Suite struct ControllerPeerStoreTests {
+    @Test func onlyPeersWeMayControlAppearAsHosts() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prc-ctl-\(UUID().uuidString)")
-        let store = try HostStore(directory: dir)
-        let host = PairedHost(deviceId: String(repeating: "ab", count: 32), publicKey: String(repeating: "A", count: 87), name: "Mini", addresses: ["10.0.0.2:47500"], rendezvousURL: nil, pairedAt: 1)
-        try store.save(host)
-        store.touch(host.deviceId, at: 5, address: "10.0.0.3:47500")
-        let reloaded = try HostStore(directory: dir)
-        #expect(reloaded.host(host.deviceId)?.lastConnected == 5)
-        #expect(reloaded.host(host.deviceId)?.addresses == ["10.0.0.3:47500", "10.0.0.2:47500"])
-        #expect(try reloaded.forget(host.deviceId))
-        #expect(try HostStore(directory: dir).all.isEmpty)
+        let store = try PeerStore(directory: dir)
+        let id = String(repeating: "ab", count: 32)
+        try store.pair(deviceId: id, publicKey: String(repeating: "A", count: 87), name: "Mini", type: .mac,
+                       mayControlUs: true, weMayControl: true, addresses: ["10.0.0.2:47500"], now: 1)
+        store.touchConnected(id, at: 5, address: "10.0.0.3:47500")
+
+        let reloaded = try PeerStore(directory: dir)
+        #expect(reloaded.hosts.count == 1)
+        #expect(reloaded.host(id)?.lastConnected == 5)
+        #expect(reloaded.host(id)?.addresses == ["10.0.0.3:47500", "10.0.0.2:47500"])
+
+        // Dropping it from our host list leaves the other direction intact.
+        try reloaded.setWeMayControl(id, false)
+        #expect(reloaded.hosts.isEmpty)
+        #expect(reloaded.controllers.count == 1)
+        #expect(reloaded.hostKey(id) == nil)
     }
 }

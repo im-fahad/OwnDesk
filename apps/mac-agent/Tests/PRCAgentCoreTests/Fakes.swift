@@ -1,5 +1,6 @@
 import Foundation
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 @testable import PRCAgentCore
 
@@ -138,14 +139,14 @@ struct Harness {
     let transport = InMemoryTransport()
     let media = LockedValue<FakeMediaSession?>(nil)
     let input = RecordingInput()
-    let trust: TrustStore
+    let peers: PeerStore
     let coordinator: SessionCoordinator
     let controller: TestController
     var eventsTask: Task<Void, Never>!
     let events = LockedValue<[AgentEvent]>([])
 
     init(mediaEnabled: Bool = true, failMediaStart: Bool = false) {
-        trust = try! TrustStore(directory: tempDirectory())
+        peers = try! PeerStore(directory: tempDirectory())
         let config = AgentConfig(hostName: "Test Mini", port: 0, advertiseBonjour: false, dataDirectory: tempDirectory(), mediaEnabled: mediaEnabled)
         let mediaBox = media
         let factory: MediaSessionFactory? = mediaEnabled ? {
@@ -154,7 +155,7 @@ struct Harness {
             mediaBox.set(m)
             return m
         } : nil
-        coordinator = SessionCoordinator(.init(identity: hostIdentity, trust: trust, config: config, transport: transport, mediaFactory: factory, input: input, power: nil, now: clock.now))
+        coordinator = SessionCoordinator(.init(identity: hostIdentity, peers: peers, config: config, transport: transport, mediaFactory: factory, input: input, power: nil, now: clock.now))
         controller = TestController(hostPublicKey: hostIdentity.publicKeyRaw, now: clock.now)
         let sink = events
         let stream = coordinator.events
@@ -165,7 +166,8 @@ struct Harness {
 
     func trustController(_ c: TestController? = nil) {
         let c = c ?? controller
-        try! trust.add(TrustedDevice(deviceId: c.deviceId, publicKey: c.identity.publicKeyB64, name: "Test Controller", type: .web, pairedAt: clock.now(), lastSeen: nil))
+        try! peers.pair(deviceId: c.deviceId, publicKey: c.identity.publicKeyB64, name: "Test Controller", type: .web,
+                        mayControlUs: true, weMayControl: false, now: clock.now())
     }
 
     func send(_ payload: SignalingPayload, session: String = "", from c: TestController? = nil) async throws -> [(Envelope, SignalingPayload)] {

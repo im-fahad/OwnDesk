@@ -23,6 +23,7 @@ let package = Package(
             dependencies: [
                 .product(name: "PRCIdentity", package: "PRCSwift"),
                 .product(name: "PRCProtocol", package: "PRCSwift"),
+                .product(name: "PRCPeers", package: "PRCSwift"),
                 .product(name: "WebRTC", package: "WebRTC"),
             ],
             swiftSettings: mode

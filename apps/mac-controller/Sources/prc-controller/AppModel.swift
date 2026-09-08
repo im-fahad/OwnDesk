@@ -5,6 +5,7 @@ import Network
 import PRCControllerCore
 import PRCIdentity
 import PRCLocalControl
+import PRCPeers
 import PRCProtocol
 import WebRTC
 
@@ -39,7 +40,7 @@ enum QualityPreset: String, CaseIterable, Identifiable {
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var hosts: [PairedHost] = []
+    @Published var hosts: [Peer] = []
     @Published var discovered: [HostDiscovery.DiscoveredHost] = []
     @Published var selectedHostId: String?
     @Published var state: SessionClient.State = .idle
@@ -65,7 +66,7 @@ final class AppModel: ObservableObject {
 
     let config: ControllerConfig
     let identity: any SigningIdentity
-    let store: HostStore
+    let store: PeerStore
     private let discovery: HostDiscovery
     private var control: LocalControlServer?
     private var session: SessionClient?
@@ -140,12 +141,12 @@ final class AppModel: ObservableObject {
             } else {
                 identity = try IdentityStore.loadOrCreate(service: config.keychainService)
             }
-            store = try HostStore(directory: config.dataDirectory)
+            store = try PeerStore(directory: config.dataDirectory)
         } catch {
             fatalError("cannot initialise identity or host store: \(error)")
         }
         discovery = HostDiscovery(serviceType: config.serviceType)
-        hosts = store.all
+        hosts = store.hosts
         selectedHostId = hosts.first?.deviceId
         discovery.onUpdate = { [weak self] found in
             Task { @MainActor in self?.discovered = found }
@@ -294,7 +295,7 @@ final class AppModel: ObservableObject {
         Task { await self.connect(host: host) }
     }
 
-    private func connect(host: PairedHost) async {
+    private func connect(host: Peer) async {
         var url: URL? = nil
         var addressUsed: String? = nil
         if !manualAddress.isEmpty {
@@ -332,8 +333,8 @@ final class AppModel: ObservableObject {
                     self.state = s
                     self.append(Self.describe(s))
                     if case .connected = s {
-                        self.store.touch(host.deviceId, at: nowMs(), address: addressUsed)
-                        self.hosts = self.store.all
+                        self.store.touchConnected(host.deviceId, at: nowMs(), address: addressUsed)
+                        self.hosts = self.store.hosts
                         self.applyStreamSettings()
                     }
                 case .rtt(let ms): self.rtt = ms
@@ -456,8 +457,11 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 let outcome = try await client.pair(qr: qr, preferredAddress: preferred.isEmpty ? nil : preferred)
-                try store.save(outcome.host)
-                hosts = store.all
+                let h = outcome.host
+                try store.pair(deviceId: h.deviceId, publicKey: h.publicKey, name: h.name, type: h.type,
+                               mayControlUs: h.mayControlUs, weMayControl: h.weMayControl,
+                               addresses: h.addresses, rendezvousURL: h.rendezvousURL, now: nowMs())
+                hosts = store.hosts
                 selectedHostId = outcome.host.deviceId
                 pairingStatus = "Paired with \(outcome.host.name)."
                 pairingText = ""
@@ -471,8 +475,10 @@ final class AppModel: ObservableObject {
     }
 
     func forget(_ id: String) {
-        try? store.forget(id)
-        hosts = store.all
+        // Forgetting from the controller side only withdraws our right to control it; if that Mac
+        // is also allowed to control us, that permission is managed on the hosting side.
+        try? store.setWeMayControl(id, false)
+        hosts = store.hosts
         if selectedHostId == id { selectedHostId = hosts.first?.deviceId }
     }
 }

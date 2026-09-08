@@ -15,7 +15,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 IDENTITY="${PRC_SIGN_IDENTITY:--}"
-VERSION="${PRC_VERSION:-0.1.0}"
+VERSION="${PRC_VERSION:-0.2.0-dev}"
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
 

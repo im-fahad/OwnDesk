@@ -3,6 +3,7 @@ import Network
 import PRCControllerCore
 import PRCIdentity
 import PRCLocalControl
+import PRCPeers
 import PRCProtocol
 import WebRTC
 
@@ -130,14 +131,14 @@ enum ControllerCLI {
         } else {
             identity = try IdentityStore.loadOrCreate(service: config.keychainService)
         }
-        let store = try HostStore(directory: config.dataDirectory)
+        let store = try PeerStore(directory: config.dataDirectory)
         print("prc-controller-cli on \(config.deviceName): identity \(identity.fingerprint)")
 
         switch command {
         case "discover":
             await discover(config: config, seconds: max(1, seconds == 10 ? 3 : seconds))
         case "hosts":
-            for h in store.all { print("  \(h.fingerprint)  \(h.name)  \(h.deviceId)  \(h.addresses.joined(separator: ", "))") }
+            for h in store.hosts { print("  \(h.fingerprint)  \(h.name)  \(h.deviceId)  \(h.addresses.joined(separator: ", "))") }
             if store.all.isEmpty { print("  none") }
         case "pair":
             let text: String
@@ -148,11 +149,14 @@ enum ControllerCLI {
             print("host \(qr.host_name) fingerprint \((try? DeviceID.fingerprint(deviceId: qr.host_device_id)) ?? "?")")
             print("this controller's fingerprint: \(identity.fingerprint)  <- approve on the host only if it shows this")
             let outcome = try await PairingClient(identity: identity, deviceName: config.deviceName).pair(qr: qr, preferredAddress: address)
-            try store.save(outcome.host)
+            let h = outcome.host
+            try store.pair(deviceId: h.deviceId, publicKey: h.publicKey, name: h.name, type: h.type,
+                           mayControlUs: h.mayControlUs, weMayControl: h.weMayControl,
+                           addresses: h.addresses, rendezvousURL: h.rendezvousURL, now: nowMs())
             check(true, "paired with \(outcome.host.name) via \(outcome.address)")
         case "connect":
             guard let needle = positional.first else { print("connect needs a host id prefix or name"); exit(2) }
-            guard let host = store.all.first(where: { $0.deviceId.hasPrefix(needle) || $0.name == needle }) else {
+            guard let host = store.hosts.first(where: { $0.deviceId.hasPrefix(needle) || $0.name == needle }) else {
                 print("no paired host matches \(needle)"); exit(2)
             }
             await connect(host: host, identity: identity, config: config, store: store, address: address, seconds: seconds, probeInput: probeInput)
@@ -200,7 +204,7 @@ enum ControllerCLI {
         }
     }
 
-    static func connect(host: PairedHost, identity: any SigningIdentity, config: ControllerConfig, store: HostStore, address: String?, seconds: Int, probeInput: Bool) async {
+    static func connect(host: Peer, identity: any SigningIdentity, config: ControllerConfig, store: PeerStore, address: String?, seconds: Int, probeInput: Bool) async {
         var url: URL? = address.flatMap { Endpoints.url(for: $0) }
         var via = address ?? ""
         if url == nil {
@@ -244,7 +248,7 @@ enum ControllerCLI {
         }
         check(recorder.hasState { $0 == .authenticating } && recorder.hasState { $0 == .negotiating }, "authenticated and negotiated")
         check(true, "session connected", "path from the controller's view: \(await session.state)")
-        store.touch(host.deviceId, at: nowMs(), address: address)
+        store.touchConnected(host.deviceId, at: nowMs(), address: address)
 
         let gotFrames = await waitUntil(timeoutMs: 15000, "video frames") { counter.snapshot.0 >= 30 }
         let (f0, size) = counter.snapshot

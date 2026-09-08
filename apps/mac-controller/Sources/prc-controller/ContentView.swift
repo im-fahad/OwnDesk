@@ -1,4 +1,5 @@
 import PRCControllerCore
+import PRCPeers
 import PRCProtocol
 import SwiftUI
 
@@ -253,7 +254,7 @@ struct SidebarPanel: View {
 
 struct HostRow: View {
     @EnvironmentObject var model: AppModel
-    let host: PairedHost
+    let host: Peer
     let isSelected: Bool
     @State private var hovering = false
 

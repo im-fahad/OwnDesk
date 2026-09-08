@@ -1,5 +1,6 @@
 import Foundation
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 import Testing
 import WebRTC
@@ -54,7 +55,8 @@ final class RecordingServerDelegate: SignalingServerDelegate, @unchecked Sendabl
         #expect(try FileBackedIdentityStore.loadOrCreate(at: config.identityFile!).deviceId == agent.identity.deviceId)
 
         let controller = TestController(hostPublicKey: agent.identity.publicKeyRaw, now: { nowMs() })
-        try agent.trust.add(TrustedDevice(deviceId: controller.deviceId, publicKey: controller.identity.publicKeyB64, name: "T", type: .web, pairedAt: 0, lastSeen: nil))
+        try agent.peers.pair(deviceId: controller.deviceId, publicKey: controller.identity.publicKeyB64, name: "T",
+                             type: .web, mayControlUs: true, weMayControl: false, now: 0)
 
         let task = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:\(agent.port)/")!)
         task.resume()

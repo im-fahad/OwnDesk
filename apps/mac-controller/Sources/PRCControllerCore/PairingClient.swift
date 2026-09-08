@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 
 public enum PairingError: Error, Equatable, Sendable {
@@ -18,7 +19,7 @@ public enum PairingError: Error, Equatable, Sendable {
 /// LAN cannot collect the request.
 public final class PairingClient: @unchecked Sendable {
     public struct Outcome: Sendable {
-        public var host: PairedHost
+        public var host: Peer
         public var address: String
     }
 
@@ -97,7 +98,11 @@ public final class PairingClient: @unchecked Sendable {
 
         let payload = try await result.value(timeoutMs: timeoutMs, onTimeout: PairingError.timeout)
         guard payload.approved else { throw PairingError.refused(payload.reason) }
-        let host = PairedHost(deviceId: hostId, publicKey: payload.host_public_key, name: payload.host_name, addresses: qr.addresses, rendezvousURL: payload.rendezvous_url, pairedAt: nowMs())
+        // Both sides now hold each other's key and both users compared fingerprints, so the record
+        // covers both directions. Whether this Mac will actually host is gated by its own switch.
+        let host = Peer(deviceId: hostId, publicKey: payload.host_public_key, name: payload.host_name, type: .mac,
+                        mayControlUs: true, weMayControl: true, addresses: qr.addresses,
+                        rendezvousURL: payload.rendezvous_url, pairedAt: nowMs())
         return Outcome(host: host, address: address)
     }
 

@@ -1,12 +1,13 @@
 import Foundation
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 
 /// Wires identity, trust, the signaling server, and the coordinator together. One per process.
 public final class Agent: @unchecked Sendable {
     public let config: AgentConfig
     public let identity: any SigningIdentity
-    public let trust: TrustStore
+    public let peers: PeerStore
     public let coordinator: SessionCoordinator
     private let server: SignalingServer
     private let bridge: ServerBridge
@@ -23,7 +24,9 @@ public final class Agent: @unchecked Sendable {
         } else {
             self.identity = try IdentityStore.loadOrCreate(service: config.keychainService)
         }
-        trust = try TrustStore(directory: config.dataDirectory)
+        peers = try PeerStore(directory: config.dataDirectory)
+        // A device that used to run the separate agent and controller apps keeps its pairings.
+        PeerMigration.importLegacy(into: peers, agentDirectory: config.dataDirectory, controllerDirectory: config.legacyControllerDirectory, now: nowMs())
 
         let advertisement: SignalingServer.Advertisement? = config.advertiseBonjour
             ? .init(name: config.hostName, type: config.serviceType, txt: ["id": self.identity.deviceId, "name": config.hostName, "proto": String(Envelope.protocolVersion)])
@@ -33,7 +36,7 @@ public final class Agent: @unchecked Sendable {
         let media: MediaSessionFactory? = mediaFactory ?? (config.mediaEnabled ? { try LiveMediaSession(config: config) } : nil)
         let inputSink: (any InputSink)? = input ?? (config.inputEnabled ? InputInjector() : nil)
         coordinator = SessionCoordinator(.init(
-            identity: self.identity, trust: trust, config: config, transport: server,
+            identity: self.identity, peers: peers, config: config, transport: server,
             mediaFactory: media, input: inputSink, power: PowerAssertion()
         ))
         bridge = ServerBridge(coordinator: coordinator)

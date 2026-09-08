@@ -1,5 +1,6 @@
 import Foundation
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 
 /// The host's brain: verifies every envelope, runs pairing and session authentication, and drives media.
@@ -7,7 +8,7 @@ import PRCProtocol
 public actor SessionCoordinator {
     public struct Dependencies: Sendable {
         public var identity: any SigningIdentity
-        public var trust: TrustStore
+        public var peers: PeerStore
         public var config: AgentConfig
         public var transport: any SignalingTransport
         public var mediaFactory: MediaSessionFactory?
@@ -15,10 +16,10 @@ public actor SessionCoordinator {
         public var power: PowerAssertion?
         public var now: @Sendable () -> Int64
 
-        public init(identity: any SigningIdentity, trust: TrustStore, config: AgentConfig, transport: any SignalingTransport,
+        public init(identity: any SigningIdentity, peers: PeerStore, config: AgentConfig, transport: any SignalingTransport,
                     mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil, power: PowerAssertion? = nil,
                     now: @escaping @Sendable () -> Int64 = { nowMs() }) {
-            self.identity = identity; self.trust = trust; self.config = config; self.transport = transport
+            self.identity = identity; self.peers = peers; self.config = config; self.transport = transport
             self.mediaFactory = mediaFactory; self.input = input; self.power = power; self.now = now
         }
     }
@@ -81,8 +82,10 @@ public actor SessionCoordinator {
         self.deps = deps
         port = deps.config.port
         sender = EnvelopeSender(identity: deps.identity, now: deps.now)
-        let trust = deps.trust
-        receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { trust.publicKey(for: $0) }, now: deps.now)
+        let peers = deps.peers
+        // Only a peer allowed to control us can have its envelopes verified, so revocation fails
+        // closed without a separate check on every message.
+        receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.controllerKey($0) }, now: deps.now)
         var continuation: AsyncStream<AgentEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation = $0 }
         eventContinuation = continuation
@@ -90,7 +93,7 @@ public actor SessionCoordinator {
     }
 
     public nonisolated var deviceId: String { deps.identity.deviceId }
-    public var trustedDevices: [TrustedDevice] { deps.trust.all }
+    public var trustedDevices: [Peer] { deps.peers.controllers }
     public var hasActiveSession: Bool { session != nil }
 
     public func setPort(_ port: UInt16) {
@@ -223,9 +226,12 @@ public actor SessionCoordinator {
     public func resolvePairing(approved: Bool) async {
         guard let state = pairing, let pending = state.pending else { return }
         if approved {
-            let device = TrustedDevice(deviceId: pending.deviceId, publicKey: pending.publicKey, name: pending.name, type: pending.type, pairedAt: now(), lastSeen: nil)
             do {
-                try deps.trust.add(device)
+                // One pairing records both directions: both sides have each other's key by now, and
+                // both users compared fingerprints. Whether the other Mac will actually host for us
+                // is still gated by its own Remote Access switch.
+                try deps.peers.pair(deviceId: pending.deviceId, publicKey: pending.publicKey, name: pending.name,
+                                    type: pending.type, mayControlUs: true, weMayControl: true, now: now())
             } catch {
                 emit(.pairingFailed("could not save trusted device: \(error.localizedDescription)"))
                 sendPairResult(to: pending.deviceId, connection: pending.connection, approved: false, reason: .denied)
@@ -251,7 +257,7 @@ public actor SessionCoordinator {
 
     private func handleSessionRequest(_ env: Envelope, _ p: SessionRequestPayload, connection: ConnectionID) async {
         guard remoteAccessEnabled else { reject(env.from, .remoteAccessDisabled, connection: connection); return }
-        guard let device = deps.trust.device(env.from) else { reject(env.from, .untrusted, connection: connection); return }
+        guard let device = deps.peers.controller(env.from) else { reject(env.from, .untrusted, connection: connection); return }
         guard p.versions.contains(where: { Envelope.supportedVersions.contains($0) }) else {
             reject(env.from, .versionUnsupported, connection: connection); return
         }
@@ -301,7 +307,7 @@ public actor SessionCoordinator {
         s.state = .authenticated
         s.connection = connection
         s.lastActivity = now()
-        deps.trust.touch(env.from, at: now())
+        deps.peers.touchSeen(env.from, at: now())
 
         if let factory = deps.mediaFactory {
             do {
@@ -354,7 +360,7 @@ public actor SessionCoordinator {
     private func handleSessionResume(_ env: Envelope, connection: ConnectionID) async {
         guard var s = session, s.id == env.session, s.deviceId == env.from, s.state != .challenged,
               now() < s.expiresAt, now() - s.lastActivity <= Int64(Limits.resumeWindowSeconds) * 1000,
-              deps.trust.device(env.from) != nil
+              deps.peers.controller(env.from) != nil
         else {
             reject(env.from, .expired, connection: connection, session: env.session)
             return
@@ -505,8 +511,11 @@ public actor SessionCoordinator {
 
     // MARK: Trust and kill switch
 
+    /// Revoking here withdraws only the right to control us. If we are also paired to control that
+    /// Mac, that stays: they are separate permissions.
     public func revoke(deviceId: String) async {
-        guard (try? deps.trust.revoke(deviceId)) == true else { return }
+        guard deps.peers.controller(deviceId) != nil else { return }
+        try? deps.peers.setMayControlUs(deviceId, false)
         receiver.forgetSender(deviceId)
         if let s = session, s.deviceId == deviceId {
             await tearDown(reason: .revoked, notify: true)

@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 import WebRTC
 
@@ -27,12 +28,12 @@ public actor SessionClient {
 
     public struct Dependencies: Sendable {
         public var identity: any SigningIdentity
-        public var host: PairedHost
+        public var host: Peer
         public var config: ControllerConfig
         public var iceServerURLs: [String]
         public var now: @Sendable () -> Int64
 
-        public init(identity: any SigningIdentity, host: PairedHost, config: ControllerConfig, iceServerURLs: [String] = [], now: @escaping @Sendable () -> Int64 = { nowMs() }) {
+        public init(identity: any SigningIdentity, host: Peer, config: ControllerConfig, iceServerURLs: [String] = [], now: @escaping @Sendable () -> Int64 = { nowMs() }) {
             self.identity = identity; self.host = host; self.config = config; self.iceServerURLs = iceServerURLs; self.now = now
         }
     }
@@ -364,7 +365,7 @@ public actor SessionClient {
 
     func mediaChannelOpened(_ label: ChannelLabel) {
         guard label == .control else { return }
-        webrtc?.send(.hello(versions: Envelope.supportedVersions, app: .macController, appVersion: "0.1.0"), ts: elapsed())
+        webrtc?.send(.hello(versions: Envelope.supportedVersions, app: .macController, appVersion: "0.2.0-dev"), ts: elapsed())
     }
 
     func mediaFrame(_ frame: DataChannelFrame) {

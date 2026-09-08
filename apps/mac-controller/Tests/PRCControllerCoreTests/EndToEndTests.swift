@@ -2,6 +2,7 @@ import Foundation
 import Network
 import PRCAgentCore
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 import Testing
 import WebRTC
@@ -75,7 +76,7 @@ enum E2E {
         #expect(outcome.host.publicKey == agent.identity.publicKeyB64)
         #expect(outcome.host.name == "Test Mini")
         #expect(outcome.address == address)
-        #expect(agent.trust.device(identity.deviceId)?.name == "Test MacBook")
+        #expect(agent.peers.controller(identity.deviceId)?.name == "Test MacBook")
 
         // Session.
         let config = ControllerConfig(deviceName: "Test MacBook", dataDirectory: E2E.tempDir(), pingIntervalMs: 300)
@@ -160,7 +161,7 @@ enum E2E {
     @Test func unpairedControllerIsRejected() async throws {
         let (agent, _) = try await E2E.startAgent(media: false)
         let identity = SoftwareIdentity()
-        let host = PairedHost(deviceId: agent.identity.deviceId, publicKey: agent.identity.publicKeyB64, name: "Test Mini", addresses: [], rendezvousURL: nil, pairedAt: 0)
+        let host = Peer(deviceId: agent.identity.deviceId, publicKey: agent.identity.publicKeyB64, name: "Test Mini", type: .mac, weMayControl: true, pairedAt: 0)
         let session = SessionClient(.init(identity: identity, host: host, config: ControllerConfig(deviceName: "Stranger", dataDirectory: E2E.tempDir())))
         let states = Box<[SessionClient.State]>([])
         let stream = session.events
@@ -179,7 +180,7 @@ enum E2E {
         let identity = SoftwareIdentity()
         let impostor = SoftwareIdentity()
         // A paired host record whose device id is not the agent's.
-        let host = PairedHost(deviceId: impostor.deviceId, publicKey: impostor.publicKeyB64, name: "Wrong Mac", addresses: [], rendezvousURL: nil, pairedAt: 0)
+        let host = Peer(deviceId: impostor.deviceId, publicKey: impostor.publicKeyB64, name: "Wrong Mac", type: .mac, weMayControl: true, pairedAt: 0)
         let config = ControllerConfig(deviceName: "T", dataDirectory: E2E.tempDir(), authTimeoutSeconds: 2)
         let session = SessionClient(.init(identity: identity, host: host, config: config))
         let states = Box<[SessionClient.State]>([])
@@ -199,7 +200,7 @@ enum E2E {
 
     @Test func unreachableHostEndsCleanly() async throws {
         let identity = SoftwareIdentity()
-        let host = PairedHost(deviceId: String(repeating: "ab", count: 32), publicKey: String(repeating: "A", count: 87), name: "Ghost", addresses: [], rendezvousURL: nil, pairedAt: 0)
+        let host = Peer(deviceId: String(repeating: "ab", count: 32), publicKey: String(repeating: "A", count: 87), name: "Ghost", type: .mac, weMayControl: true, pairedAt: 0)
         let session = SessionClient(.init(identity: identity, host: host, config: ControllerConfig(deviceName: "X", dataDirectory: E2E.tempDir())))
         let states = Box<[SessionClient.State]>([])
         let stream = session.events

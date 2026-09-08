@@ -1,5 +1,6 @@
 import Foundation
 import PRCIdentity
+import PRCPeers
 import PRCProtocol
 import Testing
 @testable import PRCAgentCore
@@ -25,8 +26,8 @@ import Testing
         #expect(result.reason == nil)
         #expect(result.host_public_key == h.hostIdentity.publicKeyB64)
         #expect(try DeviceID.deviceId(publicKeyRaw: #require(Base64URL.decode(result.host_public_key))) == qr.host_key_hash)
-        #expect(h.trust.device(h.controller.deviceId)?.name == "Browser")
-        #expect(h.trust.device(h.controller.deviceId)?.type == .web)
+        #expect(h.peers.controller(h.controller.deviceId)?.name == "Browser")
+        #expect(h.peers.controller(h.controller.deviceId)?.type == .web)
     }
 
     @Test func badProofsAreCountedAndCloseTheWindow() async throws {
@@ -43,7 +44,7 @@ import Testing
         let good = PairRequestPayload(public_key: h.controller.identity.publicKeyB64, device_name: "Browser", device_type: .web, pairing_session_id: qr.pairing_session_id, proof: Pairing.proof(pairingCode: code, pairingSessionId: qr.pairing_session_id, controllerDeviceId: h.controller.deviceId))
         let after = try await h.send(.pairRequest(good))
         #expect(after.isEmpty)
-        #expect(h.trust.device(h.controller.deviceId) == nil)
+        #expect(h.peers.controller(h.controller.deviceId) == nil)
     }
 
     @Test func deniedPairingSendsDenied() async throws {
@@ -56,7 +57,7 @@ import Testing
         let results = try h.controller.accept(h.transport.drain(h.controller.connection))
         guard results.count == 1, case .pairResult(let r) = results[0].1 else { Issue.record("expected PAIR_RESULT"); return }
         #expect(r.approved == false && r.reason == .denied)
-        #expect(h.trust.all.isEmpty)
+        #expect(h.peers.controllers.isEmpty)
     }
 
     @Test func pairRequestWithoutOpenWindowIsIgnored() async throws {
@@ -64,7 +65,7 @@ import Testing
         let request = PairRequestPayload(public_key: h.controller.identity.publicKeyB64, device_name: "Browser", device_type: .web, pairing_session_id: "AAECAwQFBgcICQoLDA0ODw", proof: Base64URL.encode(Data(count: 32)))
         let replies = try await h.send(.pairRequest(request))
         #expect(replies.isEmpty)
-        #expect(h.trust.all.isEmpty)
+        #expect(h.peers.controllers.isEmpty)
     }
 }
 
@@ -189,7 +190,7 @@ import Testing
         let ended = try h.controller.accept(h.transport.drain(h.controller.connection))
         if case .sessionEnd(let e)? = ended.last?.1 { #expect(e.reason == .revoked) } else { Issue.record("expected SESSION_END revoked") }
         #expect(h.transport.closed.contains(h.controller.connection))
-        #expect(h.trust.device(h.controller.deviceId) == nil)
+        #expect(h.peers.controller(h.controller.deviceId) == nil)
         let replies = try await h.send(Harness.request)
         guard replies.count == 1, case .sessionReject(let r) = replies[0].1 else { Issue.record("expected SESSION_REJECT"); return }
         #expect(r.reason == .untrusted)
@@ -251,22 +252,25 @@ import Testing
     }
 }
 
-@Suite struct TrustStoreTests {
-    @Test func persistsAcrossReload() throws {
-        let dir = tempDirectory()
-        let store = try TrustStore(directory: dir)
-        let id = SoftwareIdentity()
-        try store.add(TrustedDevice(deviceId: id.deviceId, publicKey: id.publicKeyB64, name: "Phone", type: .android, pairedAt: 1, lastSeen: nil))
-        store.touch(id.deviceId, at: 99)
+@Suite struct AgentPeerStoreTests {
+    @Test func pairingRecordsBothDirectionsAndRevokingOneKeepsTheOther() async throws {
+        let h = Harness()
+        let qr = await h.coordinator.openPairing()
+        let code = try #require(qr.pairingCodeBytes)
+        let proof = Pairing.proof(pairingCode: code, pairingSessionId: qr.pairing_session_id, controllerDeviceId: h.controller.deviceId)
+        _ = try await h.send(.pairRequest(PairRequestPayload(public_key: h.controller.identity.publicKeyB64, device_name: "MacBook",
+                                                            device_type: .mac, pairing_session_id: qr.pairing_session_id, proof: proof)))
+        try await waitUntil("request") { h.events.get().contains { if case .pairingRequest = $0 { return true } else { return false } } }
+        await h.coordinator.resolvePairing(approved: true)
 
-        let reloaded = try TrustStore(directory: dir)
-        #expect(reloaded.device(id.deviceId)?.name == "Phone")
-        #expect(reloaded.device(id.deviceId)?.lastSeen == 99)
-        #expect(reloaded.publicKey(for: id.deviceId) == id.publicKeyRaw)
-        #expect(try reloaded.revoke(id.deviceId))
-        #expect(try TrustStore(directory: dir).all.isEmpty)
+        let peer = try #require(h.peers.peer(h.controller.deviceId))
+        #expect(peer.mayControlUs, "it may control this Mac")
+        #expect(peer.weMayControl, "and this Mac may control it, once that Mac enables hosting")
 
-        let attrs = try FileManager.default.attributesOfItem(atPath: dir.appendingPathComponent("trusted-devices.json").path)
-        #expect((attrs[.posixPermissions] as? Int) == 0o600)
+        // Revoking on the host side withdraws only the inbound permission.
+        await h.coordinator.revoke(deviceId: h.controller.deviceId)
+        let after = try #require(h.peers.peer(h.controller.deviceId))
+        #expect(!after.mayControlUs && after.weMayControl)
+        #expect(h.peers.controllerKey(h.controller.deviceId) == nil, "verification fails closed once revoked")
     }
 }

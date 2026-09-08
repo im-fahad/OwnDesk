@@ -1,4 +1,5 @@
 import PRCAgentCore
+import PRCPeers
 import PRCProtocol
 import SwiftUI
 
@@ -34,7 +35,7 @@ struct MenuPanelView: View {
             }
             Divider()
             HStack {
-                Text("PRC Agent 0.1.0").font(.caption).foregroundStyle(.tertiary)
+                Text("PRC Agent 0.2.0-dev").font(.caption).foregroundStyle(.tertiary)
                 Spacer()
                 Button("Quit") { model.quit() }
             }
@@ -117,7 +118,7 @@ struct MenuPanelView: View {
         }
     }
 
-    private func lastSeen(_ d: TrustedDevice) -> String {
+    private func lastSeen(_ d: Peer) -> String {
         guard let t = d.lastSeen else { return "never connected" }
         return "seen " + Date(timeIntervalSince1970: Double(t) / 1000).formatted(.relative(presentation: .named))
     }
