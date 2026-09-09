@@ -58,6 +58,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Camera preview and frame analysis for scanning the Mac's pairing code.
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+    // Reads the QR itself, offline: no Play Services, nothing sent anywhere.
+    implementation("com.google.zxing:core:3.5.3")
     // A maintained build of libwebrtc for Android; the Macs use the equivalent for Apple platforms.
     implementation("io.github.webrtc-sdk:android:125.6422.07")
     testImplementation("junit:junit:4.13.2")

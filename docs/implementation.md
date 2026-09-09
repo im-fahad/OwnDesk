@@ -240,6 +240,10 @@ phone now puts H.264 first in its offer, and the host names H.264 constrained ba
 preferred codec rather than accepting whatever the factory lists first. The phone's session panel is
 what found this, which is the argument for showing real numbers instead of a spinner.
 
+**A pairing code is decoded on the phone.** Scanning uses the camera's brightness plane and a
+barcode reader compiled into the app: no Play Services, no upload, nothing kept. Typing that code
+by hand is the worst part of pairing, and the Mac already draws it as a QR.
+
 **Probe every address at once.** A Mac advertises a local address and a tailnet address, and trying
 them in turn means waiting out a timeout on the wrong network before the right one is attempted at
 all, which reads as a phone that cannot connect from a cafe. Both halves now probe in parallel and

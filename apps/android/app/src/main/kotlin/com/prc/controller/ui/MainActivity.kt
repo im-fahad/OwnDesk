@@ -16,6 +16,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -291,6 +292,14 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private val scan = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val code = result.data?.getStringExtra(ScanActivity.EXTRA_CODE)
+        if (result.resultCode == RESULT_OK && !code.isNullOrBlank()) {
+            log("read a code from the camera")
+            pair(code)
+        }
+    }
+
     private fun askForCode() {
         val field = monoField(text = "", hint = "Paste the code from the Mac").apply {
             maxLines = 5
@@ -298,9 +307,10 @@ class MainActivity : AppCompatActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Pair a Mac")
-            .setMessage("Approve on the Mac only when it shows ${identity.fingerprint}.")
+            .setMessage("Scan the code the Mac is showing, or paste it. Approve on the Mac only when it shows ${identity.fingerprint}.")
             .setView(pad(field))
             .setPositiveButton("Pair") { _, _ -> pair(field.text.toString()) }
+            .setNeutralButton("Scan a code") { _, _ -> scan.launch(ScanActivity.intent(this)) }
             .setNegativeButton("Cancel", null)
             .show()
     }

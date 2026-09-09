@@ -10,6 +10,9 @@ The Macs can host or control. The phone only controls, which is why this app is 
 
 - Makes one identity per phone, an ECDSA P-256 key generated inside the Android Keystore and never
   exportable, and shows its fingerprint at the top of the screen.
+- Pairs by scanning the code a Mac displays, or from the same code pasted as text. The camera is
+  used for nothing else, and the reading happens on the phone: a pairing code is a secret and does
+  not travel anywhere to be decoded.
 - Pairs with a Mac from the code that Mac displays, proving possession of the code with an HMAC and
   checking that the Mac's key hashes to the id printed in the code. Both people compare fingerprints.
 - Signs every signaling envelope and applies the same receiver rules as the Macs, so a replayed,
