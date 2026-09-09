@@ -22,9 +22,9 @@ import com.prc.controller.BuildConfig
 import com.prc.controller.device.KeystoreIdentity
 import com.prc.controller.device.PeerStore
 import com.prc.controller.protocol.Encoding
+import com.prc.controller.protocol.Identity
 import com.prc.controller.protocol.Peer
 import com.prc.controller.session.PairingClient
-import com.prc.controller.session.SessionClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val qr = withContext(Dispatchers.IO) { PairingClient.parse(text) }
-                log("code is from ${qr.host_name}, ${SessionClient.fingerprintOf(qr.host_device_id)}")
+                log("code is from ${qr.host_name}, ${Identity.fingerprint(qr.host_device_id)}")
                 log("approve on the Mac if it shows ${identity.fingerprint}")
                 val outcome = withContext(Dispatchers.IO) {
                     PairingClient(identity, KeystoreIdentity.deviceName(this@MainActivity)).pair(qr)
@@ -183,23 +183,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connect(peer: Peer) {
-        if (busy) return
-        busy = true
-        log("connecting to ${peer.name}")
-        lifecycleScope.launch {
-            try {
-                val client = SessionClient(identity) { id -> peers.publicKey(id) }
-                val accepted = withContext(Dispatchers.IO) {
-                    client.connect(peer) { step -> runOnUiThread { log(step) } }
-                }
-                log("session ready: ${accepted.display}, ${accepted.path}, ${accepted.roundTripMs} ms")
-                log("video and touch input are the next milestone")
-            } catch (e: Exception) {
-                log("connect failed: ${e.message}")
-            } finally {
-                busy = false
-            }
-        }
+        log("opening ${peer.name}")
+        startActivity(SessionActivity.intent(this, peer.deviceId))
     }
 
     private fun log(line: String) {

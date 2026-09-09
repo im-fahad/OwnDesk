@@ -1,7 +1,7 @@
 # PRC on Android
 
-The phone half of PRC. It pairs with a Mac and opens an authenticated session with it. Video and
-touch input are not built yet; this is the handshake the rest will hang from.
+The phone half of PRC. It pairs with a Mac, shows that Mac's screen, and drives its pointer and
+keyboard.
 
 The Macs can host or control. The phone only controls, which is why this app is much smaller than
 `apps/prc`.
@@ -14,7 +14,25 @@ The Macs can host or control. The phone only controls, which is why this app is 
   checking that the Mac's key hashes to the id printed in the code. Both people compare fingerprints.
 - Signs every signaling envelope and applies the same receiver rules as the Macs, so a replayed,
   stale, misaddressed or unsigned message is refused.
-- Runs the session handshake to the point where the Mac accepts and reports its display.
+- Runs the session handshake, then offers a WebRTC connection the Mac answers, and shows the
+  screen it sends.
+- Sends input on the three data channels the protocol defines: pointer moves on the unordered one,
+  clicks, scroll and typing on the reliable one.
+
+## Using it
+
+Tap a paired Mac to open its screen. Then:
+
+| Gesture | What the Mac sees |
+| --- | --- |
+| Tap | the pointer moves there and clicks |
+| Drag one finger | the pointer follows the finger |
+| Hold still | a right click |
+| Drag two fingers | scroll |
+| Keys | the phone's keyboard, typing into the Mac |
+| End | leaves the session |
+
+The pointer is absolute: it goes where the finger lands rather than moving by a relative amount.
 
 ## Build and install
 
@@ -30,7 +48,12 @@ Needs a JDK 17 and the Android SDK. The Gradle wrapper is checked in.
 
     ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest
 
-These run the vectors in `packages/protocol/vectors`, the same ones the TypeScript and Swift
+There is a second check that runs from the repository root, `npm run android-frames`. It validates
+every data channel frame the app can send against the protocol's own JSON Schemas, using the same
+validator the Mac uses. Run `./gradlew :app:testDebugUnitTest` first, since that is what writes the
+frames out.
+
+The Gradle tests run the vectors in `packages/protocol/vectors`, the same ones the TypeScript and Swift
 implementations run: device ids and fingerprints, the exact bytes an envelope signs, the pairing
 proof, and sixteen receiver cases covering replay, tampering, clock skew and unknown senders. If
 the phone disagrees with a vector it disagrees with both Macs, so these are the tests that matter.

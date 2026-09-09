@@ -35,7 +35,7 @@ packages/swift             Swift libraries used by both halves
   PRCPeers                 the peer list: who is trusted, in which direction
   PRCLocalControl          a same-user control channel so scripts can drive the GUI apps
 apps/prc                   the Mac app: menu bar plus a window, hosts and controls
-apps/android               the phone app: controls only, pairing and the session handshake
+apps/android               the phone app: controls only, with video and touch input
 apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-agent CLI
 apps/mac-controller        controlling half (PRCControllerCore) plus prc-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
@@ -109,8 +109,11 @@ One identity per phone, an ECDSA P-256 key generated in the Android Keystore and
 which is the same promise the Macs get from the Secure Enclave. The protocol layer is a direct
 translation of the TypeScript reference and is checked against the same vectors, so the three
 implementations agree by construction rather than by inspection. Pairing and the session handshake
-work; video and input are not built. A debug build can be driven by intent extras, the way the Mac
-app can be driven by its control CLI, which is how the flow is tested without typing on the phone.
+work, and so do video and input: the phone offers, the Mac answers, and the picture arrives on the
+same socket the handshake used. Touches are absolute rather than trackpad-relative, because on a
+phone the whole desktop is visible at once, so putting the pointer where the finger lands is both
+quicker and easier to aim. A debug build can be driven by intent extras, the way the Mac app can be
+driven by its control CLI, which is how the flow is tested without typing on the phone.
 
 ### Testing without hardware
 
@@ -193,6 +196,17 @@ silence: the schema lists the codec enum as `H264`, the phone sent `h264`, and a
 validation is refused without a reply, which looks exactly like a Mac that is asleep. When a
 message vanishes, check it against the schema before checking the network.
 
+**A video view told to fill the screen will stretch.** The renderer sizes its surface to the frame
+and lets the compositor scale it to the view, so a 16:9 desktop across a 20:9 phone came out
+stretched, and the pointer landed a quarter of a screen from the finger. The view has to measure
+itself to the frame's shape and let the black bars fall where they will. The mapping was proved by
+tapping known points and reading the Mac's real cursor, not by looking.
+
+**Check the phone's frames against the schemas.** `npm run android-frames` validates every data
+channel frame the Android app can send, using the same validator the host uses. It caught four
+frames the Mac would have dropped in silence: the wrong application name in `hello`, an invented
+`prefer` value, and a missing `nonce` and `reason` on `ping` and `bye`.
+
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
@@ -212,8 +226,7 @@ why a direct path is unavailable: on this network the home router offers no port
 
 - The rendezvous server and TURN. Deferred in favour of Tailscale; the protocol still describes
   them.
-- Video and touch input on Android. The phone pairs and completes the authenticated handshake;
-  the media half is the next milestone.
+- Audio, in either direction.
 - Audio from host to controller. Possible, but this WebRTC build can only take audio from a real
   input device on macOS, so it means carrying encoded audio on a data channel of our own.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.

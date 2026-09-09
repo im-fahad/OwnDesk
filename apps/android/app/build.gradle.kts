@@ -48,6 +48,7 @@ android {
 // The unit tests run the protocol's shared vectors, so they need to find them.
 tasks.withType<Test>().configureEach {
     systemProperty("prc.vectors", rootProject.file("../../packages/protocol/vectors").absolutePath)
+    systemProperty("prc.frames.out", layout.buildDirectory.file("frames.json").get().asFile.absolutePath)
 }
 
 dependencies {
@@ -57,6 +58,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // A maintained build of libwebrtc for Android; the Macs use the equivalent for Apple platforms.
+    implementation("io.github.webrtc-sdk:android:125.6422.07")
     testImplementation("junit:junit:4.13.2")
+    // android.jar's org.json is a stub that returns null; the real one lets the frame test run.
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
