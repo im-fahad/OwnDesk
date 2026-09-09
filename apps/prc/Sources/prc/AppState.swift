@@ -650,6 +650,21 @@ final class AppState: ObservableObject {
             connect()
             _ = await waitUntil(30_000, { if case .connected = state { return true }; if case .ended = state { return true }; return false })
             return ControlResponse(ok: isConnected, message: Self.describe(state), data: statusData)
+        case "stats":
+            guard let session, isConnected else { return .failure("not connected") }
+            guard let v = await session.videoStats() else { return .failure("no video statistics yet") }
+            return ControlResponse(ok: true,
+                message: "\(v.width)x\(v.height) at \(String(format: "%.0f", v.fps)) fps, \(String(format: "%.0f", v.kbps)) kbps, buffered \(String(format: "%.0f", v.jitterBufferMs)) ms",
+                data: ["width": String(v.width), "height": String(v.height), "fps": String(format: "%.1f", v.fps),
+                       "kbps": String(format: "%.0f", v.kbps), "packets_lost": String(v.packetsLost),
+                       "freezes": String(v.freezeCount), "jitter_buffer_ms": String(format: "%.0f", v.jitterBufferMs),
+                       "jitter_ms": String(format: "%.1f", v.jitterMs), "quality": quality.label])
+        case "probe-input":
+            guard let session, isConnected, let d = display else { return .failure("not connected") }
+            await session.send(.mouseMove(displayId: d.display_id, x: 0.5, y: 0.5))
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            await session.send(.mouseMove(displayId: d.display_id, x: 0.52, y: 0.5))
+            return ControlResponse(ok: true, message: "sent two absolute moves to the centre of \(d.display_id)")
         case "disconnect":
             disconnect()
             _ = await waitUntil(5000, { !isBusy })

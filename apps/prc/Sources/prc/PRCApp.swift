@@ -14,8 +14,7 @@ struct PRCApp: App {
             ContentView()
                 .environmentObject(state)
                 .frame(minWidth: 880, minHeight: 560)
-                .onAppear { AppDelegate.showInDock(true) }
-                .onDisappear { AppDelegate.showInDock(false) }
+
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
@@ -51,19 +50,24 @@ extension Notification.Name {
 /// Starts as an accessory so the copy launchd runs at login adds no Dock icon, and becomes a normal
 /// app while a window is open so it can take keyboard focus properly.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static var windowsOpen = 0
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Only one copy should serve a Mac: a second would advertise the same identity twice.
         AppDelegate.exitIfAlreadyRunning()
         let background = AppConfiguration.fromCommandLine().background
         // Accessory suppresses the window entirely, which is what the login copy wants and what a
         // person opening the app does not.
+        // Decided once and never changed. Changing it later leaves the Metal-backed video view
+        // showing black: frames still decode and the renderer still reports their size, but nothing
+        // is drawn. The login copy stays an accessory so it adds no Dock icon; a copy someone opens
+        // behaves like a normal app.
         NSApp.setActivationPolicy(background ? .accessory : .regular)
         guard background else { return }
+        // Hidden, not closed. Closing destroys the scene's views, and the Metal-backed video view
+        // SwiftUI builds for a replacement window renders black. Ordering it out keeps the one made
+        // at launch, which works, and showing it again is just ordering it back in.
         DispatchQueue.main.async {
-            for window in NSApp.windows where window.isVisible && !window.className.contains("MenuBarExtra") {
-                window.close()
+            for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
+                window.orderOut(nil)
             }
         }
     }
@@ -82,18 +86,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opening the app again, from Finder or the Dock, should show the window rather than do nothing.
     /// The app is usually an accessory with its window closed, so there is nothing for AppKit to raise.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { NotificationCenter.default.post(name: .prcOpenWindow, object: nil) }
+        if !flag, !AppDelegate.showExistingWindow() {
+            NotificationCenter.default.post(name: .prcOpenWindow, object: nil)
+        }
         return true
     }
 
-    static func showInDock(_ show: Bool) {
-        windowsOpen += show ? 1 : -1
-        let wanted: NSApplication.ActivationPolicy = windowsOpen > 0 ? .regular : .accessory
-        DispatchQueue.main.async {
-            guard NSApp.activationPolicy() != wanted else { return }
-            NSApp.setActivationPolicy(wanted)
-            if wanted == .regular { NSApp.activate(ignoringOtherApps: true) }
+    /// Must run *before* the window is built. Changing the activation policy after a Metal-backed
+    /// video view exists leaves it showing black: frames still decode and the renderer still reports
+    /// their size, but nothing is drawn.
+    /// Brings the app forward and shows the window it built at launch. Returns true when it found
+    /// one, so callers know not to ask SwiftUI for a new one.
+    @discardableResult
+    static func showExistingWindow() -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        guard let window = NSApp.windows.first(where: { !$0.className.contains("MenuBarExtra") && $0.contentView != nil }) else {
+            return false
         }
+        window.makeKeyAndOrderFront(nil)
+        return true
     }
 }
 

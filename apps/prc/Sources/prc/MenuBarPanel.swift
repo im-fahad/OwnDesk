@@ -43,7 +43,9 @@ struct MenuBarPanel: View {
 
             Divider()
             HStack {
-                Button("Open PRC…") { openWindow(id: PRCApp.windowID) }
+                Button("Open PRC…") {
+                    if !AppDelegate.showExistingWindow() { openWindow(id: PRCApp.windowID) }
+                }
                 Spacer()
                 Button("Quit") { state.quit() }
             }
