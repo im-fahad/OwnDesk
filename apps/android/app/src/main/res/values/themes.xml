@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PRC" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorAccent">#4D8EF7</item>
+        <item name="android:windowBackground">#1F1F1F</item>
+        <item name="android:textColor">#CCCCCC</item>
+    </style>
+</resources>

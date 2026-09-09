@@ -34,7 +34,8 @@ packages/swift             Swift libraries used by both halves
   PRCProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
   PRCPeers                 the peer list: who is trusted, in which direction
   PRCLocalControl          a same-user control channel so scripts can drive the GUI apps
-apps/prc                   the app: menu bar plus a window, hosts and controls
+apps/prc                   the Mac app: menu bar plus a window, hosts and controls
+apps/android               the phone app: controls only, pairing and the session handshake
 apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-agent CLI
 apps/mac-controller        controlling half (PRCControllerCore) plus prc-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
@@ -101,6 +102,15 @@ is its own hosting switch, which is off until turned on.
 `apps/prc` runs as a menu bar item with a window on demand. Hosting is off by default and turning
 it on is what constructs the hosting half, so a Mac used only as a controller never touches screen
 capture and is never asked for those permissions.
+
+### The phone
+
+One identity per phone, an ECDSA P-256 key generated in the Android Keystore and never exportable,
+which is the same promise the Macs get from the Secure Enclave. The protocol layer is a direct
+translation of the TypeScript reference and is checked against the same vectors, so the three
+implementations agree by construction rather than by inspection. Pairing and the session handshake
+work; video and input are not built. A debug build can be driven by intent extras, the way the Mac
+app can be driven by its control CLI, which is how the flow is tested without typing on the phone.
 
 ### Testing without hardware
 
@@ -178,6 +188,11 @@ gesture. The event also needs its click count set, and the traffic lights are on
 wide, so an aim a pixel out looks like a dead button. Getting this wrong sent several hours after
 imaginary bugs.
 
+**Codec names are upper case on the wire.** The phone's first session request was dropped in
+silence: the schema lists the codec enum as `H264`, the phone sent `h264`, and a payload that fails
+validation is refused without a reply, which looks exactly like a Mac that is asleep. When a
+message vanishes, check it against the schema before checking the network.
+
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
@@ -197,7 +212,8 @@ why a direct path is unavailable: on this network the home router offers no port
 
 - The rendezvous server and TURN. Deferred in favour of Tailscale; the protocol still describes
   them.
-- The Android controller.
+- Video and touch input on Android. The phone pairs and completes the authenticated handshake;
+  the media half is the next milestone.
 - Audio from host to controller. Possible, but this WebRTC build can only take audio from a real
   input device on macOS, so it means carrying encoded audio on a data channel of our own.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.

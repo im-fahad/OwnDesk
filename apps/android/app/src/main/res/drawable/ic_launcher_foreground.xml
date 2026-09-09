@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A display with a pointer on it, kept inside the 72dp safe zone so no launcher shape clips it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31,32 L77,32 A4,4 0 0 1 81,36 L81,62 A4,4 0 0 1 77,66 L31,66 A4,4 0 0 1 27,62 L27,36 A4,4 0 0 1 31,32 Z" />
+    <path android:fillColor="#FFE4EDFF" android:pathData="M50,66h8v6h-8z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41.5,72 L66.5,72 A2.5,2.5 0 0 1 69,74.5 L69,74.5 A2.5,2.5 0 0 1 66.5,77 L41.5,77 A2.5,2.5 0 0 1 39,74.5 L39,74.5 A2.5,2.5 0 0 1 41.5,72 Z" />
+    <path
+        android:fillColor="#FF2A5FD0"
+        android:pathData="M46,40 L46,56.7 L50.6,52.5 L53.8,59 L57.4,57.3 L54.2,51.2 L59.9,50.8 Z" />
+</vector>

@@ -23,3 +23,7 @@ local.properties
 .env
 *.local.json
 dist/
+
+# Android build outputs
+apps/android/build/
+apps/android/app/build/
