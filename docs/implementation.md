@@ -226,12 +226,15 @@ the window away rather than close it, because closing destroys the scene's views
 replacement window comes back black. Quit really quits: the launch agent restarts the app only
 after a crash, never after the owner chose Quit.
 
-**H.264 level 3.1 cannot carry 1080p.** Android offers H.264 as profile-level-id 42e01f, which is
-Level 3.1, and its ceiling is 1280x720. Asked for a 1080p desktop the Mac cannot meet that, so it
-silently encoded VP8 instead: negotiation succeeded, a picture arrived, and only the frame rate and
-a suspiciously large bitrate said anything was wrong. The phone now raises the level to 4.2 in its
-offer. The symptom was invisible until the session panel showed the codec, and the cause was
-invisible until the same agent was run at 720p, where it chose H.264 without complaint.
+**State an H.264 level the picture actually fits in.** Android offers level 3.1, whose ceiling is
+1280x720. A Mac that cannot meet the level in the offer does not complain: it quietly encodes VP8,
+and the only symptoms are a picture costing ten to twenty times the bandwidth and arriving at a
+third of the frame rate. Raising the offer to 4.2 fixed a 1080p Mac and still failed on a 1920x1200
+one, because that resolution needs more macroblocks than 4.2 allows. The phone now asks its own
+decoder what it supports and offers that, capped at 5.2: libwebrtc's parser knows no level above
+5.2, and claiming 6.2 makes the Mac discard the H.264 line entirely and the session dies during
+negotiation. Measured against a 1920x1200 desktop: VP8 at 3000 kbps became H.264 at 120 kbps, same
+resolution, same thirty frames a second.
 
 **Say which codec you want, or you will get VP8.** Neither side stated a preference, so the phone's
 offer listed VP8 first, the Mac agreed, and a Mac with a hardware H.264 encoder spent its time

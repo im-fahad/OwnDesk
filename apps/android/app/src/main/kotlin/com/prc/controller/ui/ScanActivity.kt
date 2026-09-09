@@ -8,8 +8,11 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.Log
+import android.util.Size
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -18,15 +21,21 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import com.prc.controller.BuildConfig
 import com.prc.controller.device.QrDecoder
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Points the camera at the code a Mac is showing and hands back what it reads.
@@ -40,7 +49,9 @@ class ScanActivity : AppCompatActivity() {
     private lateinit var preview: PreviewView
     private lateinit var hint: TextView
     private val analysisExecutor = Executors.newSingleThreadExecutor()
+    private var camera: Camera? = null
     private var handled = false
+    private var frames = 0
 
     private val askForCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) start() else {
@@ -97,13 +108,45 @@ class ScanActivity : AppCompatActivity() {
         providerFuture.addListener({
             val provider = providerFuture.get()
             val previewUse = Preview.Builder().build().also { it.setSurfaceProvider(preview.surfaceProvider) }
+
+            // A pairing payload makes a dense QR, eighty or so modules across. At the analyser's
+            // default of 640 by 480 each module lands on two pixels or fewer once the code is a
+            // sensible distance away, and it simply never resolves. Full HD frames give it room.
+            val resolution = ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)
+                )
+                .build()
             val analysis = ImageAnalysis.Builder()
+                .setResolutionSelector(resolution)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also { it.setAnalyzer(analysisExecutor, ::analyze) }
+
             provider.unbindAll()
-            provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, previewUse, analysis)
+            camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, previewUse, analysis)
+            // Screens are close, and a camera left to itself often settles on the room behind them.
+            // Focusing on the middle of the frame, and again on a tap, is what makes it snap to the
+            // code rather than to the wall.
+            preview.post { focusOn(preview.width / 2f, preview.height / 2f) }
+            preview.setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    focusOn(event.x, event.y)
+                    hint.text = "Focusing..."
+                }
+                true
+            }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun focusOn(x: Float, y: Float) {
+        val control = camera?.cameraControl ?: return
+        val point = preview.meteringPointFactory.createPoint(x, y)
+        control.startFocusAndMetering(
+            FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                .setAutoCancelDuration(4, TimeUnit.SECONDS)
+                .build()
+        )
     }
 
     private fun analyze(image: ImageProxy) {
@@ -111,8 +154,19 @@ class ScanActivity : AppCompatActivity() {
             if (handled) return
             val plane = image.planes.firstOrNull() ?: return
             val luminance = QrDecoder.packRows(plane.buffer, plane.rowStride, image.width, image.height)
-            val text = QrDecoder.decode(luminance, image.width, image.height) ?: return
+            val text = QrDecoder.decode(luminance, image.width, image.height)
+            frames += 1
+            if (BuildConfig.DEBUG && frames % 15 == 0) {
+                Log.i("PRC", "scanning ${image.width}x${image.height}, $frames frames, nothing read yet")
+            }
+            if (text == null) {
+                // Refocus every so often: a hand-held camera that settled on the wrong distance
+                // will otherwise stare at a blur forever.
+                if (frames % 30 == 0) runOnUiThread { focusOn(preview.width / 2f, preview.height / 2f) }
+                return
+            }
             handled = true
+            Log.i("PRC", "read a code of ${text.length} characters")
             runOnUiThread { finishWith(text) }
         } finally {
             image.close()

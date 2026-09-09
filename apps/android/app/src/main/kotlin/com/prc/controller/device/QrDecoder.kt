@@ -19,7 +19,15 @@ import java.nio.ByteBuffer
  */
 object QrDecoder {
     private val reader = MultiFormatReader().apply {
-        setHints(mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)))
+        setHints(
+            mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                // A pairing code is a dense QR read from a screen by a hand-held camera, so the
+                // slower, more forgiving search is the right trade: a few milliseconds against
+                // a scanner that appears to do nothing.
+                DecodeHintType.TRY_HARDER to true,
+            )
+        )
     }
 
     /** Returns the text of a QR in this frame, or null when there is none to read. */

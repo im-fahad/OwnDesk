@@ -2,6 +2,7 @@ package com.prc.controller.media
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SdpPreferenceTest {
@@ -54,7 +55,7 @@ class SdpPreferenceTest {
             "a=rtpmap:98 H264/90000",
             "a=fmtp:98 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
         )
-        val out = SdpPreference.preferH264(offer)
+        val out = SdpPreference.preferH264(offer, level = "2a")
         assertTrue("level was left at 3.1: $out", out.contains("profile-level-id=42e02a"))
         assertTrue("the profile changed", out.contains("42e0"))
         assertTrue("other parameters were lost", out.contains("packetization-mode=1"))
@@ -67,7 +68,25 @@ class SdpPreferenceTest {
             "a=rtpmap:98 H264/90000",
             "a=fmtp:98 profile-level-id=640c34",
         )
-        assertTrue(SdpPreference.preferH264(offer).contains("profile-level-id=640c34"))
+        assertTrue(SdpPreference.preferH264(offer, level = "2a").contains("profile-level-id=640c34"))
+    }
+
+    @Test
+    fun `a phone that decodes more is offered more`() {
+        val offer = sdp(
+            "m=video 9 UDP/TLS/RTP/SAVPF 98",
+            "a=rtpmap:98 H264/90000",
+            "a=fmtp:98 profile-level-id=42e01f",
+        )
+        // 1920x1200 needs more than level 4.2, which is why the level is asked for rather than fixed.
+        assertTrue(SdpPreference.preferH264(offer, level = "33").contains("profile-level-id=42e033"))
+    }
+
+    @Test
+    fun `a level number becomes the two digits SDP uses`() {
+        assertEquals("2a", H264Level.hex(42))
+        assertEquals("33", H264Level.hex(51))
+        assertEquals("34", H264Level.hex(52))
     }
 
     @Test
