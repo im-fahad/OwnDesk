@@ -112,7 +112,10 @@ implementations agree by construction rather than by inspection. Pairing and the
 work, and so do video and input: the phone offers, the Mac answers, and the picture arrives on the
 same socket the handshake used. Touches are absolute rather than trackpad-relative, because on a
 phone the whole desktop is visible at once, so putting the pointer where the finger lands is both
-quicker and easier to aim. A debug build can be driven by intent extras, the way the Mac app can be
+quicker and easier to aim. Pinching magnifies the picture on the phone alone and asks the Mac for
+nothing, which costs no bandwidth and keeps working on a poor link; the arithmetic that keeps the
+pointer exact under magnification lives in `PointerMapping` and is tested without a phone. A debug
+build can be driven by intent extras, the way the Mac app can be
 driven by its control CLI, which is how the flow is tested without typing on the phone.
 
 ### Testing without hardware

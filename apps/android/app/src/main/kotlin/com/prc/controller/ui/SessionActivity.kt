@@ -15,6 +15,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -63,6 +64,14 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     private var frameWidth = 0
     private var frameHeight = 0
     private var clearing = false
+    private var scale = 1f
+    private var panX = 0f
+    private var panY = 0f
+    private var twoFinger = false
+    private var lastFocusX = 0f
+    private var lastFocusY = 0f
+    private lateinit var root: FrameLayout
+    private lateinit var scaleDetector: ScaleGestureDetector
     private var lastMoveSent = 0L
     private var downAt = 0L
     private var downX = 0f
@@ -111,7 +120,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     }
 
     private fun buildLayout(): View {
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
         renderer = SurfaceViewRenderer(this).apply {
             init(eglBase.eglBaseContext, object : RendererCommon.RendererEvents {
@@ -209,7 +218,10 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         }
         root.addView(keyboardCatcher, FrameLayout.LayoutParams(1, 1))
 
-        renderer.setOnTouchListener { _, event -> onVideoTouch(event); true }
+        scaleDetector = ScaleGestureDetector(this, ZoomListener())
+        // The listener sits on the parent, not the video, because pinching moves and scales the
+        // video and a listener on it would be reading coordinates from a shifting frame.
+        root.setOnTouchListener { _, event -> onTouch(event); true }
         return root
     }
 
@@ -226,7 +238,9 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     // Input ------------------------------------------------------------------------------------
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun onVideoTouch(event: MotionEvent) {
+    private fun onTouch(event: MotionEvent) {
+        scaleDetector.onTouchEvent(event)
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downAt = now()
@@ -234,26 +248,35 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
                 downY = event.y
                 moved = false
                 rightClickFired = false
-                scrolling = false
+                twoFinger = false
                 sendMove(event.x, event.y, force = true)
                 handler.postDelayed(longPress, LONG_PRESS_MS)
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                // A second finger turns the gesture into scrolling, so cancel the pending click.
+                // A second finger means zoom, pan or scroll, never a click.
                 handler.removeCallbacks(longPress)
-                scrolling = true
-                lastScrollX = event.getX(0)
-                lastScrollY = event.getY(0)
+                twoFinger = true
+                lastFocusX = focusX(event)
+                lastFocusY = focusY(event)
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (scrolling && event.pointerCount >= 2) {
-                    val dx = event.getX(0) - lastScrollX
-                    val dy = event.getY(0) - lastScrollY
-                    if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
-                        lastScrollX = event.getX(0)
-                        lastScrollY = event.getY(0)
+                if (twoFinger) {
+                    val fx = focusX(event)
+                    val fy = focusY(event)
+                    val dx = fx - lastFocusX
+                    val dy = fy - lastFocusY
+                    lastFocusX = fx
+                    lastFocusY = fy
+                    if (scaleDetector.isInProgress) return
+                    if (scale > 1.01f) {
+                        // Zoomed in, so dragging moves the picture rather than the Mac's content.
+                        panX += dx
+                        panY += dy
+                        clampPan()
+                        applyTransform()
+                    } else if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
                         session?.send(DataChannel.scroll(dx.toDouble(), dy.toDouble(), now()))
                     }
                 } else {
@@ -268,19 +291,74 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             MotionEvent.ACTION_UP -> {
                 handler.removeCallbacks(longPress)
                 val quick = now() - downAt < LONG_PRESS_MS
-                if (!scrolling && !moved && !rightClickFired && quick) {
+                if (!twoFinger && !moved && !rightClickFired && quick) {
                     session?.send(DataChannel.mouseDown("left", now()))
                     session?.send(DataChannel.mouseUp("left", now()))
                 }
-                scrolling = false
+                twoFinger = false
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 handler.removeCallbacks(longPress)
-                scrolling = false
+                twoFinger = false
             }
         }
     }
+
+    private fun focusX(event: MotionEvent): Float =
+        if (event.pointerCount >= 2) (event.getX(0) + event.getX(1)) / 2f else event.x
+
+    private fun focusY(event: MotionEvent): Float =
+        if (event.pointerCount >= 2) (event.getY(0) + event.getY(1)) / 2f else event.y
+
+    /**
+     * Pinching magnifies the picture on the phone rather than asking the Mac to change anything.
+     * A desktop shrunk onto a phone has text a few pixels tall, and this is the difference between
+     * seeing a menu and guessing at it. The point under the fingers stays under the fingers.
+     */
+    private inner class ZoomListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val previous = scale
+            scale = (scale * detector.scaleFactor).coerceIn(1f, MAX_ZOOM)
+            if (scale == previous) return true
+
+            val centreX = renderer.left + renderer.width / 2f
+            val centreY = renderer.top + renderer.height / 2f
+            panX = PointerMapping.panAfterZoom(detector.focusX, centreX, panX, previous, scale)
+            panY = PointerMapping.panAfterZoom(detector.focusY, centreY, panY, previous, scale)
+            if (scale < 1.02f) {
+                scale = 1f
+                panX = 0f
+                panY = 0f
+            }
+            clampPan()
+            applyTransform()
+            showZoom()
+            return true
+        }
+    }
+
+    private fun applyTransform() {
+        renderer.scaleX = scale
+        renderer.scaleY = scale
+        renderer.translationX = panX
+        renderer.translationY = panY
+    }
+
+    /** Keeps the magnified picture covering the frame, so no black creeps in at an edge. */
+    private fun clampPan() {
+        panX = PointerMapping.clampPan(panX, renderer.width.toFloat(), scale)
+        panY = PointerMapping.clampPan(panY, renderer.height.toFloat(), scale)
+    }
+
+    private fun showZoom() {
+        status.visibility = View.VISIBLE
+        status.text = if (scale <= 1f) "1x" else String.format("%.1fx", scale)
+        handler.removeCallbacks(hideStatus)
+        handler.postDelayed(hideStatus, 900)
+    }
+
+    private val hideStatus = Runnable { status.visibility = View.GONE }
 
     /** Holding still is a right click, the same shape as a long press everywhere else on a phone. */
     private val longPress = Runnable {
@@ -300,25 +378,19 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         val moment = now()
         if (!force && moment - lastMoveSent < DataChannel.MOVE_COALESCE_MS) return
         lastMoveSent = moment
+        if (renderer.width <= 0 || renderer.height <= 0) return
 
-        val viewWidth = renderer.width.toFloat()
-        val viewHeight = renderer.height.toFloat()
-        if (viewWidth <= 0f || viewHeight <= 0f) return
-        val videoAspect = if (frameWidth > 0 && frameHeight > 0) {
+        val aspect = if (frameWidth > 0 && frameHeight > 0) {
             frameWidth.toFloat() / frameHeight.toFloat()
         } else {
             info.width_px.toFloat() / info.height_px.toFloat()
         }
-        val viewAspect = viewWidth / viewHeight
-        val (contentWidth, contentHeight) = if (viewAspect > videoAspect) {
-            viewHeight * videoAspect to viewHeight
-        } else {
-            viewWidth to viewWidth / videoAspect
-        }
-        val left = (viewWidth - contentWidth) / 2f
-        val top = (viewHeight - contentHeight) / 2f
-        val nx = ((x - left) / contentWidth).coerceIn(0f, 1f)
-        val ny = ((y - top) / contentHeight).coerceIn(0f, 1f)
+        val (nx, ny) = PointerMapping.normalized(
+            x = x, y = y,
+            viewLeft = renderer.left.toFloat(), viewTop = renderer.top.toFloat(),
+            viewWidth = renderer.width.toFloat(), viewHeight = renderer.height.toFloat(),
+            scale = scale, panX = panX, panY = panY, frameAspect = aspect,
+        )
         session?.send(DataChannel.mouseMove(info.display_id, nx.toDouble(), ny.toDouble(), moment))
     }
 
@@ -387,6 +459,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         private const val EXTRA_DEVICE_ID = "device_id"
         private const val LONG_PRESS_MS = 550L
         private const val TOUCH_SLOP = 12f
+        private const val MAX_ZOOM = 4f
 
         fun intent(context: Context, deviceId: String): Intent =
             Intent(context, SessionActivity::class.java).putExtra(EXTRA_DEVICE_ID, deviceId)

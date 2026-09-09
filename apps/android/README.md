@@ -18,6 +18,8 @@ The Macs can host or control. The phone only controls, which is why this app is 
   screen it sends.
 - Sends input on the three data channels the protocol defines: pointer moves on the unordered one,
   clicks, scroll and typing on the reliable one.
+- Magnifies the picture on the phone, since a desktop shrunk onto a phone has text a few pixels
+  tall.
 
 ## Using it
 
@@ -28,11 +30,14 @@ Tap a paired Mac to open its screen. Then:
 | Tap | the pointer moves there and clicks |
 | Drag one finger | the pointer follows the finger |
 | Hold still | a right click |
-| Drag two fingers | scroll |
+| Pinch | magnifies the picture on the phone, up to four times |
+| Drag two fingers | scroll, or pan the picture while it is magnified |
 | Keys | the phone's keyboard, typing into the Mac |
 | End | leaves the session |
 
 The pointer is absolute: it goes where the finger lands rather than moving by a relative amount.
+Pinching magnifies the picture on the phone and asks the Mac for nothing, so it costs no bandwidth
+and works while the link is poor. The pointer stays exact while magnified.
 
 ## Build and install
 
