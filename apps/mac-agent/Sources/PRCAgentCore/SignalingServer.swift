@@ -50,6 +50,9 @@ public final class SignalingServer: SignalingTransport, @unchecked Sendable {
     }
 
     public func start() throws {
+        // Idempotent: callers switch hosting on and off, and a second listener would leak the first
+        // and fail to bind, since the port is deliberately not shared.
+        guard listener == nil else { return }
         let params = NWParameters.tcp
         let ws = NWProtocolWebSocket.Options()
         ws.autoReplyPing = true

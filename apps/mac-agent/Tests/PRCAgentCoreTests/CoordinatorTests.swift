@@ -182,6 +182,24 @@ import Testing
         #expect(r.reason == .remoteAccessDisabled)
     }
 
+    @Test func hostingCanBeSwitchedOffAndOnAgain() async throws {
+        let h = Harness()
+        h.trustController()
+
+        await h.coordinator.setRemoteAccess(false)
+        let refused = try await h.send(Harness.request)
+        guard refused.count == 1, case .sessionReject(let r) = refused[0].1 else { Issue.record("expected SESSION_REJECT"); return }
+        #expect(r.reason == .remoteAccessDisabled)
+
+        // Switching back on must re-enable the coordinator, not just restart the listener.
+        await h.coordinator.setRemoteAccess(true)
+        #expect(await h.coordinator.remoteAccessEnabled)
+        let replies = try await h.send(Harness.request)
+        guard replies.count == 1, case .sessionChallenge = replies[0].1 else {
+            Issue.record("expected a challenge after hosting came back, got \(replies.map { $0.0.type })"); return
+        }
+    }
+
     @Test func revocationEndsTheSessionAndBlocksReconnect() async throws {
         let h = Harness()
         h.trustController()

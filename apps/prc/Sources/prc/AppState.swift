@@ -136,6 +136,9 @@ final class AppState: ObservableObject {
     }
 
     init(config: AppConfiguration) {
+        // Before touching the data folder. A second copy that got as far as opening its control
+        // channel would overwrite the running copy's control file on its way out.
+        AppDelegate.exitIfAlreadyRunning()
         self.config = config
         do {
             identity = try config.loadIdentity()
@@ -200,10 +203,18 @@ final class AppState: ObservableObject {
             do {
                 let agent = try agent ?? makeAgent()
                 self.agent = agent
-                try agent.start()
                 hosting = true
                 append("hosting on")
                 requestHostPermissions()
+                // setRemoteAccess, not start: switching off disables the coordinator as well as
+                // stopping the listener, and only this puts both back.
+                Task {
+                    do { try await agent.setRemoteAccess(true) } catch {
+                        lastMessage = "Could not start hosting: \(error)"
+                        append(lastMessage)
+                        hosting = false
+                    }
+                }
             } catch {
                 lastMessage = "Could not start hosting: \(error)"
                 append(lastMessage)
