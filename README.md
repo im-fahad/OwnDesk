@@ -5,7 +5,8 @@ Screen and input travel only inside an encrypted WebRTC connection. Signaling is
 end to end by per-device keys, so neither the LAN, the rendezvous server, nor a TURN relay
 can see or inject anything.
 
-The authoritative design is [personal-remote-control-spec-v2.md](personal-remote-control-spec-v2.md).
+The authoritative design is [docs/spec.md](docs/spec.md).
+What has actually been built, and why it is shaped that way, is [docs/implementation.md](docs/implementation.md).
 
 ## Layout
 

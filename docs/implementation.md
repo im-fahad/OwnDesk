@@ -1,0 +1,192 @@
+# PRC as built
+
+What exists today, how it works, and the things that were learned the hard way. The design this
+follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
+been amended to match.
+
+Written 2026-09-09, at commit `9e2328b` on branch `v0.2-hybrid`. Tag `v0.1.0` on `main` is the
+last state where the agent and the controller were separate apps.
+
+---
+
+## 1. What it does
+
+One Mac shows its screen to another and accepts its mouse and keyboard. It works on a LAN with no
+server at all, and across the Internet over a Tailscale tailnet. Every message that sets up a
+session is signed by a per-device key, so neither the network nor a relay can impersonate either
+side or read anything.
+
+As of v0.2 a single app fills both roles: a Mac can control, be controlled, or both. Android will
+be a controller only.
+
+## 2. Repository map
+
+```text
+docs/                      spec.md (the design), this file
+packages/protocol          the single source of truth for the wire format
+  schemas/                 JSON Schema for every message, split by transport
+  keycodes/                W3C key code tables for macOS and Android
+  vectors/                 shared test vectors, run by TypeScript and Swift alike
+  src/                     the TypeScript reference implementation
+  scripts/                 codegen (types + the Swift key table) and vector generation
+packages/swift             Swift libraries used by both halves
+  PRCIdentity              P-256 keys, Secure Enclave, encodings, code-signing check
+  PRCProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
+  PRCPeers                 the peer list: who is trusted, in which direction
+  PRCLocalControl          a same-user control channel so scripts can drive the GUI apps
+apps/prc                   the app: menu bar plus a window, hosts and controls
+apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-agent CLI
+apps/mac-controller        controlling half (PRCControllerCore) plus prc-controller-cli
+tools/e2e                  headless end-to-end test driving the real agent binary from Node
+tools/web-harness          browser controller, development only
+scripts/                   build, install, uninstall
+```
+
+`apps/mac-agent` and `apps/mac-controller` still carry their own SwiftUI app targets from v0.1.
+Those are superseded by `apps/prc` and are due for removal; their libraries and CLIs stay.
+
+## 3. How a session happens
+
+1. **Discovery.** The host advertises `_prc._tcp` over Bonjour with its device id in the
+   TXT record. Away from the LAN the controller uses a stored address instead, and tries every
+   address it knows in parallel, taking the first that answers.
+2. **Signalling.** The host serves a WebSocket on port 47500. There is no server in the middle;
+   the design keeps room for one but Tailscale has made it unnecessary.
+3. **Authentication.** Request, challenge, auth, accept. Both sides sign, both check the other's
+   nonce. Only then is SDP exchanged, and because the SDP travels inside a signed envelope the
+   DTLS fingerprint is signed too.
+4. **Media.** The controller offers, the host answers. Video is H.264 from ScreenCaptureKit
+   through VideoToolbox. Three data channels carry input and control.
+5. **Input.** The controller maps pointer positions to normalised coordinates, the host turns them
+   back into Quartz events.
+
+## 4. The parts, and why they are shaped that way
+
+### packages/protocol
+
+JSON Schema is the source of truth, not the code. `npm run codegen` emits TypeScript types *and*
+the Swift key code table, so the table cannot drift between platforms. `npm run vectors` writes
+signing inputs, envelopes, pairing proofs and TURN credentials that both the TypeScript and Swift
+test suites consume, which is what proves a message signed on one platform verifies on the other.
+
+### Envelopes
+
+Every signalling message is a signed envelope. The signature covers a fixed context label and eight
+fields joined by newline, with the payload as base64 of the exact JSON bytes the sender produced,
+so no canonical JSON is needed across three languages. Receiver rules run in a fixed order and any
+failure is final: size, version, recipient, known sender, signature, clock skew, replay, schema.
+
+`seq` restarts at 1 per session. In the empty session namespace it restarts per *attempt*: one
+pairing exchange, or one session request and its answer. Both sides reset after the reply, so a
+retry starts again at 1.
+
+### PRCPeers
+
+One record per peer holding the key once and two independent permissions: **may control us** and
+**we may control it**. Key lookups are gated on the relevant permission, so revoking a direction
+makes verification fail closed rather than relying on a check at the call site. A peer allowed
+neither is dropped.
+
+Pairing sets both directions. That costs nothing in trust, because a single pairing already
+exchanges both public keys and both people compare fingerprints. What stops a Mac being controlled
+is its own hosting switch, which is off until turned on.
+
+### The app
+
+`apps/prc` runs as a menu bar item with a window on demand. Hosting is off by default and turning
+it on is what constructs the hosting half, so a Mac used only as a controller never touches screen
+capture and is never asked for those permissions.
+
+### Testing without hardware
+
+- `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
+  Recording permission and no display.
+- `PRCLocalControl` gives each app a loopback port and a token in its data folder, so a script can
+  press the same buttons a person would. This is how pairing, connecting and measuring were driven
+  from a second Mac over SSH.
+- `tools/e2e` spawns the real agent binary and drives it from Node using werift, a WebRTC
+  implementation independent of libwebrtc, which is a genuine interoperability check.
+
+## 5. Building, installing, testing
+
+```sh
+npm install
+npm test                                   # protocol package
+npm run e2e                                # end to end against the real agent binary
+(cd packages/swift && swift test)
+(cd apps/mac-agent && swift test)
+(cd apps/mac-controller && swift test)
+
+scripts/build-apps.sh prc                  # dist/PRC.app, ad-hoc signed
+scripts/install-prc.sh                     # ~/Applications, menu bar, starts at login
+scripts/install-prc.sh --stage             # copy only, for a Mac you are away from
+scripts/install-prc.sh --replace-agent     # also remove the older split agent
+```
+
+Suite sizes at the time of writing: protocol 27, packages/swift 29, agent 25, controller 15, end to
+end 16 steps.
+
+## 6. Things that cost time, so they should not cost it twice
+
+**Never change the app's activation policy at runtime.** Switching between accessory and regular
+leaves an existing Metal-backed video view drawing nothing: frames still decode and the renderer
+still reports their size, so everything looks healthy while the picture is black. The policy is set
+once at launch.
+
+**Never close the window to hide it.** Closing destroys the scene's views and the replacement
+window gets a dead video view, with the same symptom. Order it out and back in instead.
+
+**Ad-hoc signatures change every build.** macOS ties Screen Recording and Accessibility to the
+signature, so after reinstalling, the switch in System Settings can read as on while the new build
+has nothing. The install script clears the stale entry with `tccutil reset`. A free local signing
+identity would end this, but the owner chose no certificates.
+
+**Declare the real network path.** The controller used to claim `lan` always, so the host seeded a
+LAN bitrate on a relayed link and the encoder collapsed to a soft picture. Tailscale addresses are
+private but may be relayed, so they count as cloud.
+
+**A desktop is text.** Degradation preference is `maintainResolution`: an idle screen sends almost
+nothing, which starves the bandwidth estimate, and under `balanced` the encoder answers by
+shrinking the picture. Measured over the same relay, `balanced` settled at 960x540 and
+`maintainResolution` at 1920x1080.
+
+**Absolute pointer moves need a timestamp gate.** They travel on an unordered channel with no
+retransmits, so on a relayed link a reordered pair snaps the cursor backwards. The host ignores a
+move older than the newest applied. Relative moves need no gate, being additive.
+
+**One offer at a time.** The reconnect loop used to issue a fresh ICE restart every half second; on
+a link with a 600 ms round trip a second offer left before the first was answered, and the late
+answer killed the session. An offer is outstanding for ten seconds and late answers are ignored.
+
+**Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
+screenshots settled several questions that eyes could not.
+
+## 7. Where it runs today
+
+Both Macs run only `~/Applications/PRC.app` under the `com.prc.app` LaunchAgent, hosting on, with
+Screen Recording and Accessibility granted. Identities survived the migration from the split apps,
+so nothing needed re-pairing: Mac mini `25AA-F3B7-4F82`, MacBook `FF28-84B1-1F62`, each holding the
+other in both directions.
+
+Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
+connect the two directly, it relays and the round trip becomes several hundred milliseconds at
+under a megabit; the picture stays sharp and the frame rate gives way. `tailscale netcheck` shows
+why a direct path is unavailable: on this network the home router offers no port mapping.
+
+## 8. Not built
+
+- The rendezvous server and TURN. Deferred in favour of Tailscale; the protocol still describes
+  them.
+- The Android controller.
+- Audio from host to controller. Possible, but this WebRTC build can only take audio from a real
+  input device on macOS, so it means carrying encoded audio on a data channel of our own.
+- Clipboard, file transfer, multiple monitors, local cursor rendering.
+- Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
+
+## 9. Conventions
+
+Ask before committing. Keep `packages/protocol` as the source of truth and regenerate after
+changing a schema or the key table. For local smoke runs use `--file-identity`, a temporary
+`--data-dir`, and `--synthetic-screen`, so nothing prompts and nothing lands in the real
+Application Support folder. For work across both Macs, copy the tree to the other machine and keep
+its data outside the copied folder, since a sync with delete would erase it.
