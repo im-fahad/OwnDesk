@@ -48,6 +48,45 @@ enum Theme {
     static let trafficLightInset: CGFloat = 78
 }
 
+/// The header's own background, drawn by an NSView so it can answer the clicks a real title bar
+/// would. A SwiftUI colour would sit on top and swallow them.
+struct TitleBarBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { TitleBarBackgroundView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+final class TitleBarBackgroundView: NSView {
+    /// The header covers the window's real title bar, so AppKit never sees these clicks and the
+    /// window would ignore two gestures every other Mac app honours. Both happen here instead.
+    /// SwiftUI routes a click to this view only when none of the header's own controls wants it,
+    /// which makes "arrives here" the definition of empty title bar space.
+    override func mouseDown(with event: NSEvent) {
+        guard let window else {
+            super.mouseDown(with: event)
+            return
+        }
+        guard event.clickCount == 2 else {
+            // Taking the event at all stops AppKit starting its own drag, so drive it from here.
+            window.performDrag(with: event)
+            return
+        }
+        // Whichever the user chose in Desktop & Dock.
+        switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+        case "Minimize": window.performMiniaturize(nil)
+        case "None": break
+        default: window.zoom(nil)
+        }
+    }
+
+    /// False so the click reaches `mouseDown` rather than AppKit's own window drag.
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(Theme.header).setFill()
+        dirtyRect.fill()
+    }
+}
+
 /// Makes the window's title bar part of the content, so the header is the title bar rather than a
 /// second row beneath an empty one.
 struct WindowChrome: NSViewRepresentable {
@@ -66,6 +105,8 @@ struct WindowChrome: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
+
+
 
 extension Color {
     init(hex: UInt32) {

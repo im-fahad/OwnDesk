@@ -93,7 +93,7 @@ struct HeaderBar: View {
         }
         .frame(height: Theme.headerHeight)
         .frame(maxWidth: .infinity)
-        .background(Theme.header)
+        .background(TitleBarBackground())
     }
 
     private var title: some View {

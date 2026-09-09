@@ -158,6 +158,21 @@ move older than the newest applied. Relative moves need no gate, being additive.
 a link with a 600 ms round trip a second offer left before the first was answered, and the late
 answer killed the session. An offer is outstanding for ten seconds and late answers are ignored.
 
+**A custom header is not a title bar.** The window draws its content under a transparent title
+bar, so the app's own header covers it and AppKit never sees those clicks: dragging the window and
+double clicking to zoom both stop working. The header's background view now does both itself, and
+SwiftUI decides what counts as empty space, because it routes a click down to that view only when
+none of the header's own controls wants it. Two approaches that do not work: AppKit hit testing
+cannot tell blank header space from a SwiftUI button, since SwiftUI answers with one hosting view
+for the whole area; and making the background refuse clicks gives native dragging but puts the
+double click out of reach.
+
+**Synthetic clicks need a mouse move first.** A test that posts a click at a point the cursor is
+not already at makes the window jump by that distance during a drag, which reads as a broken
+gesture. The event also needs its click count set, and the traffic lights are only twelve points
+wide, so an aim a pixel out looks like a dead button. Getting this wrong sent several hours after
+imaginary bugs.
+
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
