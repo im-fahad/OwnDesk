@@ -217,6 +217,12 @@ distance vanished, and raising the speed made it worse rather than better. The h
 delta to the position it last asked for, and resynchronises only after a pause long enough to mean
 the user let go.
 
+**Probe every address at once.** A Mac advertises a local address and a tailnet address, and trying
+them in turn means waiting out a timeout on the wrong network before the right one is attempted at
+all, which reads as a phone that cannot connect from a cafe. Both halves now probe in parallel and
+use the first that answers, remembering it for next time. The phone can also pin one by hand, which
+is the answer when only Tailscale will reach a Mac.
+
 **Copy the gestures people already know.** The phone's controls follow what Microsoft, Chrome
 Remote Desktop, Splashtop and Jump Desktop settled on, including the one that looks odd until it is
 explained: a drag with the button held has to be entered deliberately, by tapping twice and holding,

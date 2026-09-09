@@ -464,8 +464,10 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         }
     }
 
-    override fun onReady(display: DisplayInfo, path: String) {
+    override fun onReady(display: DisplayInfo, path: String, address: String) {
         this.display = display
+        // Worth remembering: next time this address is tried first.
+        intent.getStringExtra(EXTRA_DEVICE_ID)?.let { PeerStore(this).setLastGood(it, address) }
         runOnUiThread { status.text = "${display.width_px}x${display.height_px}  ·  $path" }
     }
 

@@ -45,6 +45,21 @@ be in your hands. The one worth knowing is the drag: no app treats a plain finge
 because then nothing could be pointed at without dragging it. Tapping twice and holding is how you
 enter it, and a blue circle appears to say the button is down.
 
+## Reaching a Mac
+
+A Mac advertises every address it has when pairing: the one on the local network, and its Tailscale
+addresses. All of them are probed at once when connecting, so the phone finds the Mac whether it is
+in the same room or on the other side of the world, without waiting out a timeout on the wrong
+network first. Whatever answered last time is tried first the next time.
+
+Long press a Mac in the list for its options. **Choose an address** pins one, which is what to use
+when only Tailscale will reach it and the local address belongs to some other network's router.
+**Use any address** goes back to probing. The dot beside each Mac turns green when an address
+answers.
+
+Reaching a Mac over Tailscale needs Tailscale running on the phone and on that Mac, both signed
+into the same tailnet.
+
 ## Touch or trackpad
 
 **Touch** is absolute. The pointer goes where your finger lands. Quick, but a fingertip covers about

@@ -69,6 +69,59 @@ object Endpoints {
         return "ws://$hostPort/"
     }
 
+    /**
+     * The first address that accepts a connection, probed all at once.
+     *
+     * A Mac usually advertises a home address and a tailnet address. Trying them in turn means
+     * waiting out a timeout on the wrong one before the right one is even attempted, which is the
+     * difference between connecting in a second from a cafe and appearing not to work at all.
+     */
+    fun firstReachable(addresses: List<String>, timeoutMs: Int = 2500): String? {
+        if (addresses.isEmpty()) return null
+        if (addresses.size == 1) return if (reachable(addresses[0], timeoutMs)) addresses[0] else null
+
+        val winner = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val done = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(addresses.size, 8))
+        try {
+            for (address in addresses) {
+                pool.execute {
+                    if (reachable(address, timeoutMs)) {
+                        // The first to answer wins; the rest are abandoned.
+                        if (winner.compareAndSet(null, address)) done.countDown()
+                    }
+                }
+            }
+            done.await(timeoutMs.toLong() + 500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } finally {
+            pool.shutdownNow()
+        }
+        return winner.get()
+    }
+
+    private fun reachable(address: String, timeoutMs: Int): Boolean {
+        val host = host(address)
+        val port = port(address) ?: return false
+        return try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun port(address: String): Int? {
+        val trimmed = address.trim()
+        return when {
+            trimmed.startsWith("[") -> trimmed.substringAfter("]:", "").toIntOrNull() ?: DEFAULT_PORT
+            trimmed.count { it == ':' } > 1 -> DEFAULT_PORT
+            trimmed.contains(':') -> trimmed.substringAfter(':').toIntOrNull()
+            else -> DEFAULT_PORT
+        }
+    }
+
     fun host(address: String): String {
         val trimmed = address.trim()
         return when {

@@ -121,6 +121,21 @@ data class Peer(
     val name: String,
     val addresses: List<String>,
     @SerialName("paired_at") val pairedAt: Long,
+    /** An address the owner chose by hand, such as a Tailscale one, tried before any other. */
+    val preferred: String? = null,
+    /** The address that worked last time, tried before the rest of the list. */
+    val lastGood: String? = null,
 ) {
     val fingerprint: String get() = Identity.fingerprint(deviceId)
+
+    /**
+     * Every address worth trying, best first. A chosen address leads, then whatever worked last
+     * time, then the ones the Mac advertised when pairing. The list is what gets probed, so a Mac
+     * that moved between a home network and a tailnet is still found without anyone typing.
+     */
+    fun candidates(): List<String> =
+        (listOfNotNull(preferred, lastGood) + addresses)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
 }

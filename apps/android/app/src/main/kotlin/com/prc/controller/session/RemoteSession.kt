@@ -21,6 +21,8 @@ import com.prc.controller.protocol.SessionRejectPayload
 import com.prc.controller.protocol.SessionRequestPayload
 import com.prc.controller.protocol.SigningIdentity
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -50,7 +52,7 @@ class RemoteSession(
     interface Listener {
         fun onLog(line: String)
         fun onVideo(track: VideoTrack)
-        fun onReady(display: DisplayInfo, path: String)
+        fun onReady(display: DisplayInfo, path: String, address: String)
         fun onEnded(reason: String)
     }
 
@@ -67,8 +69,24 @@ class RemoteSession(
 
     /** Connects, authenticates, and asks for the screen. Returns once the picture is negotiated. */
     suspend fun start() {
+        val candidates = peer.candidates()
+        if (candidates.isEmpty()) throw ProtocolException("no address to try; set one for this Mac")
+
+        // Every address is probed at once. A Mac usually advertises a home address and a tailnet
+        // one, and trying them in turn means waiting out a timeout on the wrong network before the
+        // right address is attempted at all.
+        listener.onLog("looking for ${peer.name}")
+        val reachable = withContext(Dispatchers.IO) { Endpoints.firstReachable(candidates) }
+        val order = if (reachable != null) {
+            listener.onLog("$reachable answered")
+            listOf(reachable) + candidates.filter { it != reachable }
+        } else {
+            listener.onLog("no address answered a probe; trying each in turn")
+            candidates
+        }
+
         var last: Exception = ProtocolException("no address answered")
-        for (address in peer.addresses) {
+        for (address in order) {
             val url = Endpoints.url(address) ?: continue
             listener.onLog("trying $address")
             try {
@@ -147,7 +165,11 @@ class RemoteSession(
             throw ProtocolException("the Mac never confirmed the session")
         }
         display = acceptPayload.display
-        listener.onReady(acceptPayload.display, if (path == "lan") "Direct (LAN)" else "Direct (Tailscale or Internet)")
+        listener.onReady(
+            acceptPayload.display,
+            if (path == "lan") "Direct (LAN)" else "Direct (Tailscale or Internet)",
+            address,
+        )
 
         startMedia()
     }

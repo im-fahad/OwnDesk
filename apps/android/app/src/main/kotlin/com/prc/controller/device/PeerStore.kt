@@ -27,6 +27,19 @@ class PeerStore(context: Context) {
         write()
     }
 
+    /** Records an address the owner typed, or clears it when the text is blank. */
+    fun setPreferred(deviceId: String, address: String?) {
+        val peer = peer(deviceId) ?: return
+        save(peer.copy(preferred = address?.trim()?.takeIf { it.isNotEmpty() }))
+    }
+
+    /** Remembers what worked, so the next connection starts with it. */
+    fun setLastGood(deviceId: String, address: String) {
+        val peer = peer(deviceId) ?: return
+        if (peer.lastGood == address) return
+        save(peer.copy(lastGood = address))
+    }
+
     fun forget(deviceId: String) {
         peers.removeAll { it.deviceId == deviceId }
         write()
