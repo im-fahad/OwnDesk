@@ -40,8 +40,8 @@ Tap a paired Mac to open its screen. Then:
 
 The sidebar sits on the black bar beside a 16:9 picture, so it costs no part of the Mac's screen.
 The icons carry no labels; hold one and its name appears, which is where Android shows the name of
-a control that has no caption. The info icon expands the sidebar and reports what the session is
-actually doing: which Mac, over which address and route, the resolution, frame rate, bitrate,
+a control that has no caption. The end icon asks before it drops the session. The info icon expands the sidebar and reports what
+the session is actually doing: which Mac, over which address and route, the resolution, frame rate, bitrate,
 codec, packets lost, jitter and round trip, read from the connection rather than guessed.
 
 These follow the conventions the established remote desktop apps settled on, so they should already

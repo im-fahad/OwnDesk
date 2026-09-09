@@ -28,6 +28,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.TooltipCompat
 import androidx.lifecycle.lifecycleScope
@@ -190,17 +191,19 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         icons.addView(iconButton(R.drawable.ic_keys, "Keyboard") { toggleKeyboard() })
         infoButton = iconButton(R.drawable.ic_info, "Session info") { toggleInfo() }
         icons.addView(infoButton)
-        icons.addView(iconButton(R.drawable.ic_end, "End session") { finish() })
+        icons.addView(iconButton(R.drawable.ic_end, "End session") { confirmEnd() })
 
-        val sidebar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(infoPanel, LinearLayout.LayoutParams(dp(232), ViewGroup.LayoutParams.WRAP_CONTENT))
-            addView(icons)
-        }
-        root.addView(sidebar, FrameLayout.LayoutParams(
+        // Anchored separately, so opening the panel does not move the icons. Sharing one row meant
+        // the row grew taller and its vertical centring slid the icons up the screen, which moved
+        // the button under the thumb that had just pressed it.
+        root.addView(icons, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.END or Gravity.CENTER_VERTICAL,
         ))
+        root.addView(infoPanel, FrameLayout.LayoutParams(
+            dp(210), ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.END or Gravity.CENTER_VERTICAL,
+        ).apply { rightMargin = dp(54) })
 
         // Off-screen, so the soft keyboard has somewhere to type into. What it types is forwarded
         // as text, which is the only way a phone keyboard can produce characters faithfully.
@@ -380,6 +383,16 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
      * route, and what the stream is actually doing. Guesswork about a stuttering picture is what
      * this replaces, so the numbers come from the peer connection rather than from hope.
      */
+    /** Ending drops the session, so a tap next to the info button should not do it silently. */
+    private fun confirmEnd() {
+        AlertDialog.Builder(this)
+            .setTitle("End the session?")
+            .setMessage("The screen closes and $peerName goes back to being on its own.")
+            .setPositiveButton("End") { _, _ -> finish() }
+            .setNegativeButton("Stay", null)
+            .show()
+    }
+
     private fun toggleInfo() {
         val showing = infoPanel.visibility == View.VISIBLE
         infoPanel.visibility = if (showing) View.GONE else View.VISIBLE
@@ -445,12 +458,17 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             text = name
             setTextColor(Theme.TEXT_FAINT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-        }, LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // The value takes the rest and sits against the right edge, so the two columns read as a
+        // table rather than as a label with a hole beside it.
         row.addView(TextView(this).apply {
             text = value
             setTextColor(Theme.TEXT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             typeface = android.graphics.Typeface.MONOSPACE
+            gravity = Gravity.END
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            leftMargin = dp(8)
         })
         infoPanel.addView(row, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
