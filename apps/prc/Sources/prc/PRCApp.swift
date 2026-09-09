@@ -25,6 +25,8 @@ struct PRCApp: App {
                 Button("Toggle Peers") { state.showSidebar.toggle() }.keyboardShortcut("b", modifiers: .command)
                 Button("Toggle Log") { state.showLog.toggle() }.keyboardShortcut("j", modifiers: .command)
                 Divider()
+                Button("Close Window") { AppDelegate.hideWindow() }.keyboardShortcut("w", modifiers: .command)
+                Divider()
                 Button(state.isConnected ? "Disconnect" : "Connect") {
                     state.isConnected ? state.disconnect() : state.connect()
                 }
@@ -45,6 +47,8 @@ struct PRCApp: App {
 
 extension Notification.Name {
     static let prcOpenWindow = Notification.Name("prc.openWindow")
+    /// Posted when the Dock icon appears or disappears, which costs the video view its drawing.
+    static let prcRebuildVideo = Notification.Name("prc.rebuildVideo")
 }
 
 /// Starts as an accessory so the copy launchd runs at login adds no Dock icon, and becomes a normal
@@ -70,6 +74,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.orderOut(nil)
             }
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // The close button belongs to a window SwiftUI makes on its own schedule, so it is claimed
+        // whenever the app comes forward rather than once at launch.
+        DispatchQueue.main.async { AppDelegate.interceptCloseButton() }
+    }
+
+    /// The Dock icon follows the window: there while one is open, gone when it is put away. The
+    /// menu bar item stays either way, because the Mac is still reachable.
+    ///
+    /// Changing the activation policy leaves an existing Metal-backed video view drawing nothing,
+    /// so every change asks the window to build a fresh one. That is why this is the only place the
+    /// policy is allowed to move.
+    static func showDockIcon(_ visible: Bool) {
+        let wanted: NSApplication.ActivationPolicy = visible ? .regular : .accessory
+        guard NSApp.activationPolicy() != wanted else { return }
+        NSApp.setActivationPolicy(wanted)
+        NotificationCenter.default.post(name: .prcRebuildVideo, object: nil)
+    }
+
+    /// Put away, not closed. Closing destroys the scene's views and SwiftUI's replacement window
+    /// comes back with a video view that renders black.
+    static func hideWindow() {
+        for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
+            window.orderOut(nil)
+        }
+        showDockIcon(false)
+    }
+
+    /// The red button should put the window away rather than destroy it. Taking the button's action
+    /// leaves SwiftUI's own window delegate alone, which nothing else here can safely replace.
+    static func interceptCloseButton() {
+        for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
+            guard let button = window.standardWindowButton(.closeButton) else { continue }
+            button.target = closer
+            button.action = #selector(WindowCloser.hide)
+        }
+    }
+
+    private static let closer = WindowCloser()
+
+    private final class WindowCloser: NSObject {
+        @objc func hide() { AppDelegate.hideWindow() }
     }
 
     static func exitIfAlreadyRunning() {
@@ -99,11 +147,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// one, so callers know not to ask SwiftUI for a new one.
     @discardableResult
     static func showExistingWindow() -> Bool {
+        showDockIcon(true)
         NSApp.activate(ignoringOtherApps: true)
         guard let window = NSApp.windows.first(where: { !$0.className.contains("MenuBarExtra") && $0.contentView != nil }) else {
             return false
         }
         window.makeKeyAndOrderFront(nil)
+        interceptCloseButton()
         return true
     }
 }

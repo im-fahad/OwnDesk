@@ -217,6 +217,22 @@ distance vanished, and raising the speed made it worse rather than better. The h
 delta to the position it last asked for, and resynchronises only after a pause long enough to mean
 the user let go.
 
+**The Dock icon follows the window, and the policy change costs the video.** The app is an
+accessory while it lives in the menu bar, and a normal app while a window is open, so a Mac started
+at login adds no Dock icon and an open window can take keyboard focus. Changing the activation
+policy leaves an existing Metal-backed video view drawing nothing, so every change now posts a
+notification and the video view is rebuilt with a fresh id. The close button is redirected to put
+the window away rather than close it, because closing destroys the scene's views and SwiftUI's
+replacement window comes back black. Quit really quits: the launch agent restarts the app only
+after a crash, never after the owner chose Quit.
+
+**H.264 level 3.1 cannot carry 1080p.** Android offers H.264 as profile-level-id 42e01f, which is
+Level 3.1, and its ceiling is 1280x720. Asked for a 1080p desktop the Mac cannot meet that, so it
+silently encoded VP8 instead: negotiation succeeded, a picture arrived, and only the frame rate and
+a suspiciously large bitrate said anything was wrong. The phone now raises the level to 4.2 in its
+offer. The symptom was invisible until the session panel showed the codec, and the cause was
+invisible until the same agent was run at 720p, where it chose H.264 without complaint.
+
 **Say which codec you want, or you will get VP8.** Neither side stated a preference, so the phone's
 offer listed VP8 first, the Mac agreed, and a Mac with a hardware H.264 encoder spent its time
 encoding VP8 in software: eight to seventeen frames a second, where H.264 gives full motion. The

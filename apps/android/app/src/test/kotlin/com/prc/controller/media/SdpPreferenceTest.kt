@@ -47,6 +47,30 @@ class SdpPreferenceTest {
     }
 
     @Test
+    fun `the H264 level is raised so 1080p is allowed`() {
+        val offer = sdp(
+            "m=video 9 UDP/TLS/RTP/SAVPF 96 98",
+            "a=rtpmap:96 VP8/90000",
+            "a=rtpmap:98 H264/90000",
+            "a=fmtp:98 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
+        )
+        val out = SdpPreference.preferH264(offer)
+        assertTrue("level was left at 3.1: $out", out.contains("profile-level-id=42e02a"))
+        assertTrue("the profile changed", out.contains("42e0"))
+        assertTrue("other parameters were lost", out.contains("packetization-mode=1"))
+    }
+
+    @Test
+    fun `a level that is already high enough is left alone`() {
+        val offer = sdp(
+            "m=video 9 UDP/TLS/RTP/SAVPF 98",
+            "a=rtpmap:98 H264/90000",
+            "a=fmtp:98 profile-level-id=640c34",
+        )
+        assertTrue(SdpPreference.preferH264(offer).contains("profile-level-id=640c34"))
+    }
+
+    @Test
     fun `an offer without H264 is left exactly as it was`() {
         val offer = sdp("m=video 9 UDP/TLS/RTP/SAVPF 96", "a=rtpmap:96 VP8/90000")
         assertEquals(offer, SdpPreference.preferH264(offer))

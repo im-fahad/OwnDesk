@@ -324,6 +324,9 @@ struct HostRow: View {
 
 struct ScreenArea: View {
     @EnvironmentObject var model: AppState
+    /// Bumped when the Dock icon comes or goes. Changing the app's activation policy leaves an
+    /// existing Metal-backed video view drawing nothing, so it is replaced rather than reused.
+    @State private var videoGeneration = 0
 
     var body: some View {
         ZStack {
@@ -331,10 +334,14 @@ struct ScreenArea: View {
             // Kept in the hierarchy at all times so the renderer is attached once and the stream
             // survives every panel toggle.
             VideoView()
+                .id(videoGeneration)
             if !model.isConnected { placeholder }
             if model.showTextField { textOverlay }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onReceive(NotificationCenter.default.publisher(for: .prcRebuildVideo)) { _ in
+            videoGeneration += 1
+        }
     }
 
     private var placeholder: some View {

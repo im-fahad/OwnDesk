@@ -9,7 +9,9 @@
     <string>--background</string>
   </array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <!-- Restart after a crash, but not after the owner chooses Quit. -->
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
   <key>ProcessType</key><string>Interactive</string>
   <key>ThrottleInterval</key><integer>5</integer>
   <key>StandardOutPath</key><string>__LOG_DIR__/prc.log</string>

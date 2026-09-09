@@ -12,8 +12,16 @@ package com.prc.controller.media
  */
 object SdpPreference {
 
+    /**
+     * Level 3.1, which Android offers by default, tops out at 1280x720. A Mac asked for a 1080p
+     * desktop cannot meet it, so it quietly encodes VP8 instead: the negotiation succeeds, the
+     * picture arrives, and only the frame rate says anything is wrong. Level 4.2 covers 1920x1080
+     * at sixty, and any phone that can decode this stream can decode that level.
+     */
+    private const val LEVEL_4_2 = "2a"
+
     fun preferH264(sdp: String): String {
-        val lines = sdp.split("\r\n")
+        val lines = raiseH264Level(sdp).split("\r\n")
         val videoIndex = lines.indexOfFirst { it.startsWith("m=video") }
         if (videoIndex < 0) return sdp
 
@@ -30,6 +38,16 @@ object SdpPreference {
         val updated = lines.toMutableList()
         updated[videoIndex] = (head + reordered).joinToString(" ")
         return updated.joinToString("\r\n")
+    }
+
+    private fun raiseH264Level(sdp: String): String = sdp.split("\r\n").joinToString("\r\n") { line ->
+        if (!line.startsWith("a=fmtp:") || !line.contains("profile-level-id=")) return@joinToString line
+        val id = line.substringAfter("profile-level-id=").take(6)
+        if (id.length != 6) return@joinToString line
+        val level = id.substring(4).toIntOrNull(16) ?: return@joinToString line
+        // Only ever raise it: a level already high enough is left alone.
+        if (level >= LEVEL_4_2.toInt(16)) return@joinToString line
+        line.replace("profile-level-id=$id", "profile-level-id=${id.substring(0, 4)}$LEVEL_4_2")
     }
 
     /** Every payload type whose rtpmap names this codec, in the order the offer lists them. */
