@@ -21,7 +21,19 @@ public enum WebRTCError: Error, Sendable {
 public final class WebRTCSession: NSObject, RTCPeerConnectionDelegate, RTCDataChannelDelegate, @unchecked Sendable {
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
-        return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
+        // Ask for H.264 by name. Left to itself the factory offers VP8 first, and a controller that
+        // politely accepts the offered order then receives VP8, which this Mac has to encode in
+        // software: measured against the Android controller, eight to seventeen frames a second
+        // where H.264 gives full motion. Both Macs and the phone decode H.264 in hardware.
+        let encoderFactory = RTCDefaultVideoEncoderFactory()
+        let supported = RTCDefaultVideoEncoderFactory.supportedCodecs()
+        let h264 = supported.first { codec in
+            codec.name == kRTCVideoCodecH264Name
+                && (codec.parameters["profile-level-id"] as? String)?.hasPrefix("42e01f") == true
+                && (codec.parameters["packetization-mode"] as? String) == "1"
+        } ?? supported.first { $0.name == kRTCVideoCodecH264Name }
+        if let h264 { encoderFactory.preferredCodec = h264 }
+        return RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: RTCDefaultVideoDecoderFactory())
     }()
 
     private let pc: RTCPeerConnection

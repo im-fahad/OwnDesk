@@ -217,6 +217,13 @@ distance vanished, and raising the speed made it worse rather than better. The h
 delta to the position it last asked for, and resynchronises only after a pause long enough to mean
 the user let go.
 
+**Say which codec you want, or you will get VP8.** Neither side stated a preference, so the phone's
+offer listed VP8 first, the Mac agreed, and a Mac with a hardware H.264 encoder spent its time
+encoding VP8 in software: eight to seventeen frames a second, where H.264 gives full motion. The
+phone now puts H.264 first in its offer, and the host names H.264 constrained baseline as its
+preferred codec rather than accepting whatever the factory lists first. The phone's session panel is
+what found this, which is the argument for showing real numbers instead of a spinner.
+
 **Probe every address at once.** A Mac advertises a local address and a tailnet address, and trying
 them in turn means waiting out a timeout on the wrong network before the right one is attempted at
 all, which reads as a phone that cannot connect from a cafe. Both halves now probe in parallel and

@@ -115,10 +115,16 @@ class WebRTCClient(
         }
         connection.createOffer(object : SimpleSdpObserver() {
             override fun onCreateSuccess(description: SessionDescription) {
+                // Ask for H.264 first. Both sides do it in hardware; Android's default order would
+                // otherwise settle on VP8, which the Mac then encodes in software.
+                val preferred = SessionDescription(
+                    description.type,
+                    SdpPreference.preferH264(description.description),
+                )
                 connection.setLocalDescription(object : SimpleSdpObserver() {
-                    override fun onSetSuccess() = done(description.description, null)
+                    override fun onSetSuccess() = done(preferred.description, null)
                     override fun onSetFailure(error: String?) = done(null, error)
-                }, description)
+                }, preferred)
             }
 
             override fun onCreateFailure(error: String?) = done(null, error)
@@ -134,6 +140,90 @@ class WebRTCClient(
 
     fun addCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int) {
         connection.addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, candidate))
+    }
+
+    /**
+     * What the stream is actually doing, read from the peer connection rather than guessed. The
+     * same numbers the Mac app reports for itself, so a bad link can be told from a bad decoder.
+     */
+    data class Stats(
+        val width: Int = 0,
+        val height: Int = 0,
+        val fps: Double = 0.0,
+        val kbps: Long = 0,
+        val packetsLost: Int = 0,
+        val jitterMs: Double = 0.0,
+        val roundTripMs: Double = 0.0,
+        val codec: String? = null,
+    )
+
+    private var lastBytes = 0L
+    private var lastBytesAt = 0L
+
+    fun stats(callback: (Stats) -> Unit) {
+        connection.getStats { report ->
+            var width = 0
+            var height = 0
+            var fps = 0.0
+            var bytes = 0L
+            var lost = 0
+            var jitter = 0.0
+            var rtt = 0.0
+            var codecId: String? = null
+            val codecNames = HashMap<String, String>()
+
+            for (entry in report.statsMap.values) {
+                val members = entry.members
+                when (entry.type) {
+                    "inbound-rtp" -> if (members["kind"] == "video" || members["mediaType"] == "video") {
+                        width = number(members["frameWidth"])?.toInt() ?: width
+                        height = number(members["frameHeight"])?.toInt() ?: height
+                        fps = number(members["framesPerSecond"]) ?: fps
+                        bytes = number(members["bytesReceived"])?.toLong() ?: bytes
+                        lost = number(members["packetsLost"])?.toInt() ?: lost
+                        jitter = (number(members["jitter"]) ?: 0.0) * 1000
+                        codecId = members["codecId"] as? String ?: codecId
+                    }
+                    "candidate-pair" -> if (members["state"] == "succeeded" || number(members["currentRoundTripTime"]) != null) {
+                        val value = number(members["currentRoundTripTime"])
+                        if (value != null && value > 0) rtt = value * 1000
+                    }
+                    "codec" -> {
+                        val name = members["mimeType"] as? String
+                        if (name != null) codecNames[entry.id] = name.substringAfter('/')
+                    }
+                }
+            }
+
+            // Bitrate is a rate, so it only exists between two readings.
+            val now = System.currentTimeMillis()
+            val kbps = if (lastBytesAt > 0 && now > lastBytesAt && bytes >= lastBytes) {
+                (bytes - lastBytes) * 8 / (now - lastBytesAt)
+            } else {
+                0L
+            }
+            lastBytes = bytes
+            lastBytesAt = now
+
+            callback(
+                Stats(
+                    width = width, height = height, fps = fps, kbps = kbps,
+                    packetsLost = lost, jitterMs = jitter, roundTripMs = rtt,
+                    codec = codecId?.let { codecNames[it] },
+                )
+            )
+        }
+    }
+
+    /** Statistics arrive as whatever numeric type the platform chose, so take them all. */
+    private fun number(value: Any?): Double? = when (value) {
+        is Double -> value
+        is Float -> value.toDouble()
+        is Long -> value.toDouble()
+        is Int -> value.toDouble()
+        is java.math.BigInteger -> value.toDouble()
+        is Number -> value.toDouble()
+        else -> null
     }
 
     /** Sends one frame on the channel its type belongs to, dropping it if that channel is closed. */

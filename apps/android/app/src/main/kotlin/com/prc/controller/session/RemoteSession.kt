@@ -67,6 +67,12 @@ class RemoteSession(
     var display: DisplayInfo? = null
         private set
 
+    /** The address that answered, and what kind of route it turned out to be. */
+    var address: String? = null
+        private set
+    var path: String? = null
+        private set
+
     /** Connects, authenticates, and asks for the screen. Returns once the picture is negotiated. */
     suspend fun start() {
         val candidates = peer.candidates()
@@ -165,6 +171,8 @@ class RemoteSession(
             throw ProtocolException("the Mac never confirmed the session")
         }
         display = acceptPayload.display
+        this.address = address
+        this.path = if (path == "lan") "Direct (LAN)" else "Direct (Tailscale or Internet)"
         listener.onReady(
             acceptPayload.display,
             if (path == "lan") "Direct (LAN)" else "Direct (Tailscale or Internet)",
@@ -267,6 +275,11 @@ class RemoteSession(
                 listener.onEnded(if (reason.isNullOrEmpty()) "the Mac ended the session" else "the Mac ended the session: $reason")
             }
         }
+    }
+
+    /** What the stream is doing, straight from the peer connection. */
+    fun stats(callback: (WebRTCClient.Stats) -> Unit) {
+        webrtc?.stats(callback)
     }
 
     /** Input and control frames. Silently dropped before the channels open, which is correct. */

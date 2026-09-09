@@ -36,9 +36,13 @@ Tap a paired Mac to open its screen. Then:
 | Drag one finger | moves the pointer |
 | Drag two fingers | scroll, or pan the picture while it is magnified |
 | Pinch | magnifies the picture on the phone, up to four times |
-| Touch or Trackpad | switches how a finger moves the pointer |
-| Keys | the phone's keyboard, typing into the Mac |
-| End | leaves the session |
+| Sidebar icons | touch or trackpad, keyboard, session info, end |
+
+The sidebar sits on the black bar beside a 16:9 picture, so it costs no part of the Mac's screen.
+The icons carry no labels; hold one and its name appears, which is where Android shows the name of
+a control that has no caption. The info icon expands the sidebar and reports what the session is
+actually doing: which Mac, over which address and route, the resolution, frame rate, bitrate,
+codec, packets lost, jitter and round trip, read from the connection rather than guessed.
 
 These follow the conventions the established remote desktop apps settled on, so they should already
 be in your hands. The one worth knowing is the drag: no app treats a plain finger drag as a drag,

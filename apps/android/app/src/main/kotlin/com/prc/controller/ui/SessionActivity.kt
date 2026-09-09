@@ -24,12 +24,15 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.TooltipCompat
 import androidx.lifecycle.lifecycleScope
 import com.prc.controller.BuildConfig
+import com.prc.controller.R
 import com.prc.controller.device.KeystoreIdentity
 import com.prc.controller.device.PeerStore
 import com.prc.controller.protocol.AndroidKeyCodes
@@ -70,7 +73,11 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     private var panY = 0f
     private lateinit var root: FrameLayout
     private lateinit var holdMark: View
-    private lateinit var modeButton: TextView
+    private lateinit var modeButton: ImageView
+    private lateinit var infoButton: ImageView
+    private lateinit var infoPanel: LinearLayout
+    private var infoTicker: Runnable? = null
+    private var peerName = "this Mac"
     private val gestures: Gestures by lazy {
         Gestures(GestureOutput(), object : Gestures.Scheduler {
             override fun after(delayMs: Long, action: () -> Unit): Any {
@@ -114,6 +121,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         )
         session = remote
 
+        peerName = peer.name
         status.text = "connecting to ${peer.name}"
         lifecycleScope.launch {
             try {
@@ -160,31 +168,39 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START,
         ))
 
-        // Two controls, kept out of the way at the bottom right.
-        // The mark that says the button is being held, the way other remote apps show a ripple.
-        // Without it there is no way to tell that a drag has begun.
-        holdMark = View(this).apply {
+        // A sidebar rather than labelled buttons: it sits on the black bar beside a 16:9 picture,
+        // so it costs no part of the Mac's screen. The names live in tooltips, on a long press,
+        // which is where Android puts them for icon-only controls.
+        infoPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             visibility = View.GONE
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0x554D8EF7)
-                setStroke(dp(2), 0xCC4D8EF7.toInt())
-            }
+            setBackgroundColor(0xE61B1B1B.toInt())
+            setPadding(dp(14), dp(12), dp(14), dp(12))
         }
-        root.addView(holdMark, FrameLayout.LayoutParams(dp(56), dp(56)))
 
-        modeButton = overlayButton("Touch") {
+        val icons = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xE61B1B1B.toInt())
+            setPadding(dp(4), dp(6), dp(4), dp(6))
+        }
+        modeButton = iconButton(R.drawable.ic_touch, "Touch") {
             setMode(if (gestures.mode == Gestures.Mode.TOUCH) Gestures.Mode.TRACKPAD else Gestures.Mode.TOUCH)
         }
-        val buttons = LinearLayout(this).apply {
+        icons.addView(modeButton)
+        icons.addView(iconButton(R.drawable.ic_keys, "Keyboard") { toggleKeyboard() })
+        infoButton = iconButton(R.drawable.ic_info, "Session info") { toggleInfo() }
+        icons.addView(infoButton)
+        icons.addView(iconButton(R.drawable.ic_end, "End session") { finish() })
+
+        val sidebar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(modeButton)
-            addView(overlayButton("Keys") { toggleKeyboard() })
-            addView(overlayButton("End") { finish() })
+            addView(infoPanel, LinearLayout.LayoutParams(dp(232), ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(icons)
         }
-        root.addView(buttons, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END,
-        ).apply { setMargins(0, 0, 24, 24) })
+        root.addView(sidebar, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.END or Gravity.CENTER_VERTICAL,
+        ))
 
         // Off-screen, so the soft keyboard has somewhere to type into. What it types is forwarded
         // as text, which is the only way a phone keyboard can produce characters faithfully.
@@ -241,22 +257,30 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
 
         scaleDetector = ScaleGestureDetector(this, ZoomListener())
         val saved = getSharedPreferences("prc", Context.MODE_PRIVATE).getString("input_mode", null)
-        gestures.mode = if (saved == Gestures.Mode.TRACKPAD.name) Gestures.Mode.TRACKPAD else Gestures.Mode.TOUCH
-        modeButton.text = if (gestures.mode == Gestures.Mode.TOUCH) "Touch" else "Trackpad"
+        setMode(if (saved == Gestures.Mode.TRACKPAD.name) Gestures.Mode.TRACKPAD else Gestures.Mode.TOUCH)
         // The listener sits on the parent, not the video, because pinching moves and scales the
         // video and a listener on it would be reading coordinates from a shifting frame.
         root.setOnTouchListener { _, event -> onTouch(event); true }
         return root
     }
 
-    private fun overlayButton(text: String, action: () -> Unit): TextView = TextView(this).apply {
-        this.text = text
-        setTextColor(Color.WHITE)
-        setBackgroundColor(0xCC4D8EF7.toInt())
-        setPadding(36, 20, 36, 20)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+    private fun iconButton(icon: Int, name: String, action: () -> Unit): ImageView = ImageView(this).apply {
+        setImageResource(icon)
+        imageTintList = android.content.res.ColorStateList.valueOf(Theme.TEXT_DIM)
+        setPadding(dp(11), dp(11), dp(11), dp(11))
+        isClickable = true
+        contentDescription = name
+        // Held down, an icon says what it is. That is where Android shows the name of a control
+        // that has no label, so it is where people already look.
+        TooltipCompat.setTooltipText(this, name)
         setOnClickListener { action() }
-        (layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 16
+        layoutParams = LinearLayout.LayoutParams(dp(46), dp(46))
+    }
+
+    private fun tint(view: ImageView, on: Boolean) {
+        view.imageTintList = android.content.res.ColorStateList.valueOf(
+            if (on) Theme.ACCENT else Theme.TEXT_DIM
+        )
     }
 
     // Input ------------------------------------------------------------------------------------
@@ -351,9 +375,93 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         return remoteWidth / (width * scale)
     }
 
+    /**
+     * Everything worth knowing about the session, in the sidebar: which Mac, over which address and
+     * route, and what the stream is actually doing. Guesswork about a stuttering picture is what
+     * this replaces, so the numbers come from the peer connection rather than from hope.
+     */
+    private fun toggleInfo() {
+        val showing = infoPanel.visibility == View.VISIBLE
+        infoPanel.visibility = if (showing) View.GONE else View.VISIBLE
+        tint(infoButton, !showing)
+        infoTicker?.let(handler::removeCallbacks)
+        if (showing) {
+            infoTicker = null
+            return
+        }
+        val tick = object : Runnable {
+            override fun run() {
+                refreshInfo()
+                handler.postDelayed(this, 1000)
+            }
+        }
+        infoTicker = tick
+        handler.post(tick)
+    }
+
+    private fun refreshInfo() {
+        val remote = session ?: return
+        remote.stats { stats ->
+            if (BuildConfig.DEBUG) {
+                Log.i("PRC", "stats ${stats.width}x${stats.height} ${stats.fps}fps ${stats.kbps}kbps codec=${stats.codec}")
+            }
+            runOnUiThread {
+                if (infoPanel.visibility != View.VISIBLE) return@runOnUiThread
+                infoPanel.removeAllViews()
+                infoPanel.addView(infoHeading("SESSION"))
+                infoRow("Mac", peerName)
+                infoRow("Address", remote.address ?: "unknown")
+                infoRow("Route", remote.path ?: "unknown")
+                remote.display?.let { infoRow("Its screen", "${it.width_px} x ${it.height_px}") }
+
+                infoPanel.addView(infoHeading("STREAM"))
+                infoRow("Now", if (stats.width > 0) "${stats.width} x ${stats.height}" else "waiting")
+                infoRow("Frames", String.format("%.0f a second", stats.fps))
+                infoRow("Bitrate", "${stats.kbps} kbps")
+                infoRow("Codec", stats.codec ?: "H264")
+                infoRow("Lost", "${stats.packetsLost} packets")
+                infoRow("Jitter", String.format("%.0f ms", stats.jitterMs))
+                if (stats.roundTripMs > 0) infoRow("Round trip", String.format("%.0f ms", stats.roundTripMs))
+
+                infoPanel.addView(infoHeading("THIS PHONE"))
+                infoRow("Input", if (gestures.mode == Gestures.Mode.TOUCH) "Touch" else "Trackpad")
+                infoRow("Zoom", if (scale <= 1f) "fit" else String.format("%.1fx", scale))
+            }
+        }
+    }
+
+    private fun infoHeading(title: String) = TextView(this).apply {
+        text = title
+        setTextColor(Theme.TEXT_FAINT)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+        letterSpacing = 0.1f
+        setTypeface(typeface, android.graphics.Typeface.BOLD)
+        setPadding(0, dp(10), 0, dp(4))
+    }
+
+    private fun infoRow(name: String, value: String) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(TextView(this).apply {
+            text = name
+            setTextColor(Theme.TEXT_FAINT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+        }, LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT))
+        row.addView(TextView(this).apply {
+            text = value
+            setTextColor(Theme.TEXT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            typeface = android.graphics.Typeface.MONOSPACE
+        })
+        infoPanel.addView(row, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(2) })
+    }
+
     private fun setMode(next: Gestures.Mode) {
         gestures.mode = next
-        modeButton.text = if (next == Gestures.Mode.TOUCH) "Touch" else "Trackpad"
+        modeButton.setImageResource(if (next == Gestures.Mode.TOUCH) R.drawable.ic_touch else R.drawable.ic_touchpad)
+        TooltipCompat.setTooltipText(modeButton, if (next == Gestures.Mode.TOUCH) "Touch" else "Trackpad")
+        tint(modeButton, next == Gestures.Mode.TRACKPAD)
         getSharedPreferences("prc", Context.MODE_PRIVATE).edit().putString("input_mode", next.name).apply()
         status.visibility = View.VISIBLE
         status.text = if (next == Gestures.Mode.TOUCH) {
@@ -480,6 +588,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     }
 
     override fun onDestroy() {
+        infoTicker?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
         session?.end()
         session = null
