@@ -39,8 +39,13 @@ apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-age
 apps/mac-controller        controlling half (PRCControllerCore) plus prc-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
 tools/web-harness          browser controller, development only
-scripts/                   build, install, uninstall
+scripts/                   build, install, uninstall, draw the app icon
+assets/                    AppIcon.icns, which the build copies into every bundle
 ```
+
+The icon is drawn, not painted: `scripts/make-app-icon.swift` renders it as vectors at each size
+and packs the result with `iconutil`. Run it only when the artwork changes, since the build uses
+the committed `assets/AppIcon.icns`.
 
 `apps/mac-agent` and `apps/mac-controller` still carry their own SwiftUI app targets from v0.1.
 Those are superseded by `apps/prc` and are due for removal; their libraries and CLIs stay.

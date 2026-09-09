@@ -37,6 +37,8 @@ bundle() {
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources"
   cp "$build_dir/$bin" "$app/Contents/MacOS/$bin"
   cp -R "$framework" "$app/Contents/Frameworks/"
+  # Drawn by scripts/make-app-icon.swift; regenerate that only when the artwork changes.
+  [ -f "$ROOT/assets/AppIcon.icns" ] && cp "$ROOT/assets/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
   # SwiftPM binaries carry an absolute rpath into .build; add the bundle's Frameworks folder too.
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$app/Contents/MacOS/$bin" 2>/dev/null || true
 
@@ -47,6 +49,8 @@ bundle() {
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>$bin</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundleIdentifier</key><string>$bid</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>$name</string>
