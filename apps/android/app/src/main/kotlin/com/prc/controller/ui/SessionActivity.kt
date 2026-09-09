@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -67,20 +68,24 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     private var scale = 1f
     private var panX = 0f
     private var panY = 0f
-    private var twoFinger = false
-    private var lastFocusX = 0f
-    private var lastFocusY = 0f
     private lateinit var root: FrameLayout
+    private lateinit var holdMark: View
+    private lateinit var modeButton: TextView
+    private val gestures: Gestures by lazy {
+        Gestures(GestureOutput(), object : Gestures.Scheduler {
+            override fun after(delayMs: Long, action: () -> Unit): Any {
+                val runnable = Runnable { action() }
+                handler.postDelayed(runnable, delayMs)
+                return runnable
+            }
+
+            override fun cancel(token: Any) {
+                handler.removeCallbacks(token as Runnable)
+            }
+        })
+    }
     private lateinit var scaleDetector: ScaleGestureDetector
     private var lastMoveSent = 0L
-    private var downAt = 0L
-    private var downX = 0f
-    private var downY = 0f
-    private var moved = false
-    private var rightClickFired = false
-    private var scrolling = false
-    private var lastScrollY = 0f
-    private var lastScrollX = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -156,8 +161,24 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         ))
 
         // Two controls, kept out of the way at the bottom right.
+        // The mark that says the button is being held, the way other remote apps show a ripple.
+        // Without it there is no way to tell that a drag has begun.
+        holdMark = View(this).apply {
+            visibility = View.GONE
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x554D8EF7)
+                setStroke(dp(2), 0xCC4D8EF7.toInt())
+            }
+        }
+        root.addView(holdMark, FrameLayout.LayoutParams(dp(56), dp(56)))
+
+        modeButton = overlayButton("Touch") {
+            setMode(if (gestures.mode == Gestures.Mode.TOUCH) Gestures.Mode.TRACKPAD else Gestures.Mode.TOUCH)
+        }
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            addView(modeButton)
             addView(overlayButton("Keys") { toggleKeyboard() })
             addView(overlayButton("End") { finish() })
         }
@@ -219,6 +240,9 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         root.addView(keyboardCatcher, FrameLayout.LayoutParams(1, 1))
 
         scaleDetector = ScaleGestureDetector(this, ZoomListener())
+        val saved = getSharedPreferences("prc", Context.MODE_PRIVATE).getString("input_mode", null)
+        gestures.mode = if (saved == Gestures.Mode.TRACKPAD.name) Gestures.Mode.TRACKPAD else Gestures.Mode.TOUCH
+        modeButton.text = if (gestures.mode == Gestures.Mode.TOUCH) "Touch" else "Trackpad"
         // The listener sits on the parent, not the video, because pinching moves and scales the
         // video and a listener on it would be reading coordinates from a shifting frame.
         root.setOnTouchListener { _, event -> onTouch(event); true }
@@ -240,68 +264,17 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     @SuppressLint("ClickableViewAccessibility")
     private fun onTouch(event: MotionEvent) {
         scaleDetector.onTouchEvent(event)
+        gestures.pinching = scaleDetector.isInProgress
+        gestures.magnified = scale > 1.01f
 
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                downAt = now()
-                downX = event.x
-                downY = event.y
-                moved = false
-                rightClickFired = false
-                twoFinger = false
-                sendMove(event.x, event.y, force = true)
-                handler.postDelayed(longPress, LONG_PRESS_MS)
-            }
-
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                // A second finger means zoom, pan or scroll, never a click.
-                handler.removeCallbacks(longPress)
-                twoFinger = true
-                lastFocusX = focusX(event)
-                lastFocusY = focusY(event)
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                if (twoFinger) {
-                    val fx = focusX(event)
-                    val fy = focusY(event)
-                    val dx = fx - lastFocusX
-                    val dy = fy - lastFocusY
-                    lastFocusX = fx
-                    lastFocusY = fy
-                    if (scaleDetector.isInProgress) return
-                    if (scale > 1.01f) {
-                        // Zoomed in, so dragging moves the picture rather than the Mac's content.
-                        panX += dx
-                        panY += dy
-                        clampPan()
-                        applyTransform()
-                    } else if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
-                        session?.send(DataChannel.scroll(dx.toDouble(), dy.toDouble(), now()))
-                    }
-                } else {
-                    if (abs(event.x - downX) > TOUCH_SLOP || abs(event.y - downY) > TOUCH_SLOP) {
-                        moved = true
-                        handler.removeCallbacks(longPress)
-                    }
-                    sendMove(event.x, event.y, force = false)
-                }
-            }
-
-            MotionEvent.ACTION_UP -> {
-                handler.removeCallbacks(longPress)
-                val quick = now() - downAt < LONG_PRESS_MS
-                if (!twoFinger && !moved && !rightClickFired && quick) {
-                    session?.send(DataChannel.mouseDown("left", now()))
-                    session?.send(DataChannel.mouseUp("left", now()))
-                }
-                twoFinger = false
-            }
-
-            MotionEvent.ACTION_CANCEL -> {
-                handler.removeCallbacks(longPress)
-                twoFinger = false
-            }
+            MotionEvent.ACTION_DOWN -> gestures.down(event.x, event.y, event.eventTime)
+            MotionEvent.ACTION_POINTER_DOWN ->
+                gestures.pointerDown(event.pointerCount, focusX(event), focusY(event), event.eventTime)
+            MotionEvent.ACTION_MOVE ->
+                gestures.move(event.pointerCount, event.x, event.y, focusX(event), focusY(event))
+            MotionEvent.ACTION_UP -> gestures.up(event.x, event.y, event.eventTime)
+            MotionEvent.ACTION_CANCEL -> gestures.cancel()
         }
     }
 
@@ -310,6 +283,87 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
 
     private fun focusY(event: MotionEvent): Float =
         if (event.pointerCount >= 2) (event.getY(0) + event.getY(1)) / 2f else event.y
+
+    /** What each gesture does to the Mac, or to the picture of it. */
+    private inner class GestureOutput : Gestures.Output {
+        /** Debug builds narrate their gestures, since multi-touch cannot be replayed from a computer. */
+        private fun trace(what: String) {
+            if (BuildConfig.DEBUG) Log.i("PRC", "gesture $what")
+        }
+
+        override fun moveTo(x: Float, y: Float) = sendMove(x, y, force = false)
+
+        override fun moveBy(dx: Float, dy: Float) {
+            // View pixels are not the Mac's pixels: the picture is scaled onto the phone and may be
+            // magnified on top of that. A little acceleration makes it feel like a trackpad rather
+            // than a slow crawl.
+            val perPixel = remotePixelsPerViewPixel()
+            session?.send(
+                DataChannel.mouseMoveRel(
+                    (dx * perPixel * TRACKPAD_SPEED).toDouble(),
+                    (dy * perPixel * TRACKPAD_SPEED).toDouble(),
+                    now(),
+                )
+            )
+        }
+
+        override fun click(button: String) {
+            trace("click $button")
+            session?.send(DataChannel.mouseDown(button, now()))
+            session?.send(DataChannel.mouseUp(button, now()))
+        }
+
+        override fun buttonDown(button: String) {
+            trace("down $button")
+            session?.send(DataChannel.mouseDown(button, now()))
+        }
+
+        override fun buttonUp(button: String) {
+            trace("up $button")
+            session?.send(DataChannel.mouseUp(button, now()))
+        }
+
+        override fun scroll(dx: Float, dy: Float) {
+            session?.send(DataChannel.scroll(dx.toDouble(), dy.toDouble(), now()))
+        }
+
+        override fun pan(dx: Float, dy: Float) {
+            panX += dx
+            panY += dy
+            clampPan()
+            applyTransform()
+        }
+
+        override fun holding(x: Float, y: Float, held: Boolean) {
+            trace("holding $held")
+            holdMark.visibility = if (held) View.VISIBLE else View.GONE
+            if (held) {
+                holdMark.translationX = x - dp(28)
+                holdMark.translationY = y - dp(28)
+            }
+        }
+    }
+
+    private fun remotePixelsPerViewPixel(): Float {
+        val width = renderer.width.toFloat()
+        if (width <= 0f) return 1f
+        val remoteWidth = if (frameWidth > 0) frameWidth.toFloat() else display?.width_px?.toFloat() ?: width
+        return remoteWidth / (width * scale)
+    }
+
+    private fun setMode(next: Gestures.Mode) {
+        gestures.mode = next
+        modeButton.text = if (next == Gestures.Mode.TOUCH) "Touch" else "Trackpad"
+        getSharedPreferences("prc", Context.MODE_PRIVATE).edit().putString("input_mode", next.name).apply()
+        status.visibility = View.VISIBLE
+        status.text = if (next == Gestures.Mode.TOUCH) {
+            "Touch: the pointer goes where you tap"
+        } else {
+            "Trackpad: drag to move the pointer, tap to click"
+        }
+        handler.removeCallbacks(hideStatus)
+        handler.postDelayed(hideStatus, 2200)
+    }
 
     /**
      * Pinching magnifies the picture on the phone rather than asking the Mac to change anything.
@@ -359,15 +413,6 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     }
 
     private val hideStatus = Runnable { status.visibility = View.GONE }
-
-    /** Holding still is a right click, the same shape as a long press everywhere else on a phone. */
-    private val longPress = Runnable {
-        if (!moved && !scrolling) {
-            rightClickFired = true
-            session?.send(DataChannel.mouseDown("right", now()))
-            session?.send(DataChannel.mouseUp("right", now()))
-        }
-    }
 
     /**
      * Where the finger is, as a fraction of the Mac's screen. The video is letterboxed to keep its
@@ -453,12 +498,13 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             )
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
     private fun now(): Long = System.currentTimeMillis()
 
     companion object {
         private const val EXTRA_DEVICE_ID = "device_id"
-        private const val LONG_PRESS_MS = 550L
-        private const val TOUCH_SLOP = 12f
+        private const val TRACKPAD_SPEED = 1.5f
         private const val MAX_ZOOM = 4f
 
         fun intent(context: Context, deviceId: String): Intent =

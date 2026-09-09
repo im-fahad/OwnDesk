@@ -18,6 +18,7 @@ class DataChannelFrameTest {
         val frames = listOf(
             DataChannel.hello("0.2.0-dev", ts),
             DataChannel.mouseMove("1", 0.25, 0.75, ts),
+            DataChannel.mouseMoveRel(-12.5, 40.0, ts),
             DataChannel.mouseDown("left", ts),
             DataChannel.mouseUp("left", ts),
             DataChannel.mouseDown("right", ts),

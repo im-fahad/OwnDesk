@@ -27,15 +27,33 @@ Tap a paired Mac to open its screen. Then:
 
 | Gesture | What the Mac sees |
 | --- | --- |
-| Tap | the pointer moves there and clicks |
-| Drag one finger | the pointer follows the finger |
-| Hold still | a right click |
-| Pinch | magnifies the picture on the phone, up to four times |
+| Tap | left click |
+| Two quick taps | double click |
+| Tap twice and hold, then drag | the button stays down, which is how text is selected and windows are moved |
+| Hold one finger still | right click |
+| Tap with two fingers | right click |
+| Tap with three fingers | middle click |
+| Drag one finger | moves the pointer |
 | Drag two fingers | scroll, or pan the picture while it is magnified |
+| Pinch | magnifies the picture on the phone, up to four times |
+| Touch or Trackpad | switches how a finger moves the pointer |
 | Keys | the phone's keyboard, typing into the Mac |
 | End | leaves the session |
 
-The pointer is absolute: it goes where the finger lands rather than moving by a relative amount.
+These follow the conventions the established remote desktop apps settled on, so they should already
+be in your hands. The one worth knowing is the drag: no app treats a plain finger drag as a drag,
+because then nothing could be pointed at without dragging it. Tapping twice and holding is how you
+enter it, and a blue circle appears to say the button is down.
+
+## Touch or trackpad
+
+**Touch** is absolute. The pointer goes where your finger lands. Quick, but a fingertip covers about
+forty pixels of a desktop, so small targets are hard to hit.
+
+**Trackpad** is relative. Your finger nudges the pointer from where it already is, like a laptop
+trackpad, and a tap clicks where the pointer is. Slower to cross the screen, far easier to be
+precise. The choice is remembered.
+
 Pinching magnifies the picture on the phone and asks the Mac for nothing, so it costs no bandwidth
 and works while the link is poor. The pointer stays exact while magnified.
 

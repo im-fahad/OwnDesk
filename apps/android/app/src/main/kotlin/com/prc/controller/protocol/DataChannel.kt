@@ -40,6 +40,12 @@ object DataChannel {
             .put("x", x.coerceIn(0.0, 1.0))
             .put("y", y.coerceIn(0.0, 1.0))
 
+    /** A nudge rather than a position, for trackpad style control where the pointer stays put. */
+    fun mouseMoveRel(dx: Double, dy: Double, ts: Long): JSONObject =
+        frame("mouse_move_rel", ts)
+            .put("dx", dx.coerceIn(-4096.0, 4096.0))
+            .put("dy", dy.coerceIn(-4096.0, 4096.0))
+
     fun mouseDown(button: String, ts: Long): JSONObject = frame("mouse_down", ts).put("button", button)
 
     fun mouseUp(button: String, ts: Long): JSONObject = frame("mouse_up", ts).put("button", button)

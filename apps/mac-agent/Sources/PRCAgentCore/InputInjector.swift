@@ -28,6 +28,40 @@ struct MoveOrderGate {
     mutating func reset() { lastSentAt = .min }
 }
 
+/// Where a relative move should land.
+///
+/// The obvious implementation asks the system where the cursor is and adds the delta, but the
+/// WindowServer has not applied the previous move yet when the next one arrives, so each event
+/// builds on a stale position and most of a fast drag is thrown away. Measured from a phone in
+/// trackpad mode, roughly a third of the distance vanished. Accumulating against the position we
+/// last asked for keeps every delta, while a pause long enough to mean the user has let go
+/// resynchronises with wherever the cursor really is.
+struct RelativeCursor {
+    static let resyncAfterMs: Int64 = 250
+
+    private var point: CGPoint?
+    private var lastAt: Int64 = .min
+
+    mutating func next(dx: Double, dy: Double, now: Int64, live: () -> CGPoint) -> CGPoint {
+        let base = (point != nil && now - lastAt <= Self.resyncAfterMs) ? point! : live()
+        let target = CGPoint(x: base.x + dx, y: base.y + dy)
+        point = target
+        lastAt = now
+        return target
+    }
+
+    /// Called whenever the pointer is placed by other means, so the next nudge starts from there.
+    mutating func placed(at point: CGPoint, now: Int64) {
+        self.point = point
+        lastAt = now
+    }
+
+    mutating func reset() {
+        point = nil
+        lastAt = .min
+    }
+}
+
 struct RateLimiter {
     let perSecond: Int
     private var windowStart: Int64 = 0
@@ -51,6 +85,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
     private var pressed: Set<MouseButton> = []
     private var lastClick: (button: MouseButton, time: Int64, point: CGPoint, count: Int64)?
     private var moveGate = MoveOrderGate()
+    private var relativeCursor = RelativeCursor()
     private var mouseLimiter = RateLimiter(perSecond: Limits.mouseEventsPerSecond)
     private var keyLimiter = RateLimiter(perSecond: Limits.keyEventsPerSecond)
     private var textLimiter = RateLimiter(perSecond: Limits.textEventsPerSecond)
@@ -61,6 +96,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
         lock.lock()
         self.display = display
         moveGate.reset()
+        relativeCursor.reset()
         lock.unlock()
     }
 
@@ -72,11 +108,14 @@ public final class InputInjector: InputSink, @unchecked Sendable {
             guard mouseLimiter.allow(now: now) else { return false }
             guard moveGate.accept(sentAt) else { return false }
             let b = display.pointBounds
-            move(to: CGPoint(x: b.origin.x + x * b.width, y: b.origin.y + y * b.height))
+            let point = CGPoint(x: b.origin.x + x * b.width, y: b.origin.y + y * b.height)
+            relativeCursor.placed(at: point, now: now)
+            move(to: point)
         case .mouseMoveRel(let dx, let dy):
             guard mouseLimiter.allow(now: now) else { return false }
-            let current = currentLocation()
-            move(to: clamp(CGPoint(x: current.x + dx, y: current.y + dy)))
+            let point = clamp(relativeCursor.next(dx: dx, dy: dy, now: now, live: currentLocation))
+            relativeCursor.placed(at: point, now: now)
+            move(to: point)
         case .mouseDown(let button):
             guard mouseLimiter.allow(now: now) else { return false }
             press(button, down: true, now: now)
@@ -107,6 +146,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
         for button in pressed { press(button, down: false, now: nowMs()) }
         pressed.removeAll()
         moveGate.reset()
+        relativeCursor.reset()
     }
 
     // MARK: Mouse

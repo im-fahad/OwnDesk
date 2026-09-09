@@ -210,6 +210,21 @@ channel frame the Android app can send, using the same validator the host uses. 
 frames the Mac would have dropped in silence: the wrong application name in `hello`, an invented
 `prefer` value, and a missing `nonce` and `reason` on `ping` and `bye`.
 
+**Relative pointer moves must accumulate, not re-read the cursor.** Adding each delta to wherever
+the system says the cursor is loses most of a fast drag, because the window server has not applied
+the previous move yet. Measured from a phone in trackpad mode, between a third and a half of the
+distance vanished, and raising the speed made it worse rather than better. The host now adds each
+delta to the position it last asked for, and resynchronises only after a pause long enough to mean
+the user let go.
+
+**Copy the gestures people already know.** The phone's controls follow what Microsoft, Chrome
+Remote Desktop, Splashtop and Jump Desktop settled on, including the one that looks odd until it is
+explained: a drag with the button held has to be entered deliberately, by tapping twice and holding,
+because a plain finger drag has to stay free to point at things. Without that gesture there is no
+way to select text or move a window. The logic lives in `Gestures`, away from Android's event
+classes, because multi-touch cannot be synthesised over the debugging bridge and this is the only
+way to test it at all.
+
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
