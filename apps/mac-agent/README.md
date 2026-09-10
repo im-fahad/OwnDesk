@@ -1,27 +1,37 @@
-# PRC Mac agent
+# PRC Mac agent: the hosting half
 
-The host side of PRC: embedded signaling endpoint, pairing, mutual session authentication,
-ScreenCaptureKit into libwebrtc, and CGEvent input injection. Spec sections 4.1, 7, 8, 12 to 15, 20, 21.
+The host side of PRC: the signalling endpoint, pairing, mutual session authentication,
+ScreenCaptureKit into libwebrtc, and CGEvent input injection. Spec sections 4.1, 7, 8, 12 to 15,
+20, 21.
+
+**This is a library, not the app you install.** `PRCAgentCore` is one of the two halves inside
+[`apps/prc`](../prc), which is what runs on each Mac. See [../../README.md](../../README.md) for how
+the two halves fit together.
 
 Three targets:
 
-- `PRCAgentCore`: everything, as a library.
-- `prc-agent-app`: the menu bar app (spec section 19). Remote Access switch, active session with
-  Disconnect, trusted devices with Revoke, a pairing window with QR code and fingerprint approval,
-  permission warnings with links to System Settings, notifications when bundled.
+- `PRCAgentCore`: the hosting half, as a library. Used by `apps/prc`.
 - `prc-agent`: a headless runner that prints events and takes commands on stdin, for development,
   the browser harness, and `npm run e2e`.
+- `prc-agent-app`: the v0.1 menu bar app. **Superseded by `apps/prc` and due for removal.** It
+  still builds, and is occasionally useful for running a host without the merged app.
 
 ## Build and run
 
 ```sh
 cd apps/mac-agent
 swift build
-swift run prc-agent-app --file-identity      # menu bar app, development mode
 swift run prc-agent --file-identity          # headless runner
 ```
 
-For daily use build a real app bundle instead; see "App bundle, signing, and start at login" below.
+For daily use install the app instead: `scripts/build-apps.sh prc && scripts/install-prc.sh`.
+
+Testing a host change without reinstalling the app: stop the installed one with
+`launchctl bootout gui/$(id -u)/com.prc.app`, run
+`(sleep 600 | swift run prc-agent --port 47500 --data-dir <a copy of the app's data> --file-identity) &`,
+and restore it with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.prc.app.plist`.
+The `sleep` pipe matters: the CLI exits when stdin reaches EOF, which a backgrounded process hits
+immediately.
 
 Options:
 
@@ -58,9 +68,12 @@ quit
 ## App bundle and start at login
 
 ```sh
-scripts/build-apps.sh              # dist/PRC Agent.app and dist/PRC Controller.app, ad-hoc signed
-scripts/install-launch-agent.sh    # copies the agent to ~/Applications and starts it at login
+scripts/build-apps.sh prc          # dist/PRC.app, ad-hoc signed
+scripts/install-prc.sh             # copies it to ~/Applications and starts it at login
 ```
+
+The older `scripts/build-apps.sh agent` and `scripts/install-launch-agent.sh` build and install the
+superseded split app under `com.prc.agent`. `scripts/install-prc.sh --replace-agent` removes it.
 
 No certificate, Apple account, or notarization is involved: this is personal use and the apps
 never leave your machines. The one consequence of ad-hoc signing is that macOS remembers the
@@ -72,8 +85,8 @@ If that chore ever gets old, `scripts/make-signing-identity.sh` creates a free l
 identity (no Apple involvement) and `PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh`
 signs with it, after which the grants survive rebuilds. Optional.
 
-The LaunchAgent uses `RunAtLoad` and `KeepAlive`, so the agent starts at login and restarts after a
-crash (spec section 18). Once installed this way, do not also open the app from Finder: launchd
+The LaunchAgent uses `RunAtLoad`, and `KeepAlive` limited to `SuccessfulExit: false`, so it starts
+at login and restarts after a crash but stays gone when you choose Quit (spec section 18). Once installed this way, do not also open the app from Finder: launchd
 already runs it, and a second copy exits immediately. To restart it after granting a permission,
 quit it from its menu bar panel and launchd brings it back, or run
 `launchctl kickstart -k gui/$(id -u)/com.prc.agent`. Logs go to `~/Library/Logs/PRC`. `scripts/uninstall-launch-agent.sh`
@@ -153,7 +166,7 @@ plain http so it can open the agent's `ws://` endpoint.
 | `ScreenCapturer.swift` | SCStream to NV12 pixel buffers, static-frame repeat |
 | `WebRTCSession.swift` | Peer connection as answerer, video sender, data channels, path detection |
 | `InputInjector.swift` | CGEvent posting with rate limits, click counting, drag, scroll phases, Unicode text |
-| `TrustStore.swift` | Trusted controllers on disk, owner-only permissions |
+| `PRCPeers` (in `packages/swift`) | The peer list on disk, with a permission per direction |
 | `Agent.swift` | Wiring and the dev file identity store |
 
 ## Headless end-to-end test
@@ -182,13 +195,13 @@ anywhere. That flag exists only for testing and is never on unless asked for.
 swift test
 ```
 
-Nineteen tests. Pairing and session flows run against an in-memory transport with fake media.
+Twenty-eight tests. Pairing and session flows run against an in-memory transport with fake media.
 The signaling server is tested over a real WebSocket on localhost. The WebRTC test runs libwebrtc on
 both ends in one process, negotiates, exchanges ICE, opens all three data channels, and sends
 messages both ways. No permission is needed for any of them, so they run anywhere.
 
 ## Known limits at this step
 
-- No rendezvous client. LAN and Tailscale paths only.
+- No rendezvous client. LAN and Tailscale paths only, which is the deployed answer, not a gap.
 - The cursor is baked into the video. Local cursor rendering is Phase 2.
 - One display, the main one.

@@ -6,6 +6,13 @@ keyboard.
 The Macs can host or control. The phone only controls, which is why this app is much smaller than
 `apps/prc`.
 
+[../../README.md](../../README.md) is the guided tour: the technology on both platforms, the full
+flow, and the user guide. This file is the app's own reference.
+
+Kotlin 2.1 on JDK 17, plain Android Views, minSdk 26. OkHttp for the WebSocket,
+kotlinx.serialization for the JSON, the Android Keystore for the identity, CameraX and zxing for
+scanning, and `io.github.webrtc-sdk:android` for the media.
+
 ## What it does today
 
 - Makes one identity per phone, an ECDSA P-256 key generated inside the Android Keystore and never
@@ -92,6 +99,9 @@ Needs a JDK 17 and the Android SDK. The Gradle wrapper is checked in.
 ## Tests
 
     ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest
+
+Forty-seven tests: the shared protocol vectors, the gestures, the pointer mapping under
+magnification, the SDP rewriting, address preference, and QR decoding.
 
 There is a second check that runs from the repository root, `npm run android-frames`. It validates
 every data channel frame the app can send against the protocol's own JSON Schemas, using the same

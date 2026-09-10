@@ -1,8 +1,13 @@
 # Personal Remote Control System (PRC) --- Specification v2
 
-Revision date: 2026-09-07
+Revision date: 2026-09-07. Amended 2026-09-10 to match what was built.
 Supersedes: personal-remote-control-ai-agent-spec.md (v1)
 Protocol version defined by this document: 1
+
+The protocol in sections 5 to 17 and 21 is unchanged and is what all three implementations speak.
+The amendments are to roles, deployment and UI: see section 0.1. What exists today, and the traps
+found on the way, is [implementation.md](implementation.md); [../README.md](../README.md) is the
+guided tour.
 
 ---
 
@@ -29,14 +34,37 @@ v1 had the right shape. v2 keeps the architecture and fixes the places where v1 
 
 ---
 
+## 0.1 What changed while building it
+
+v2 described one host and two controllers. It is now symmetric between the Macs, and one product
+decision by the owner removed a whole component.
+
+| Area | v2 as written | As built |
+|---|---|---|
+| Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phone controls only. |
+| Apps | `mac-agent` and `mac-controller` as separate apps | One `PRC.app` containing both halves as libraries. The old app targets are superseded. |
+| Trust store | One direction, "trusted controllers" | One peer record per device with two independent permissions: may control us, we may control it. Key lookup is gated on the relevant one, so revoking a direction fails closed. |
+| Internet path | Rendezvous server plus TURN on a VPS | Tailscale. Same signed protocol over a tailnet address, no server to run, no VPS to pay for. The rendezvous protocol in section 11 is still specified and still unbuilt. |
+| Signing | A persistent identity from day one, ideally Developer ID | Ad-hoc, by the owner's decision: these apps are personal and never distributed. The cost is re-granting Screen Recording and Accessibility after each rebuild, which the install script handles with `tccutil reset`. |
+| Android input | Trackpad first, screen view second | Both, switchable, with touch as the default: on a phone the whole desktop is visible at once, so putting the pointer where the finger lands is quicker to aim than nudging it. Pinch magnifies on the phone alone. |
+| Android pairing | QR only | QR by camera, or the same code pasted as text. Decoded on the phone, offline. |
+| Host UI | Menu bar only | Menu bar item plus a window: the window is needed anyway to show a screen this Mac is controlling. |
+| Codec negotiation | "H.264 via VideoToolbox" | Both sides must *state* it: name H.264 as the preferred codec and offer an H.264 level the picture actually fits in, or libwebrtc silently agrees on VP8. See implementation.md. |
+
+Sections 5 to 25 were written when only the Mac mini could host. Where they say "the Mac Mini",
+read "whichever Mac is hosting this session"; the rules are the same whichever way round the two
+Macs are, and the examples were left with their original names so older notes still match.
+
+---
+
 ## 1. Project goal
 
 A private, self-hosted remote-control system for personal use.
 
-- A Mac Mini is the remote host.
-- A MacBook controls the Mac Mini.
-- An Android phone controls the Mac Mini.
-- Controllers connect from the same LAN or across the Internet.
+- Each Mac runs one app that can host, control, or both. Hosting is off until switched on.
+- A Mac controls another Mac.
+- An Android phone controls either Mac.
+- Controllers connect from the same LAN, or across the Internet over a Tailscale tailnet.
 - Low-latency screen viewing plus mouse and keyboard control.
 - Secure device pairing and mandatory authentication on every session.
 - Automatic connection fallback. No remote-control port is ever exposed directly to the Internet.
@@ -48,48 +76,41 @@ Personal use only. No public distribution.
 ## 2. Architecture
 
 ```text
-                    +---------------------------+
-                    |    Rendezvous Server      |
-                    |  (cloud, optional)        |
-                    |  WSS: presence + relay    |
-                    |  Issues TURN credentials  |
-                    |  Holds no durable state   |
-                    +------------+--------------+
-                                 |
-                   signaling only (signed envelopes)
-                                 |
-            +--------------------+---------------------+
-            |                                          |
-            v                                          v
-  +--------------------+                    +--------------------+
-  |     MacBook        |                    |   Android Phone    |
-  |    Controller      |                    |    Controller      |
-  |  Swift + WebRTC    |                    |  Kotlin + WebRTC   |
-  +---------+----------+                    +----------+---------+
-            |                                          |
-            |   LAN: signal directly to the agent      |
-            |   over its embedded endpoint (Bonjour)   |
-            |                                          |
-            |          WebRTC (DTLS-SRTP)              |
-            |   direct when possible, TURN when not    |
-            +--------------------+---------------------+
-                                 |
-                                 v
-                    +---------------------------+
-                    |         Mac Mini          |
-                    |        Remote Agent       |
-                    |  Embedded signaling (WS)  |
-                    |  ScreenCaptureKit         |
-                    |  CGEvent input injection  |
-                    |  Trusted device store     |
-                    |  Menu bar UI              |
-                    +---------------------------+
+        ┌───────────────────────────┐      ┌───────────────────────────┐
+        │         Mac mini          │      │          MacBook          │
+        │          PRC.app          │      │          PRC.app          │
+        │  ┌─────────────────────┐  │      │  ┌─────────────────────┐  │
+        │  │ hosting half        │  │◄────►│  │ controlling half    │  │
+        │  │  WebSocket :47500   │  │      │  └─────────────────────┘  │
+        │  │  Bonjour advert     │  │      │  ┌─────────────────────┐  │
+        │  │  ScreenCaptureKit   │  │      │  │ hosting half        │  │
+        │  │  CGEvent injection  │  │◄────►│  │  (same, either way) │  │
+        │  └─────────────────────┘  │      │  └─────────────────────┘  │
+        │  ┌─────────────────────┐  │      └───────────────────────────┘
+        │  │ controlling half    │  │
+        │  └─────────────────────┘  │      ┌───────────────────────────┐
+        │  shared: identity key,    │      │      Android phone        │
+        │  peer list, window        │◄────►│   PRC, the phone app      │
+        └───────────────────────────┘      │  controlling half only    │
+                                           └───────────────────────────┘
+
+        ◄────►  signalling: signed envelopes over a WebSocket the host serves
+                media: WebRTC, DTLS-SRTP, H.264 video plus three data channels
+                the phone reaches either Mac exactly the same way
+
+        LAN     the controller reaches that WebSocket directly, found by Bonjour.
+                No server of any kind is involved.
+        Away    the same WebSocket at a Tailscale address. Tailscale connects the
+                two directly when it can and relays through DERP when it cannot.
+        Later   the rendezvous server and TURN of section 11 remain specified and
+                unbuilt; they would carry signalling only, and are unnecessary while
+                a tailnet is available.
 ```
 
 Two planes:
 
-- **Control plane**: presence, pairing, session authentication, SDP, ICE. Carried by the agent's embedded endpoint on the LAN, or by the rendezvous server over the Internet. Every control-plane message is signed end to end. The transport is never trusted.
-- **Data plane**: screen video and input events. Carried only inside the WebRTC connection. Never touches the server. TURN, when used, relays encrypted packets it cannot read.
+- **Control plane**: presence, pairing, session authentication, SDP, ICE. Carried by the host's own endpoint, reached on the LAN or over the tailnet, and by the rendezvous server if one is ever built. Every control-plane message is signed end to end. The transport is never trusted, which is what makes it safe to carry the control plane over something we do not own.
+- **Data plane**: screen video and input events. Carried only inside the WebRTC connection. Never touches a server. A relay, whether TURN or Tailscale's DERP, forwards encrypted packets it cannot read.
 
 ---
 
@@ -98,7 +119,7 @@ Two planes:
 | Decision | Choice | Reason |
 |---|---|---|
 | Identity key type | ECDSA P-256, SHA-256 | Supported by Secure Enclave, Android Keystore, CryptoKit, WebCrypto. Ed25519 is not hardware-backed on either platform. |
-| Signature encoding | Raw r||s, 64 bytes, base64url | Uniform across platforms. Android must convert from DER. |
+| Signature encoding | Raw r\|\|s, 64 bytes, base64url | Uniform across platforms. Android must convert from DER. |
 | Public key encoding | X9.63 uncompressed, 65 bytes, base64url | Universal. |
 | Device ID | Lowercase hex SHA-256 of the 65-byte public key | Self-certifying. |
 | Signaling message format | JSON envelope, payload as base64url of exact JSON bytes | Avoids canonical JSON across three languages. |
@@ -108,7 +129,11 @@ Two planes:
 | Codec | H.264 via VideoToolbox | Hardware encode on Mac, hardware decode on Android and Mac. |
 | Fallback | Single ICE negotiation with all candidate types | ICE already picks the best path. |
 | MacBook stack | Native Swift | Shares code with the agent. Web views swallow system shortcuts. |
-| Android role | Trackpad and keyboard first, screen view second | Phone screen is not a desktop. |
+| Mac app shape | One app with both halves; hosting off by default | A Mac used only as a controller never constructs capture and is never asked for those permissions. |
+| Internet path | Tailscale, not a rendezvous server | Same signed protocol, no server to run or pay for. WireGuard underneath, and it is already trusted with far more than this. |
+| Android pointer | Absolute touch by default, relative trackpad on request | The whole desktop is visible on a phone, so landing the pointer under the finger aims faster; the trackpad is there for small targets. |
+| Android magnification | Local only, never asked of the host | Costs no bandwidth and keeps working on a poor link. |
+| Code signing | Ad-hoc, no certificate | The owner's decision: personal use, never distributed. Grants are re-issued after a rebuild by the install script. |
 | Pairing | LAN only, physical approval on the host | Removes remote pairing attack surface. |
 | Concurrency | One active controller. Second request is rejected as busy. | Simplest safe MVP behavior. |
 | Host runtime | LaunchAgent in the login session, KeepAlive | Restarts after crash and after login. |
@@ -117,76 +142,83 @@ Two planes:
 
 ## 4. Components
 
-### 4.1 Mac Mini remote agent
+### 4.1 The hosting half
 
-Runs continuously in the user's login session as a LaunchAgent. Presents a menu bar UI.
+Lives inside `PRC.app` and is constructed only when hosting is switched on. Runs in the user's
+login session under a LaunchAgent, so it comes back after login and after a crash, but not after
+the owner chooses Quit.
 
 Responsibilities:
 
-- Own the host identity key in the Secure Enclave.
-- Serve the embedded signaling endpoint on the LAN.
-- Advertise itself via Bonjour.
-- Connect outbound to the rendezvous server when one is configured and remote access is on.
-- Keep the trusted-device store and push it to the rendezvous server.
-- Run pairing with local user approval.
+- Own the device identity key in the Secure Enclave.
+- Serve the signalling endpoint on port 47500 and advertise `_prc._tcp` over Bonjour.
+- Run pairing with local approval and a fingerprint comparison.
 - Authenticate every session with challenge-response and verify every signed envelope.
-- Capture the screen with ScreenCaptureKit and feed libwebrtc.
+- Capture the screen with ScreenCaptureKit and feed libwebrtc, naming H.264 as the preferred codec.
 - Receive input on data channels, validate it, and inject it with CGEvent.
 - Hold a power assertion while a session is active.
-- Expose the Remote Access kill switch, trusted devices, active session, and pairing in the menu bar UI.
+- Show the active session and let the owner end it.
 - Never execute arbitrary remote commands.
 
-Required macOS permissions: Screen Recording and Accessibility. See section 18 for why signing matters here.
+Required macOS permissions: Screen Recording and Accessibility, asked for when hosting is first
+switched on. See section 18.
 
-### 4.2 MacBook controller
+### 4.2 The controlling half
 
-Native Swift app using the WebRTC framework.
+The same app, always available, needing no macOS permission at all.
 
 Responsibilities:
 
-- Discover the host on the LAN via Bonjour. Fall back to the rendezvous server.
-- Authenticate. Verify the host's signatures.
-- Render the video track full-window. Map pointer position over the video to normalized host coordinates.
+- Find a host by Bonjour on this network, and otherwise probe every address it knows at once,
+  taking the first that answers and remembering it.
+- Authenticate, and verify the host's signatures.
+- Create the three data channels and the offer. Render the video track. Map pointer position over
+  the video to normalised host coordinates, letterboxing included.
 - Send absolute mouse moves, buttons, precise scroll, key events, and text.
-- Capture as many system shortcuts as macOS allows when the window is focused, with a documented list of ones it cannot capture. Provide a toolbar for the rest, at minimum Cmd+Tab, Cmd+Q, and Cmd+Space.
-- Show connection state and path: LAN direct, Internet direct, or relayed.
-- Reconnect automatically.
+- Capture as many system shortcuts as macOS allows while the pointer is over the video, with
+  toolbar buttons for the ones it cannot: Cmd+Tab, Cmd+Space, Cmd+Q.
+- Show the connection state and which path it took: Direct (LAN), Direct (Tailscale),
+  Direct (Internet), or Relayed.
+- Reconnect automatically, and never fall back to re-pairing.
 
 ### 4.3 Android controller
 
-Kotlin, native UI, official WebRTC Android library.
+Kotlin, plain Android Views, the WebRTC Android library. Controls only; it never hosts.
 
 Responsibilities:
 
-- Discover via NSD on the LAN. Fall back to the rendezvous server.
-- Authenticate. Verify the host's signatures.
-- Trackpad mode: the whole screen is a touch surface sending relative moves, taps, two-finger scroll, long-press for right click.
-- Screen mode: video rendered in a SurfaceViewRenderer with pinch zoom, taps sending absolute moves plus clicks.
-- Soft keyboard sending text events and key events for non-printing keys.
-- Foreground service keeping the connection alive while the app is in use.
-- Reconnect automatically.
+- Keep its identity in the Android Keystore, non-exportable.
+- Pair by scanning the host's QR with the camera, or from the same code pasted as text. Decoding
+  happens on the phone: a pairing code is a secret and is not sent anywhere to be read.
+- Authenticate, verify the host's signatures, and apply the same receiver rules as the Macs.
+- Offer the connection, render the video in a `SurfaceViewRenderer` sized to the frame's shape, and
+  ask its own decoder what H.264 level it supports rather than guessing.
+- Touch mode: the pointer goes where the finger lands. Trackpad mode: relative nudges, as on a
+  laptop. Both send the same message types.
+- Gestures as the established remote desktop apps define them: tap, double tap, tap-tap-hold to
+  drag, long press and two-finger tap for right click, three-finger tap for middle, two-finger
+  drag to scroll, pinch to magnify locally.
+- Soft keyboard sending text events, and key events for non-printing keys.
+- Show what the connection is doing, read from the WebRTC stats rather than estimated.
 
-### 4.4 Rendezvous server
+### 4.4 Rendezvous server — specified, not built
 
-Node.js, TypeScript, one WebSocket endpoint, one health endpoint. Deployed behind a TLS reverse proxy.
+Node.js, TypeScript, one WebSocket endpoint, one health endpoint, behind a TLS reverse proxy.
+Deferred: a tailnet does the same job with nothing to run. Section 11 defines the protocol should it
+ever be wanted.
 
-Does:
+Would:
 
 - Authenticate connecting devices by identity key against an allowlist pushed by the host.
-- Track presence.
-- Relay opaque signed envelopes between the host and its trusted controllers.
-- Issue time-limited TURN credentials.
+- Track presence, relay opaque signed envelopes, issue time-limited TURN credentials.
 
-Does not:
+Would not: store anything durable, inspect the inner envelopes, carry video or input, or offer any
+REST API for device management.
 
-- Store anything durable. The allowlist lives in memory and is re-pushed by the host on every connect.
-- Inspect, log, or verify the inner envelopes beyond routing fields.
-- Carry video, input, clipboard, or files. Ever.
-- Have any REST API for device management.
+### 4.5 TURN — specified, not built
 
-### 4.5 TURN
-
-coturn, on the same VPS, using time-limited credentials (`use-auth-secret`). Treated as an untrusted packet relay.
+coturn with time-limited credentials (`use-auth-secret`), treated as an untrusted packet relay.
+Tailscale's own DERP relay fills this role today.
 
 ---
 
@@ -206,7 +238,7 @@ Every device generates one P-256 key pair at first launch.
 | Platform | Storage |
 |---|---|
 | macOS | CryptoKit `SecureEnclave.P256.Signing.PrivateKey`, falling back to a Keychain-stored key on Macs without Secure Enclave. |
-| Android | Android Keystore EC P-256, `setIsStrongBoxBacked(true)` when available, otherwise TEE. Signatures come back DER-encoded and must be converted to raw r||s. |
+| Android | Android Keystore EC P-256, `setIsStrongBoxBacked(true)` when available, otherwise TEE. Signatures come back DER-encoded and must be converted to raw r\|\|s. |
 
 Private keys never leave the device. They are never sent to the server, never included in QR codes, never logged.
 
@@ -508,9 +540,17 @@ Only the **signaling path** is chosen explicitly. The **media path** is chosen b
 ```text
 1. Resolve the host by device_id over Bonjour for up to 2 s.
 2. If found: open WS to the advertised address and port.  path = "lan"
-3. Else, or if that fails: open WSS to the rendezvous server. path = "cloud"
-4. If the LAN signaling drops mid-session, retry LAN once, then cloud.
+3. Else: open a TCP connection to every address stored for that host at once and use the
+   first that answers. A private LAN address is "lan"; anything else, a tailnet address
+   included, is "cloud".
+4. If the LAN signaling drops mid-session, retry LAN once, then the stored addresses.
 ```
+
+As built there is no step for the rendezvous server, and the addresses are probed in parallel
+rather than in turn: trying them one after another means waiting out a timeout on the wrong network
+before the right one is attempted at all. A tailnet address must declare `cloud` even though it is
+private, because the overlay may be relaying it, and a host that seeds a LAN bitrate on a relayed
+link produces a soft picture that looks like an encoder fault.
 
 ### 9.2 ICE servers by path
 
@@ -533,9 +573,9 @@ From the selected candidate pair:
 
 A peer on the same LAN can show up as peer-reflexive when its candidate is learned from a connectivity check before its trickled candidate arrives, and libwebrtc reports no address for such a remote candidate. So a pair selected through one of our own host candidates on a private address is also reported as Direct (LAN). Addresses in Tailscale's ranges, IPv4 100.64.0.0/10 and IPv6 fd7a:115c:a1e0::/48, are reported as Direct (Tailscale) instead: they are private, but the overlay may be relaying them through a DERP server, which shows up as a round trip of several hundred milliseconds.
 
-### 9.4 Alternative: private overlay network instead of the rendezvous server
+### 9.4 Chosen: a private overlay network instead of the rendezvous server
 
-For a zero-cost deployment the three devices can join a Tailscale tailnet on the free plan. The agent's embedded endpoint is then reachable over the tailnet from anywhere, so controllers use the `lan` signaling path against the stored tailnet address, ICE gathers host candidates on the tailnet interface, and Tailscale's own relays replace TURN. No rendezvous server, TURN, VPS, or domain is needed. Signed envelopes still protect against the overlay operator exactly as they protect against the rendezvous server. The apps do not change: the controller keeps a list of known host addresses to try after Bonjour fails, and the rendezvous path remains available for later.
+This is what is deployed. The three devices join a Tailscale tailnet on the free plan. The agent's embedded endpoint is then reachable over the tailnet from anywhere, so controllers use the `lan` signaling path against the stored tailnet address, ICE gathers host candidates on the tailnet interface, and Tailscale's own relays replace TURN. No rendezvous server, TURN, VPS, or domain is needed. Signed envelopes still protect against the overlay operator exactly as they protect against the rendezvous server. The apps do not change: the controller keeps a list of known host addresses to try after Bonjour fails, and the rendezvous path remains available for later.
 
 ---
 
@@ -581,7 +621,10 @@ Rules:
 
 ---
 
-## 11. Rendezvous server protocol
+## 11. Rendezvous server protocol — specified, not built
+
+Nothing in this section is implemented. It is kept because it is the answer if a tailnet ever stops
+being acceptable, and because the device envelopes it carries are the same ones in use today.
 
 Server-level frames are JSON with a `kind` field. They are distinct from the device envelopes they carry.
 
@@ -810,40 +853,87 @@ These are the operational facts that decide whether the Mac Mini is reachable wh
 - **Display**: ScreenCaptureKit requires an attached display. A headless Mac Mini needs an HDMI dummy plug or a virtual display. Without one there is nothing to capture.
 - **Login session**: the agent runs as a LaunchAgent inside the logged-in user's session. It is not running at the login window. After a reboot you cannot log in remotely unless automatic login is enabled. Automatic login is incompatible with FileVault. Decide one way; see section 31.
 - **Sleep**: enable "Prevent automatic sleeping when the display is off" and "Wake for network access" in System Settings. The agent additionally holds `kIOPMAssertionTypePreventUserIdleSystemSleep` while a session is active. Enable "Start up automatically after a power failure".
-- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity. Ad-hoc signatures change every build and the grants vanish. Use a persistent signing identity from the first day, ideally a Developer ID, or at minimum a self-signed certificate created once and reused. `scripts/make-signing-identity.sh` creates one and `scripts/build-apps.sh` signs with it. Notarization is only needed if the app is distributed.
-- **LaunchAgent**: `KeepAlive` true, `RunAtLoad` true, so the agent survives crashes and comes back after login. `scripts/install-launch-agent.sh` installs it.
+- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity, and an ad-hoc signature changes every build, so the grants vanish on each reinstall. The owner chose ad-hoc signing and no certificate: these apps are personal and are never distributed. `scripts/install-prc.sh` therefore clears the stale entry with `tccutil reset` on every install, and the app shows a warning with a link to the right System Settings pane until both are granted again. `scripts/make-signing-identity.sh` creates a free self-signed identity that would end the chore, and is not used. Notarization would only matter if the app were distributed.
+- **LaunchAgent**: `RunAtLoad` true and `KeepAlive` set to `SuccessfulExit: false`, so the app comes back after login and after a crash but stays gone when the owner chooses Quit. `scripts/install-prc.sh` installs it as `com.prc.app`.
 
 ---
 
 ## 19. Host UI
 
-Menu bar app with a status icon: grey when idle, green with the controller's name when connected.
+A menu bar item, plus a window on demand. The window is needed anyway to show a screen this Mac is
+controlling, so the same app draws both directions.
+
+The menu bar panel, which is all a Mac used only as a host ever needs:
 
 ```text
-Remote Access            [ ON ]
-Rendezvous server        connected as Mac Mini M4
-LAN discovery            advertising on port 47500
+Mac mini M4
+fingerprint 25AA-F3B7-4F82
 
-Active session
-  My MacBook     Direct (LAN)  1080p60  RTT 3 ms    [Disconnect]
+Let other Macs control this one          [ ON ]
 
-Trusted devices
-  My MacBook     paired 2026-09-07   last seen now        [Revoke]
-  Pixel 9                paired 2026-09-07   last seen yesterday  [Revoke]
+Incoming
+  My MacBook   Direct (LAN)            [Disconnect]
 
-[Pair New Device]
-[Settings]  rendezvous URL, idle timeout, max bitrate
+[Open PRC…]                                        [Quit]
 ```
 
-A system notification fires when a session starts and when one ends. The user must always be able to see that someone is connected.
+The window, when controlling:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ ●●●  PRC   Mac mini M4 · Direct (LAN)   [Quality] [Keys] [⏸] │  header, doubles as the title bar
+├──────────────┬───────────────────────────────────────────────┤
+│ THIS MAC     │                                               │
+│  Let others  │                                               │
+│  control it  │            the other Mac's screen             │
+│              │                                               │
+│ MACS YOU CAN │                                               │
+│ CONTROL      │                                               │
+│  ● MacBook   │                                               │
+│              │                                               │
+│ MACS THAT CAN│                                               │
+│ CONTROL THIS │                                               │
+│  ● MacBook   │                                               │
+│              │                                               │
+│ NEARBY, NOT  │                                               │
+│ PAIRED       │                                               │
+│              │                                               │
+│ [Pair a Mac…]│                                               │
+├──────────────┴───────────────────────────────────────────────┤
+│ LOG                                                          │  optional, ⌘J
+└──────────────────────────────────────────────────────────────┘
+```
+
+Rules the window follows, each of which cost something to learn (see implementation.md):
+
+- The Dock icon appears while a window is open and goes away when it closes, so a Mac started at
+  login adds nothing to the Dock, and an open window can still take keyboard focus.
+- Closing the window hides it rather than destroying it, and Quit really quits.
+- A session this Mac is hosting is always visible: the menu bar panel names the controller and
+  offers Disconnect, and the header says so while the window is open.
+
+A system notification fires when a session starts and ends. The owner must always be able to see
+that someone is connected.
 
 ---
 
 ## 20. Trusted devices, revocation, kill switch
 
-- The trusted-device store lives on the Mac Mini in Application Support, containing device_id, public key, name, type, paired date, last seen. No secrets, so no special protection beyond file permissions.
-- Revoke: remove the entry, send `SESSION_END` with `revoked` and close any active session from that device, push `trust_sync` to the server. The device must pair again from scratch.
-- Remote Access off: reject new sessions with `remote_access_disabled`, end existing sessions, stop Bonjour, close the LAN endpoint, disconnect from the rendezvous server. On: reverse all of that. This toggle is local-only and cannot be flipped remotely.
+- The peer store lives in Application Support on each device: one record per peer holding
+  device_id, public key, name, type, paired date, last seen, known addresses, and **two independent
+  permissions** — may control us, and we may control it. No secrets, so no protection beyond file
+  permissions.
+- Key lookup is gated on the permission for the direction being checked, so withdrawing one makes
+  verification fail closed rather than relying on a check at the call site. A peer allowed neither
+  is dropped.
+- Pairing sets both directions between two Macs. That costs nothing in trust: one pairing already
+  exchanges both public keys and both people compared fingerprints. What stops a Mac being
+  controlled is its own hosting switch.
+- Revoke: remove the entry, send `SESSION_END` with `revoked`, and close any active session from
+  that device. It must pair again from scratch.
+- Hosting off: reject new sessions with `remote_access_disabled`, end existing ones, stop Bonjour,
+  close the endpoint. On: reverse all of that. This switch is local-only and cannot be flipped
+  remotely — that is the point of it.
 
 ---
 
@@ -911,14 +1001,27 @@ Never log:
 
 ## 25. Deployment
 
+What is actually deployed:
+
+```text
+Mac mini   ~/Applications/PRC.app under the LaunchAgent com.prc.app, hosting on,
+           Screen Recording and Accessibility granted
+MacBook    the same app, the same way
+Phone      the debug APK, installed with adb
+Network    Tailscale on all three, one tailnet, free plan.
+           No server, no TURN, no domain, no VPS, no recurring cost.
+```
+
 Development:
 
 ```text
-Mac Mini agent + MacBook controller on one LAN, no server, LAN path only.
-Optional: rendezvous server running on the MacBook for cloud-path testing.
+Both halves in one process: swift test in apps/mac-controller runs a real agent
+in-process with a synthetic screen. npm run e2e drives the real prc-agent binary
+from Node. Neither needs a display or a permission.
 ```
 
-Internet:
+The Internet deployment below is **not built**, and is kept in case a tailnet ever stops being
+acceptable:
 
 ```text
 Small VPS
@@ -928,17 +1031,8 @@ Small VPS
                       relay range 49160-49200 udp, use-auth-secret
 ```
 
-Only the reverse proxy and coturn are exposed. The rendezvous server listens on localhost.
-
-Zero-cost alternative (section 9.4):
-
-```text
-Tailscale free plan on the Mac Mini, MacBook, and phone.
-No server, no TURN, no domain. Controllers connect to the agent's
-embedded endpoint over the tailnet.
-```
-
-Cost: all software is free. The VPS is the only recurring cost and TURN bandwidth is the only variable. Do not trade security for cost.
+Only the reverse proxy and coturn would be exposed; the rendezvous server would listen on
+localhost. Do not trade security for cost.
 
 ---
 
@@ -946,52 +1040,68 @@ Cost: all software is free. The VPS is the only recurring cost and TURN bandwidt
 
 ```text
 prc/
-  apps/
-    mac-agent/             Swift, menu bar app, embedded signaling, capture, injection
-    mac-controller/        Swift
-    android-controller/    Kotlin
-  services/
-    rendezvous/            Node 22, TypeScript
-  packages/
-    protocol/
-      schemas/             JSON Schema for every envelope, payload, and data channel message
-      keycodes/            W3C code -> macOS virtual key, W3C code -> Android KeyEvent tables
-      vectors/             Test vectors: signing inputs, signatures, pairing proofs
-      generated/           Swift, Kotlin, TypeScript types produced by codegen, committed
-    identity/              Per-platform thin wrappers: key generation, signing, encoding
-  tools/
-    web-harness/           Browser test client using WebCrypto P-256, dev only
-  infra/
-    docker/
-    coturn/
-    reverse-proxy/
   docs/
-    architecture.md
-    security.md
-    protocol.md
-    deployment.md
+    spec.md                 this document
+    implementation.md       what exists, and what it cost to learn
+  apps/
+    prc/                    the Mac app: menu bar plus a window, hosts and controls
+    android/                the phone app: controls only
+    mac-agent/              PRCAgentCore, the hosting half, plus the prc-agent CLI
+    mac-controller/         PRCControllerCore, the controlling half, plus prc-controller-cli
+  packages/
+    protocol/               the single source of truth
+      schemas/              JSON Schema for every envelope, payload, and data channel message
+      keycodes/             W3C code -> macOS virtual key, W3C code -> Android KeyEvent
+      vectors/              signing inputs, signatures, pairing proofs, receiver cases
+      generated/            types produced by codegen, committed
+      src/                  the TypeScript reference implementation
+    swift/                  PRCIdentity, PRCProtocol, PRCPeers, PRCLocalControl
+  tools/
+    e2e/                    headless end-to-end test driving the real agent binary from Node
+    web-harness/            browser test client, dev only
+  scripts/                  build, install, uninstall, draw the app icon
+  assets/                   AppIcon.icns
+  services/, infra/         empty: the rendezvous server and TURN were deferred
   README.md
 ```
 
-The `protocol` package is the single source of truth. JSON Schema drives generated types for all three languages, and the test vectors are run by all three implementations in CI so a signature computed on Android verifies on the Mac.
+Two differences from what v2 planned. There is no separate `identity` package: the per-platform key
+wrappers live in `packages/swift/PRCIdentity` and in the phone's `device/` folder, because a wrapper
+that thin is not worth a package boundary. And codegen emits TypeScript types and the Swift key
+table only; the Kotlin protocol layer is written by hand against the same schemas and proved by the
+same vectors, which is what actually matters.
+
+The `protocol` package is the single source of truth. The vectors are run by all three
+implementations, so a signature computed on Android verifies on both Macs.
 
 ---
 
 ## 27. Development order
 
-1. **Protocol package.** Schemas, key code tables, signing test vectors. A TypeScript reference implementation of envelope signing and verification.
-2. **Identity.** Key generation, signing, and verification on macOS and in the web harness. Cross-check with the vectors.
-3. **Agent core.** Embedded signaling endpoint, session authentication, ScreenCaptureKit into libwebrtc. Verify with the web harness rendering video on the LAN.
-4. **MacBook controller.** Discovery, authentication, video. Then absolute mouse. Then keyboard and text.
-5. **Pairing and host UI.** QR, proof, approval, trusted devices, kill switch, session indicator, power assertion, LaunchAgent, persistent signing identity.
-6. **Rendezvous server and TURN.** Server auth, trust sync, relay, TURN credentials, coturn, Docker, deploy. Test the cloud path from a phone hotspot.
-7. **Reconnection.** ICE restart, resume, network change handling. Run the testing matrix.
-8. **Android controller.** Identity in Keystore, discovery, authentication, trackpad mode, screen mode, soft keyboard.
-9. **Phase 2** only after every acceptance criterion in section 29 passes.
+Followed in this order, with the numbering kept so old notes still line up.
+
+| Step | State |
+|---|---|
+| 1. Protocol package: schemas, key tables, vectors, TypeScript reference | done |
+| 2. Identity on macOS and in the web harness, cross-checked with the vectors | done |
+| 3. Agent core: signalling endpoint, session authentication, ScreenCaptureKit into libwebrtc | done |
+| 4. Mac controller: discovery, authentication, video, mouse, keyboard, text | done |
+| 5. Pairing and host UI: QR, proof, approval, peers, kill switch, power assertion, LaunchAgent | done, except the persistent signing identity, which the owner declined |
+| 6. Rendezvous server and TURN | **not done.** Replaced by Tailscale, section 9.4 |
+| 7. Reconnection: ICE restart, resume, network change | done on the Macs; the phone does not yet reconnect by itself |
+| 8. Android controller: Keystore identity, authentication, video, touch and trackpad, keyboard | done |
+| 9. Phase 2 | not started |
+
+The two halves were then merged into one app per Mac, which was not in this list: it came from
+using it, and finding that the machine you want to control is whichever one you are not sitting at.
 
 ---
 
 ## 28. Testing matrix
+
+Every row that does not involve the rendezvous server or TURN has been exercised, most of them as
+automated tests: see the suite table in [../README.md](../README.md) and the traps in
+[implementation.md](implementation.md). The server rows are untested because there is no server.
 
 | Scenario | Expected |
 |---|---|
@@ -1021,31 +1131,36 @@ The `protocol` package is the single source of truth. JSON Schema drives generat
 
 ## 29. Acceptance criteria
 
-Performance:
+Performance, as measured rather than as hoped:
 
-- LAN: 1080p, up to 60 fps, pointer feels local.
-- Internet, good conditions: 1080p at 30 fps.
-- Internet, poor conditions: automatic downgrade, no freeze.
-- No relay when direct works.
-- Reconnect after a short interruption without user action.
+| Criterion | Result |
+|---|---|
+| LAN: 1080p, up to 60 fps, pointer feels local | met: 1920x1080 at 52 to 58 fps, 8 to 12 ms round trip, Mac mini to MacBook over Wi-Fi |
+| Internet, good conditions: 1080p at 30 fps | met over a tailnet with a direct path |
+| Internet, poor conditions: automatic downgrade, no freeze | met: on a DERP relay at under a megabit the frame rate gives way and the picture stays sharp, which is the deliberate trade |
+| No relay when direct works | met: ICE prefers direct, and the path is reported from `getStats` |
+| Reconnect after a short interruption without user action | met on the Macs; the phone does not yet |
+| Phone: 1080p H.264 rather than VP8 | met, after naming the codec on both sides and offering a level the picture fits in |
 
-Security, all must be true:
+Security. Everything that does not depend on the deferred server holds:
 
-- [ ] Only the reverse proxy and coturn are reachable from the Internet.
-- [ ] Every signaling message is signed and verified. Confirmed by the fingerprint-swap test.
-- [ ] Devices authenticate to the rendezvous server. Unknown devices are closed.
-- [ ] Private keys are hardware-backed where available and never leave the device.
-- [ ] Pairing needs approval on the Mac Mini and a fingerprint comparison.
-- [ ] Revocation ends active sessions and blocks resume and relay.
-- [ ] Mutual challenge-response precedes every SDP exchange.
-- [ ] Remote Access can be disabled locally and it stops everything.
-- [ ] No message type can execute commands or touch files.
-- [ ] Logs contain no input contents, keys, codes, or frames.
-- [ ] TURN credentials expire.
-- [ ] All messages are schema-validated. The malformed-input tests pass.
-- [ ] Sessions expire and resumption is signed.
-- [ ] Reconnection never skips verification.
-- [ ] Every session start is visible on the Mac Mini.
+- [x] Every signalling message is signed and verified, including the SDP, so the DTLS fingerprint is
+      signed. Confirmed by the fingerprint-swap test.
+- [x] Private keys are hardware-backed where available and never leave the device.
+- [x] Pairing needs approval on the host and a fingerprint comparison on both sides.
+- [x] Revocation ends active sessions and blocks resume.
+- [x] Mutual challenge-response precedes every SDP exchange.
+- [x] Hosting can be switched off locally and it stops everything.
+- [x] No message type can execute commands or touch files.
+- [x] Logs contain no input contents, keys, codes, or frames.
+- [x] All messages are schema-validated. The malformed-input tests pass.
+- [x] Sessions expire and resumption is signed.
+- [x] Reconnection never skips verification.
+- [x] Every session start is visible on the host.
+- [x] No control port is exposed to the Internet: the only way in from outside is the tailnet.
+- [ ] Devices authenticate to the rendezvous server — not applicable while there is no server. The
+      code and vectors exist; nothing runs them but the tests.
+- [ ] TURN credentials expire — same: implemented and tested, unused.
 
 ---
 
@@ -1059,13 +1174,18 @@ Phase 2:
 - File transfer over a dedicated reliable channel with approval, progress, cancel, and size limits.
 - Binary message encoding for the input channels.
 - Native-resolution capture on the LAN path.
-- Android hardware keyboard, better gestures.
-- Manual short pairing code as an alternative to QR.
+- Android hardware keyboard. The gestures listed here as future work were built instead, in
+  section 4.3.
+- Manual short pairing code as an alternative to QR. Pasting the full code as text already works,
+  which took most of the need out of this.
 - TLS on the LAN signaling endpoint.
 - Explicit quality policy on top of the stats API.
 
 Phase 3:
 
+- Waking a sleeping host. On the LAN this is a magic packet, and the Mac mini already has
+  `womp 1` on AC power; from outside the LAN it cannot work, because a magic packet does not route
+  over a tailnet, so it needs something already awake at home to send it.
 - Host status such as CPU, battery on a laptop host, uptime.
 - Remote restart and shutdown as dedicated, explicitly confirmed message types, never a shell.
 - Audio.
@@ -1074,10 +1194,14 @@ Phase 3:
 
 ---
 
-## 31. Open decisions for the owner
+## 31. Decisions the owner has since made
 
-1. **Automatic login versus FileVault** on the Mac Mini. Automatic login makes the Mac reachable after a reboot. FileVault protects the disk if the Mac is stolen. They are mutually exclusive.
-2. **VPS provider and domain** for the rendezvous server and TURN.
-3. **Pairing is LAN-only** in this design. Confirm that pairing a new phone while away from home is acceptable to give up.
-4. **Busy policy**: reject the second controller, or let the newest connection take over. This spec rejects.
-5. **Idle timeout default**: this spec uses 120 minutes.
+1. **Automatic login versus FileVault.** Undecided, and it has not bitten yet: both Macs are logged
+   in and stay that way. After a reboot, a Mac must be logged into in person before it can be
+   controlled.
+2. **VPS provider and domain.** Not needed. Tailscale replaced the rendezvous server and TURN.
+3. **Pairing is LAN-only.** Confirmed, and accepted: a new device is paired at home.
+4. **Busy policy.** Confirmed as written: the second controller is rejected as busy.
+5. **Idle timeout default.** 120 minutes, as written.
+6. **Code signing.** Decided against: ad-hoc signing, no certificate, and the permission prompts
+   after a rebuild are accepted as the price. This overrides the advice in section 18.

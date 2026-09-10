@@ -1,21 +1,26 @@
-# PRC Mac controller
+# PRC Mac controller: the controlling half
 
-The MacBook side of PRC: discovers hosts, pairs, authenticates, receives the screen over WebRTC,
-and forwards mouse, scroll, keyboard, and text. Spec sections 4.2, 7, 8, 10, 13.
+The side that drives another Mac: discovery, pairing, authentication, receiving the screen over
+WebRTC, and forwarding mouse, scroll, keyboard, and text. Spec sections 4.2, 7, 8, 10, 13.
+
+**This is a library, not the app you install.** `PRCControllerCore` is one of the two halves inside
+[`apps/prc`](../prc), which is what runs on each Mac. See [../../README.md](../../README.md) for how
+the two halves fit together.
 
 Three targets:
 
 - `PRCControllerCore`: discovery, pairing, the session state machine with reconnection, the
-  WebRTC offerer, and input mapping.
-- `prc-controller`: the SwiftUI app.
-- `prc-controller-cli`: the same core without a window, for scripts and remote testing.
+  WebRTC offerer, and input mapping. Used by `apps/prc`.
+- `prc-controller-cli`: the same core without a window, for scripts and remote testing. It is also
+  how the merged app is driven from a script, through `prc-controller-cli app …`.
+- `prc-controller`: the v0.1 SwiftUI app. **Superseded by `apps/prc` and due for removal.**
 
 ## Build and run
 
 ```sh
 cd apps/mac-controller
 swift build
-swift run prc-controller --file-identity
+swift run prc-controller-cli discover
 ```
 
 | Flag | Effect |
@@ -50,13 +55,15 @@ reports or toggles the panels for scripted use.
 
 ## Using it
 
-1. On the Mac Mini, run the agent and type `pair`. Copy the JSON line it prints.
-2. In the controller, click **Pair with a host…**, paste the JSON, and click **Pair**.
-3. The agent prints the controller's fingerprint. The sheet shows this Mac's fingerprint. If they
-   match, type `y` on the agent. The host appears in the sidebar.
-4. Hosts advertised on the current network show a green dot. Select one and click **Connect**. On
-   another network, type the host's address in the override field first, for example a Tailscale
-   address such as `100.64.0.10:47500`.
+Day to day this is all done in `apps/prc`; see [../../README.md](../../README.md) section 6. The
+flow below is the same one, described against the CLI and the superseded app.
+
+1. On the Mac to be controlled, open PRC and choose **Pair a Mac…** → **Show a code**.
+2. On this Mac, **Pair a Mac…**, paste the code, **Pair**.
+3. Each side shows the other's fingerprint. If they match, **Approve** on the host.
+4. Macs on the current network show a green dot. Select one and **Connect**. On another network the
+   stored addresses are probed too, so a Tailscale address such as `100.64.0.10:47500` is tried
+   without being typed.
 5. Move the pointer over the video to control the host. While the pointer is over the video and the
    window is active, every key including Cmd+Q and Cmd+W goes to the host. Move the pointer off the
    video to get your keyboard back.
@@ -172,7 +179,7 @@ connection (spec section 10).
 | `SessionClient.swift` | Authentication, offer, ICE, keepalive, reconnection, teardown |
 | `WebRTCClient.swift` | Peer connection as offerer, data channels, remote track, path detection |
 | `InputMapper.swift` | Letterbox-aware coordinate mapping, key code inversion, modifier and scroll mapping |
-| `HostStore.swift` | Paired hosts on disk |
+| `PRCPeers` (in `packages/swift`) | Paired Macs on disk, with a permission per direction |
 | `../prc-controller/VideoView.swift` | Metal video view plus the input overlay and keyboard capture |
 
 ## Tests
@@ -181,7 +188,7 @@ connection (spec section 10).
 swift test
 ```
 
-Eleven tests. Geometry, key maps, path classification, endpoint parsing, and host persistence are
+Fifteen tests. Geometry, key maps, path classification, endpoint parsing, and peer persistence are
 unit tests. The end-to-end suite starts a real agent in the same process with its synthetic screen,
 pairs through the real signaling server with the host approving, connects, receives video frames,
 measures a ping round trip, sends input, disconnects, and checks that an unpaired controller is
@@ -191,4 +198,5 @@ rejected and an unreachable host ends cleanly. About one second, no permissions.
 
 - Video shows the host's cursor baked into the stream. Local cursor rendering is Phase 2.
 - Cmd+Tab and other OS-level shortcuts cannot be captured; use the toolbar.
-- No rendezvous client. LAN, direct addresses, and Tailscale only.
+- No rendezvous client. LAN, direct addresses, and Tailscale only, which is the deployed answer.
+- No way to cancel an attempt while it is connecting; it ends itself after 15 seconds.

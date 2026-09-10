@@ -4,6 +4,9 @@ One app per Mac. It can control another Mac, be controlled by one, or both at th
 The split `mac-agent` and `mac-controller` apps are what this replaces; their libraries still
 provide the two halves, and their headless CLIs remain for testing.
 
+[../../README.md](../../README.md) is the guided tour: the technology, the full flow from pairing to
+a moving picture, and the user guide. This file is the app's own reference.
+
 ## Build and install
 
 ```sh
@@ -37,7 +40,27 @@ then two separate permissions you can withdraw one at a time, from a peer's cont
 - **This Mac may control it**, which puts it under "Macs you can control".
 - **It may control this Mac**, which lets it open a session here when hosting is on.
 
-Pair from either end: **Show a code** on one Mac and **Use a code** on the other.
+Pair from either end: **Show a code** on one Mac and paste it on the other. A phone pairs from the
+same code, by scanning the QR with its camera.
+
+## The window, and the menu bar
+
+The app lives in the menu bar and only claims a Dock icon while a window is open, so a Mac started
+at login adds nothing to the Dock, and an open window can still take keyboard focus.
+
+| Action | What happens |
+|---|---|
+| Close the window, or ⌘W | It goes away, and so does the Dock icon. The menu bar item stays, and hosting keeps running. |
+| **Open PRC…** in the menu bar | The window comes back |
+| Double click the header | Zooms, or whatever "double-click a window's title bar to" is set to in System Settings |
+| Drag the header | Moves the window |
+| **Quit** | Really quits: the launch agent brings the app back after a crash, never after Quit |
+
+## Where its data lives
+
+`~/Library/Application Support/PRC`: the identity, the peer list, settings, and `control.json` for
+the script channel. Logs are in `~/Library/Logs/PRC`. Nothing there is a secret except the identity,
+which is an opaque Secure Enclave reference on a Mac that has one.
 
 ## Migrating from the split apps
 

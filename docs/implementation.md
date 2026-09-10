@@ -4,8 +4,10 @@ What exists today, how it works, and the things that were learned the hard way. 
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
 been amended to match.
 
-Written 2026-09-09, at commit `9e2328b` on branch `v0.2-hybrid`. Tag `v0.1.0` on `main` is the
-last state where the agent and the controller were separate apps.
+Written 2026-09-09 and brought up to date 2026-09-10, at commit `8cb60cf` on branch `v0.2-hybrid`.
+Tag `v0.1.0` on `main` is the last state where the agent and the controller were separate apps.
+[../README.md](../README.md) is the guided tour: the technology, the flow, and how to use it. This
+file is the record of decisions and traps.
 
 ---
 
@@ -16,8 +18,10 @@ server at all, and across the Internet over a Tailscale tailnet. Every message t
 session is signed by a per-device key, so neither the network nor a relay can impersonate either
 side or read anything.
 
-As of v0.2 a single app fills both roles: a Mac can control, be controlled, or both. Android will
-be a controller only.
+As of v0.2 a single app fills both roles: a Mac can control, be controlled, or both. The Android
+app is a controller only, and it is finished enough to use daily: it pairs by scanning the Mac's
+code, shows the screen in H.264, and drives the pointer and keyboard with the gestures the
+established remote desktop apps settled on.
 
 ## 2. Repository map
 
@@ -110,13 +114,19 @@ which is the same promise the Macs get from the Secure Enclave. The protocol lay
 translation of the TypeScript reference and is checked against the same vectors, so the three
 implementations agree by construction rather than by inspection. Pairing and the session handshake
 work, and so do video and input: the phone offers, the Mac answers, and the picture arrives on the
-same socket the handshake used. Touches are absolute rather than trackpad-relative, because on a
-phone the whole desktop is visible at once, so putting the pointer where the finger lands is both
-quicker and easier to aim. Pinching magnifies the picture on the phone alone and asks the Mac for
-nothing, which costs no bandwidth and keeps working on a poor link; the arithmetic that keeps the
-pointer exact under magnification lives in `PointerMapping` and is tested without a phone. A debug
-build can be driven by intent extras, the way the Mac app can be
-driven by its control CLI, which is how the flow is tested without typing on the phone.
+same socket the handshake used. Pairing is done by scanning the QR the Mac draws, decoded on the
+phone from the camera's brightness plane with no Play Services and nothing uploaded. Touches are
+absolute rather than trackpad-relative, because on a phone the whole desktop is visible at once, so
+putting the pointer where the finger lands is both quicker and easier to aim. Pinching magnifies the
+picture on the phone alone and asks the Mac for nothing, which costs no bandwidth and keeps working
+on a poor link; the arithmetic that keeps the pointer exact under magnification lives in
+`PointerMapping` and is tested without a phone. The controls live on a sidebar drawn over the black
+bar beside the picture, so they cost no part of the Mac's screen: touch or trackpad, the keyboard,
+session info, and end. The icons have no labels and name themselves when held, which is where
+Android puts the name of a control that has no caption. The info panel reports what the connection
+is actually doing, read from `getStats` rather than guessed, and that panel is what found the two
+codec bugs below. A debug build can be driven by intent extras, the way the Mac app can be driven by
+its control CLI, which is how the flow is tested without typing on the phone.
 
 ### Testing without hardware
 
@@ -134,18 +144,23 @@ driven by its control CLI, which is how the flow is tested without typing on the
 npm install
 npm test                                   # protocol package
 npm run e2e                                # end to end against the real agent binary
+npm run android-frames                     # the phone's frames against the real schemas
 (cd packages/swift && swift test)
 (cd apps/mac-agent && swift test)
 (cd apps/mac-controller && swift test)
+(cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
 
 scripts/build-apps.sh prc                  # dist/PRC.app, ad-hoc signed
 scripts/install-prc.sh                     # ~/Applications, menu bar, starts at login
 scripts/install-prc.sh --stage             # copy only, for a Mac you are away from
 scripts/install-prc.sh --replace-agent     # also remove the older split agent
+
+cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes at the time of writing: protocol 27, packages/swift 29, agent 25, controller 15, end to
-end 16 steps.
+Suite sizes, all passing on 2026-09-10: protocol 27, packages/swift 29, agent 28, controller 15,
+android 47, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -247,6 +262,15 @@ what found this, which is the argument for showing real numbers instead of a spi
 barcode reader compiled into the app: no Play Services, no upload, nothing kept. Typing that code
 by hand is the worst part of pairing, and the Mac already draws it as a QR.
 
+**A scanner needs resolution and focus, and CameraX gives neither by default.** The first build
+looked alive — preview moving, frames arriving — and never read a code. Analysis frames default to
+640x480, which is not enough pixels for a QR holding a public key hash and several addresses, and
+nothing ever asked the camera to focus, so the picture stayed soft at the distance a phone is
+naturally held from a screen. The fix was all three together: ask for 1920x1080 analysis frames,
+trigger a focus on open, on tap, and again after every thirty frames that decoded nothing, and turn
+on the reader's `TRY_HARDER` hint. A scanner that does nothing gives no clue which of the three is
+missing, so check all three at once.
+
 **Probe every address at once.** A Mac advertises a local address and a tailnet address, and trying
 them in turn means waiting out a timeout on the wrong network before the right one is attempted at
 all, which reads as a phone that cannot connect from a cafe. Both halves now probe in parallel and
@@ -271,6 +295,9 @@ Screen Recording and Accessibility granted. Identities survived the migration fr
 so nothing needed re-pairing: Mac mini `25AA-F3B7-4F82`, MacBook `FF28-84B1-1F62`, each holding the
 other in both directions.
 
+The phone is an Android phone running the debug build, paired with both Macs, reaching them on the LAN
+and over the tailnet.
+
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at
 under a megabit; the picture stays sharp and the frame rate gives way. `tailscale netcheck` shows
@@ -280,10 +307,15 @@ why a direct path is unavailable: on this network the home router offers no port
 
 - The rendezvous server and TURN. Deferred in favour of Tailscale; the protocol still describes
   them.
-- Audio, in either direction.
 - Audio from host to controller. Possible, but this WebRTC build can only take audio from a real
   input device on macOS, so it means carrying encoded audio on a data channel of our own.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.
+- Waking a sleeping host. The Mac mini has `womp 1` on AC power, so a magic packet on the LAN would
+  work; from outside the LAN it cannot, because a magic packet does not route over a tailnet.
+- Cancelling an attempt while it is connecting, on either controller.
+- The phone does not read the incoming data channel: `display_info` and `pong` arrive and are
+  ignored, there is no ping keepalive from it, and it does not reconnect by itself when the network
+  changes.
 - Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
 
 ## 9. Conventions
