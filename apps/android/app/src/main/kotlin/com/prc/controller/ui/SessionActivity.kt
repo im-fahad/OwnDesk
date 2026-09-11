@@ -170,6 +170,21 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START,
         ))
 
+        // Shown under the finger while a drag holds the mouse button down. Without something to see,
+        // "tap twice and hold" is invisible: the Mac thinks a button is pressed and nothing on the
+        // phone says so. The dp(28) offsets in holding() centre it, so it has to be dp(56) across.
+        holdMark = View(this).apply {
+            visibility = View.GONE
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x554D8EF7)
+                setStroke(dp(2), Theme.ACCENT)
+            }
+        }
+        root.addView(holdMark, FrameLayout.LayoutParams(
+            dp(56), dp(56), Gravity.TOP or Gravity.START,
+        ))
+
         // A banner rather than a curtain: while the Mac's capture is paused the last frame stays on
         // screen and input still reaches it, so the picture is left visible and touchable underneath
         // and only the explanation is added.

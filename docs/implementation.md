@@ -321,6 +321,15 @@ would have put every touch in the wrong place. `DataChannel.parse` now decodes t
 the phone acts on and returns null for everything else, because a newer Mac is allowed to send
 types this build has never heard of and dropping the session over that would be worse.
 
+**A `lateinit` that nothing assigns is a crash waiting for the gesture that reads it.** `holdMark`,
+the circle shown while a drag holds the mouse button down, was declared and never created: three
+reads, no assignment, and the compiler is happy because that is what `lateinit` promises. Every
+tap-twice-and-hold — the gesture for selecting text and dragging windows — killed the app, and
+because `buttonDown` is sent just before the read, it did so with the Mac's left button held. Two
+of these sat in the phone's dropbox from 2026-09-10 and nobody had looked. Worth an occasional
+`adb shell dumpsys dropbox --print` and a sweep of `~/Library/Logs/DiagnosticReports`: the devices
+keep a record of every crash, whether or not anyone was watching when it happened.
+
 **Verify this one by watching frames, not the connection.** The proof that the fix works is the
 frame rate going to **0** for the length of the outage. Before the fix it stayed at ~30 fps on a
 frozen picture, because the repeat timer kept feeding the encoder the same frame — which is exactly
