@@ -77,6 +77,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     private lateinit var modeButton: ImageView
     private lateinit var infoButton: ImageView
     private lateinit var infoPanel: LinearLayout
+    private lateinit var captureBanner: TextView
     private var infoTicker: Runnable? = null
     private var peerName = "this Mac"
     private val gestures: Gestures by lazy {
@@ -168,6 +169,21 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         root.addView(status, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START,
         ))
+
+        // A banner rather than a curtain: while the Mac's capture is paused the last frame stays on
+        // screen and input still reaches it, so the picture is left visible and touchable underneath
+        // and only the explanation is added.
+        captureBanner = TextView(this).apply {
+            visibility = View.GONE
+            setTextColor(Theme.TEXT)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, Theme.UI_SECONDARY)
+            setBackgroundColor(0xE61B1B1B.toInt())
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        root.addView(captureBanner, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+        ).apply { topMargin = dp(12) })   // This screen hides the system bars, so no inset to clear.
 
         // A sidebar rather than labelled buttons: it sits on the black bar beside a 16:9 picture,
         // so it costs no part of the Mac's screen. The names live in tooltips, on a long press,
@@ -595,6 +611,33 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         // Worth remembering: next time this address is tried first.
         intent.getStringExtra(EXTRA_DEVICE_ID)?.let { PeerStore(this).setLastGood(it, address) }
         runOnUiThread { status.text = "${display.width_px}x${display.height_px}  ·  $path" }
+    }
+
+    /** A restarted capture can be a different size, and every touch is mapped through this. */
+    override fun onDisplayChanged(display: DisplayInfo) {
+        this.display = display
+        runOnUiThread { status.text = "${display.width_px}x${display.height_px}" }
+    }
+
+    override fun onCapture(state: String, detail: String?) = runOnUiThread {
+        val text = describeCapture(state, detail)
+        // The Mac sends its state when the channel opens too, and nothing had paused then.
+        val wasPaused = captureBanner.visibility == View.VISIBLE
+        if (text == null) {
+            captureBanner.visibility = View.GONE
+        } else {
+            captureBanner.text = text
+            captureBanner.visibility = View.VISIBLE
+        }
+        onLog(text ?: if (wasPaused) "screen capture resumed" else "screen capture active")
+    }
+
+    /** Null when the Mac is capturing normally, which is when the banner should not be there. */
+    private fun describeCapture(state: String, detail: String?): String? = when (state) {
+        "active" -> null
+        "paused_locked" -> "The Mac is locked. Its screen is frozen until it is unlocked."
+        "paused_display_asleep" -> "The Mac's display is asleep. Its screen is frozen."
+        else -> "The Mac stopped capturing its screen${detail?.let { " ($it)" } ?: ""}. Retrying."
     }
 
     override fun onEnded(reason: String) {

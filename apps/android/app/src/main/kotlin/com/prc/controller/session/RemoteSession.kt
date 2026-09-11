@@ -53,6 +53,10 @@ class RemoteSession(
         fun onLog(line: String)
         fun onVideo(track: VideoTrack)
         fun onReady(display: DisplayInfo, path: String, address: String)
+        /** The Mac changed the streamed display mid-session. Pointer mapping depends on this. */
+        fun onDisplayChanged(display: DisplayInfo)
+        /** Whether the Mac is really capturing. A paused capture leaves the last frame on screen. */
+        fun onCapture(state: String, detail: String?)
         fun onEnded(reason: String)
     }
 
@@ -209,6 +213,19 @@ class RemoteSession(
                 if (label == DataChannel.CONTROL) {
                     send(DataChannel.hello(appVersion, now()))
                     listener.onLog("input ready")
+                }
+            }
+
+            override fun onControlFrame(label: String, text: String) {
+                when (val message = DataChannel.parse(text, label)) {
+                    is DataChannel.Incoming.Display -> {
+                        display = message.info
+                        listener.onLog("its screen is now ${message.info.width_px}x${message.info.height_px}")
+                        listener.onDisplayChanged(message.info)
+                    }
+                    is DataChannel.Incoming.Capture -> listener.onCapture(message.state, message.detail)
+                    is DataChannel.Incoming.Bye -> if (!ended) listener.onEnded("the Mac ended the session: ${message.reason}")
+                    null -> Unit
                 }
             }
 

@@ -85,7 +85,18 @@ class MainActivity : AppCompatActivity() {
             val match = peers.all().firstOrNull {
                 it.fingerprint.startsWith(prefix, ignoreCase = true) || it.deviceId.startsWith(prefix)
             }
-            if (match == null) log("no paired Mac matches $prefix") else connect(match)
+            if (match == null) {
+                log("no paired Mac matches $prefix")
+            } else {
+                // A Mac whose address has moved cannot be found headlessly, because every stored
+                // candidate is stale and there is nobody to long-press "Choose an address". Pins it
+                // the same way that menu would; "Use any address" clears it again.
+                intent.getStringExtra("address")?.let {
+                    peers.setPreferred(match.deviceId, it)
+                    log("pinned $it for ${match.name}")
+                }
+                connect(match)
+            }
         }
     }
 

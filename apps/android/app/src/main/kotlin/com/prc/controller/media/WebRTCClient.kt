@@ -37,6 +37,8 @@ class WebRTCClient(
         fun onIceCandidate(candidate: IceCandidate)
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
         fun onChannelOpen(label: String)
+        /** One frame the Mac sent, still as text: the session layer decides what it means. */
+        fun onControlFrame(label: String, text: String)
         fun onLog(line: String)
     }
 
@@ -102,7 +104,16 @@ class WebRTCClient(
                 override fun onStateChange() {
                     if (channel.state() == RtcDataChannel.State.OPEN) listener.onChannelOpen(label)
                 }
-                override fun onMessage(buffer: RtcDataChannel.Buffer) {}
+                override fun onMessage(buffer: RtcDataChannel.Buffer) {
+                    // Binary frames are not part of the protocol, and an oversized one is refused
+                    // here rather than parsed (spec section 21).
+                    if (buffer.binary) return
+                    val remaining = buffer.data.remaining()
+                    if (remaining > DataChannel.MAX_BYTES) return
+                    val bytes = ByteArray(remaining)
+                    buffer.data.get(bytes)
+                    listener.onControlFrame(label, String(bytes, StandardCharsets.UTF_8))
+                }
             })
             channels[label] = channel
         }

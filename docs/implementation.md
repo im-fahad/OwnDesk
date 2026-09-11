@@ -160,7 +160,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 29, agent 45, controller 15,
-android 47, end to end 16 steps, android frames 13.
+android 54, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -313,6 +313,14 @@ a freshly started capture is given `settleAfterStartMs` before anything may call
 outage is not announced to the controller until it has lasted `reportAfterMs`. Restarting through a
 blip is right; narrating it is not.
 
+**The phone had been throwing the control channel away.** `WebRTCClient`'s data channel observer
+registered an `onMessage` with an empty body, so every message the Mac sent was discarded. That
+made `capture_state` invisible, and it also meant a `display_info` sent mid-session never landed:
+pointer mapping kept using the size learned at SESSION_ACCEPT, so a host display that changed size
+would have put every touch in the wrong place. `DataChannel.parse` now decodes the three messages
+the phone acts on and returns null for everything else, because a newer Mac is allowed to send
+types this build has never heard of and dropping the session over that would be worse.
+
 **Verify this one by watching frames, not the connection.** The proof that the fix works is the
 frame rate going to **0** for the length of the outage. Before the fix it stayed at ~30 fps on a
 frozen picture, because the repeat timer kept feeding the encoder the same frame — which is exactly
@@ -346,9 +354,10 @@ why a direct path is unavailable: on this network the home router offers no port
 - Waking a sleeping host. The Mac mini has `womp 1` on AC power, so a magic packet on the LAN would
   work; from outside the LAN it cannot, because a magic packet does not route over a tailnet.
 - Cancelling an attempt while it is connecting, on either controller.
-- The phone does not read the incoming data channel: `display_info` and `pong` arrive and are
-  ignored, there is no ping keepalive from it, and it does not reconnect by itself when the network
-  changes.
+- The phone ignores `pong`, so it has no round trip time of its own from the control channel (the
+  info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
+  not reconnect by itself when the network changes. It does now read `display_info`,
+  `capture_state` and `bye`.
 - Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
 
 ## 9. Conventions

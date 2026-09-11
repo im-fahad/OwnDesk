@@ -73,4 +73,51 @@ object DataChannel {
     fun pong(nonce: Long, ts: Long): JSONObject = frame("pong", ts).put("nonce", nonce)
 
     fun bye(reason: String, ts: Long): JSONObject = frame("bye", ts).put("reason", reason)
+
+    /**
+     * What the Mac sends back on the control channel. Only the messages the phone acts on are
+     * modelled; anything else decodes to null rather than an error, because a newer Mac is allowed
+     * to send things this build has never heard of and dropping the session over that would be
+     * worse than ignoring it.
+     */
+    sealed interface Incoming {
+        /** The streamed display changed, mid-session. Pointer mapping depends on it. */
+        data class Display(val info: DisplayInfo) : Incoming
+        /** Whether the Mac is really capturing, and why not if it isn't. */
+        data class Capture(val state: String, val detail: String?) : Incoming
+        /** The Mac ended the session over the data channel rather than signaling. */
+        data class Bye(val reason: String) : Incoming
+    }
+
+    val CAPTURE_STATES = setOf("active", "paused_locked", "paused_display_asleep", "paused_error")
+
+    /**
+     * Decodes one frame the Mac sent. Returns null for anything malformed, oversized, unknown, or
+     * arriving on the wrong channel: the phone treats all of those the same way, by ignoring them.
+     * Mirrors packages/protocol/src/datachannel.ts and the Swift DataChannelCodec.
+     */
+    fun parse(text: String, receivedOn: String): Incoming? {
+        if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return null
+        val obj = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        val type = obj.optString("type").ifEmpty { return null }
+        // A control message arriving on an input channel is a protocol error, not a surprise.
+        if (channelFor(type) != receivedOn) return null
+        return when (type) {
+            "display_info" -> {
+                val width = obj.optInt("width_px", 0)
+                val height = obj.optInt("height_px", 0)
+                val scale = obj.optDouble("scale", 0.0)
+                val id = obj.optString("display_id").ifEmpty { return null }
+                if (width !in 1..16384 || height !in 1..16384 || scale !in 0.5..4.0) return null
+                Incoming.Display(DisplayInfo(id, width, height, scale))
+            }
+            "capture_state" -> {
+                val state = obj.optString("state")
+                if (state !in CAPTURE_STATES) return null
+                Incoming.Capture(state, obj.optString("detail").ifEmpty { null })
+            }
+            "bye" -> Incoming.Bye(obj.optString("reason").ifEmpty { "error" })
+            else -> null
+        }
+    }
 }
