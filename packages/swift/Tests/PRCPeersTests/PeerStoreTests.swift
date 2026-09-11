@@ -14,6 +14,43 @@ private let macBook = SoftwareIdentity()
 private let mini = SoftwareIdentity()
 
 @Suite struct PeerStoreTests {
+    /// The bug this exists to prevent: pairing recorded both directions for every device, so a
+    /// phone landed in "Macs you can control" with a dot that could never go green. A phone runs no
+    /// hosting half and has no address to reach, so permission alone is not enough.
+    @Test func aPhoneIsNeverSomethingWeCanControl() throws {
+        let dir = tempDir()
+        let store = try PeerStore(directory: dir)
+        let phone = SoftwareIdentity()
+
+        // Even with the permission set, which is what older records carry.
+        try store.pair(deviceId: phone.deviceId, publicKey: phone.publicKeyB64, name: "Test Phone", type: .android,
+                       mayControlUs: true, weMayControl: true, addresses: [], now: 100)
+
+        let record = try #require(store.peer(phone.deviceId))
+        #expect(record.canHost == false)
+        #expect(record.isHostForUs == false)
+        #expect(store.hosts.isEmpty)
+        #expect(store.host(phone.deviceId) == nil)
+        // Fails closed: a phone's key must never pass as a host's, since we would never open a
+        // session to one.
+        #expect(store.hostKey(phone.deviceId) == nil)
+
+        // It can still control this Mac, which is the whole point of pairing it.
+        #expect(store.controllerKey(phone.deviceId) == phone.publicKeyRaw)
+        #expect(store.controllers.count == 1)
+    }
+
+    @Test func aMacWithPermissionIsStillAHost() throws {
+        let dir = tempDir()
+        let store = try PeerStore(directory: dir)
+        try store.pair(deviceId: macBook.deviceId, publicKey: macBook.publicKeyB64, name: "MacBook", type: .mac,
+                       mayControlUs: true, weMayControl: true, addresses: [], now: 100)
+        let record = try #require(store.peer(macBook.deviceId))
+        #expect(record.canHost)
+        #expect(record.isHostForUs)
+        #expect(store.hosts.count == 1)
+    }
+
     @Test func permissionsGateTheKeyLookups() throws {
         let dir = tempDir()
         let store = try PeerStore(directory: dir)

@@ -221,11 +221,14 @@ struct SidebarPanel: View {
                             .padding(.horizontal, 12).padding(.vertical, 6)
                     }
 
-                    let inbound = model.peerList.filter { $0.mayControlUs && !$0.weMayControl }
+                    let inbound = model.inboundOnlyPeers
                     if !inbound.isEmpty {
-                        sectionHeader("Macs that can control this one").padding(.top, 8)
+                        // "Devices", not "Macs": a phone belongs here, and it is the common case.
+                        sectionHeader("Devices that can control this one").padding(.top, 8)
                         ForEach(inbound) { peer in
-                            HostRow(host: peer, isSelected: false)
+                            // No reachability dot: there is nothing on a controller for us to
+                            // reach, so a grey one would only read as "offline".
+                            HostRow(host: peer, isSelected: false, showsReachability: false)
                                 .contextMenu { peerMenu(peer) }
                         }
                     }
@@ -298,12 +301,14 @@ struct HostRow: View {
     @EnvironmentObject var model: AppState
     let host: Peer
     let isSelected: Bool
+    /// False for a device we never connect to, where a dot could only ever say "offline".
+    var showsReachability: Bool = true
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 7) {
             Circle()
-                .fill(model.discoveredPeer(for: host.deviceId) != nil ? Theme.online : Theme.textFaint)
+                .fill(dotColour)
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 1) {
                 Text(host.name).font(Theme.sidebarItem).foregroundStyle(Theme.text).lineLimit(1)
@@ -317,6 +322,13 @@ struct HostRow: View {
         .background(isSelected ? Theme.selection : (hovering ? Theme.hover : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+    }
+
+    /// Clear rather than grey when reachability means nothing here, so the name still lines up with
+    /// the rows above it.
+    private var dotColour: Color {
+        guard showsReachability else { return .clear }
+        return model.discoveredPeer(for: host.deviceId) != nil ? Theme.online : Theme.textFaint
     }
 }
 

@@ -30,7 +30,7 @@ public final class PeerStore: @unchecked Sendable {
     public var controllers: [Peer] { all.filter(\.mayControlUs) }
 
     /// Peers this device may control.
-    public var hosts: [Peer] { all.filter(\.weMayControl) }
+    public var hosts: [Peer] { all.filter(\.isHostForUs) }
 
     public func peer(_ deviceId: String) -> Peer? {
         lock.lock(); defer { lock.unlock() }
@@ -43,9 +43,9 @@ public final class PeerStore: @unchecked Sendable {
         return p
     }
 
-    /// The peer record, but only when we are allowed to control it.
+    /// The peer record, but only when we are allowed to control it and it can actually host.
     public func host(_ deviceId: String) -> Peer? {
-        guard let p = peer(deviceId), p.weMayControl else { return nil }
+        guard let p = peer(deviceId), p.isHostForUs else { return nil }
         return p
     }
 
@@ -56,9 +56,11 @@ public final class PeerStore: @unchecked Sendable {
         return p.publicKeyRaw
     }
 
-    /// The key to verify envelopes from a host we are connecting to.
+    /// The key to verify envelopes from a host we are connecting to. A device that cannot host is
+    /// refused here too: we would never open a session to a phone, so its key must never pass as a
+    /// host's.
     public func hostKey(_ deviceId: String) -> Data? {
-        guard let p = peer(deviceId), p.weMayControl else { return nil }
+        guard let p = peer(deviceId), p.isHostForUs else { return nil }
         return p.publicKeyRaw
     }
 

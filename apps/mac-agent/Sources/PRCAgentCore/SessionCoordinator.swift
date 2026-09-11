@@ -230,9 +230,12 @@ public actor SessionCoordinator {
             do {
                 // One pairing records both directions: both sides have each other's key by now, and
                 // both users compared fingerprints. Whether the other Mac will actually host for us
-                // is still gated by its own Remote Access switch.
+                // is still gated by its own Remote Access switch. A phone is the exception: it runs
+                // no hosting half, so recording that we may control it only produces a row that can
+                // never come alive.
                 try deps.peers.pair(deviceId: pending.deviceId, publicKey: pending.publicKey, name: pending.name,
-                                    type: pending.type, mayControlUs: true, weMayControl: true, now: now())
+                                    type: pending.type, mayControlUs: true, weMayControl: pending.type == .mac,
+                                    now: now())
             } catch {
                 emit(.pairingFailed("could not save trusted device: \(error.localizedDescription)"))
                 sendPairResult(to: pending.deviceId, connection: pending.connection, approved: false, reason: .denied)

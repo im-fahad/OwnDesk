@@ -56,4 +56,13 @@ public struct Peer: Codable, Sendable, Equatable, Identifiable {
 
     /// Nothing is remembered about a peer that may do neither, so such a record is dropped.
     public var isTrustedEitherWay: Bool { mayControlUs || weMayControl }
+
+    /// Whether this peer can host at all. Only a Mac runs the hosting half: a phone has no
+    /// signaling server and no address to reach, so it can never be on the other end of a session
+    /// we open. Permission is a separate question, asked of `weMayControl`.
+    public var canHost: Bool { type == .mac }
+
+    /// A peer we could actually open a session to: allowed, and able. Listing a phone as something
+    /// to control leaves a row that can never come alive, which reads as a Mac that is offline.
+    public var isHostForUs: Bool { weMayControl && canHost }
 }

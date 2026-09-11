@@ -159,8 +159,12 @@ final class AppState: ObservableObject {
         discovery = HostDiscovery(serviceType: AgentConfig.serviceType)
         peerList = peers.all
         selectedPeerId = peers.hosts.first?.deviceId
+        let ownId = identity.deviceId
         discovery.onUpdate = { [weak self] found in
-            Task { @MainActor in self?.discovered = found }
+            // This Mac hears its own advertisement, including over loopback, and would otherwise
+            // list itself as a stranger nearby.
+            let others = found.filter { $0.deviceId != ownId }
+            Task { @MainActor in self?.discovered = others }
         }
         discovery.start()
         append("identity \(identity.fingerprint) ready")
@@ -307,7 +311,10 @@ final class AppState: ObservableObject {
         if selectedPeerId == nil { selectedPeerId = peers.hosts.first?.deviceId }
     }
 
-    var hostablePeers: [Peer] { peerList.filter(\.weMayControl) }
+    var hostablePeers: [Peer] { peerList.filter(\.isHostForUs) }
+    /// Paired devices that can drive this Mac but that we cannot open a session to: every phone,
+    /// and any Mac whose permission we revoked in that direction.
+    var inboundOnlyPeers: [Peer] { peerList.filter { $0.mayControlUs && !$0.isHostForUs } }
 
     func discoveredPeer(for deviceId: String) -> HostDiscovery.DiscoveredHost? {
         discovered.first { $0.deviceId == deviceId }

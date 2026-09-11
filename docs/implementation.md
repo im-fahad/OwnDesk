@@ -159,7 +159,7 @@ cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDeb
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 29, agent 45, controller 15,
+Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 31, agent 45, controller 15,
 android 58, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
@@ -320,6 +320,19 @@ pointer mapping kept using the size learned at SESSION_ACCEPT, so a host display
 would have put every touch in the wrong place. `DataChannel.parse` now decodes the three messages
 the phone acts on and returns null for everything else, because a newer Mac is allowed to send
 types this build has never heard of and dropping the session over that would be worse.
+
+**Permission is not the same as capability.** Pairing records both directions, which is right for
+two Macs and wrong for a phone: an Android controller runs no hosting half and has no address to
+reach, so `weMayControl` on it produced a row under "Macs you can control" whose dot could never go
+green. It read as a Mac that was offline. `Peer.canHost` now says what a device is able to do and
+`isHostForUs` combines it with permission; the phone moves to the section for devices that drive
+this Mac, where no reachability dot is drawn because there is nothing to reach. `hostKey` is gated
+the same way, so a phone's key can never pass as a host's. Old records need no migration, because
+the rule is computed rather than stored.
+
+**A Mac hears its own advertisement.** Bonjour returns this Mac's own service, over loopback as
+well as the LAN, so it listed itself under "Nearby, not paired" as though it were a stranger. The
+discovery sink filters on its own device id.
 
 **A stored address is a guess about the past.** The phone kept the addresses each Mac advertised at
 pairing time, and a router that moves a lease makes them wrong: the MacBook paired at .50 answered
