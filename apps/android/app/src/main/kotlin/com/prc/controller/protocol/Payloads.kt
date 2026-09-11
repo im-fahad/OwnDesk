@@ -138,4 +138,23 @@ data class Peer(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
+
+    /**
+     * This Mac just said where it is, so put that first. What it advertised when pairing stops
+     * being true the moment a router hands out a different lease, and a Mac on the same Wi-Fi then
+     * looks unreachable with no hint as to why. The list is capped so a Mac that moves between
+     * networks does not accumulate a tail of addresses nobody can reach.
+     *
+     * Returns null when nothing changed, so a caller can leave the screen alone.
+     */
+    fun withDiscovered(address: String, max: Int = MAX_ADDRESSES): Peer? {
+        val clean = address.trim()
+        if (clean.isEmpty() || addresses.firstOrNull() == clean) return null
+        val merged = (listOf(clean) + addresses).distinct().take(max)
+        return if (merged == addresses) null else copy(addresses = merged)
+    }
+
+    companion object {
+        const val MAX_ADDRESSES = 6
+    }
 }

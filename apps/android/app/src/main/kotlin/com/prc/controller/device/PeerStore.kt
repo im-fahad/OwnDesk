@@ -27,6 +27,19 @@ class PeerStore(context: Context) {
         write()
     }
 
+    /**
+     * Records where a Mac says it is right now, learned from its own advertisement. It goes first,
+     * because a live answer beats whatever was true when the pairing happened, and the list is
+     * capped so a Mac that moves between networks does not collect an endless tail of addresses
+     * nobody can reach. Returns whether anything actually changed, so callers can leave the screen
+     * alone when it did not.
+     */
+    fun noteDiscovered(deviceId: String, address: String): Boolean {
+        val updated = peer(deviceId)?.withDiscovered(address) ?: return false
+        save(updated)
+        return true
+    }
+
     /** Records an address the owner typed, or clears it when the text is blank. */
     fun setPreferred(deviceId: String, address: String?) {
         val peer = peer(deviceId) ?: return

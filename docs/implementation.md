@@ -160,7 +160,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 29, agent 45, controller 15,
-android 54, end to end 16 steps, android frames 13.
+android 58, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -321,6 +321,18 @@ would have put every touch in the wrong place. `DataChannel.parse` now decodes t
 the phone acts on and returns null for everything else, because a newer Mac is allowed to send
 types this build has never heard of and dropping the session over that would be worse.
 
+**A stored address is a guess about the past.** The phone kept the addresses each Mac advertised at
+pairing time, and a router that moves a lease makes them wrong: the MacBook paired at .50 answered
+at .51, the mini paired at .55 answered at .52. With Tailscale off, nothing reachable was left in
+the list, so a Mac sitting on the same Wi-Fi showed a grey dot and could only be reached by typing
+an address by hand. The phone now browses `_prc._tcp` with `NsdManager` and matches the
+`id` in the TXT record against its peer list, which is the Mac saying where it is now. The answer
+goes to the front of `addresses`, capped at six, so the dot, the connect path and the address
+dialog all get it at once — everything funnels through `Peer.candidates()`. Two details: NsdManager
+resolves one service at a time and a second request while one is in flight is simply lost, so they
+queue; and discovery is a convenience, never a requirement, because a network that forbids
+multicast must still fall back to the stored list.
+
 **A `lateinit` that nothing assigns is a crash waiting for the gesture that reads it.** `holdMark`,
 the circle shown while a drag holds the mouse button down, was declared and never created: three
 reads, no assignment, and the compiler is happy because that is what `lateinit` promises. Every
@@ -363,6 +375,8 @@ why a direct path is unavailable: on this network the home router offers no port
 - Waking a sleeping host. The Mac mini has `womp 1` on AC power, so a magic packet on the LAN would
   work; from outside the LAN it cannot, because a magic packet does not route over a tailnet.
 - Cancelling an attempt while it is connecting, on either controller.
+- The Mac app does not browse for Macs the way the phone now does, so a Mac whose address moved is
+  still found only because `firstReachable` probes every candidate in parallel.
 - The phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,

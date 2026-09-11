@@ -23,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import com.prc.controller.BuildConfig
 import com.prc.controller.device.KeystoreIdentity
 import com.prc.controller.device.PeerStore
+import com.prc.controller.net.Discovery
 import com.prc.controller.net.Endpoints
 import com.prc.controller.protocol.Encoding
 import com.prc.controller.protocol.Identity
@@ -46,6 +47,9 @@ class MainActivity : AppCompatActivity() {
 
     private val identity by lazy { KeystoreIdentity.load() }
     private val peers by lazy { PeerStore(this) }
+    /** Macs heard advertising themselves on this network, by device id. */
+    private val onThisNetwork = mutableMapOf<String, String>()
+    private val discovery by lazy { Discovery(this) { deviceId, address -> foundOnNetwork(deviceId, address) } }
 
     private lateinit var peerList: LinearLayout
     private lateinit var logView: TextView
@@ -69,6 +73,25 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshPeers()
+        discovery.start()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        discovery.stop()
+    }
+
+    /**
+     * A Mac said where it is. Remembering it is what stops a moved lease from making a Mac on the
+     * same Wi-Fi look offline, which is otherwise only fixable by typing an address by hand.
+     */
+    private fun foundOnNetwork(deviceId: String, address: String) = runOnUiThread {
+        if (peers.peer(deviceId) == null) return@runOnUiThread
+        val known = onThisNetwork.put(deviceId, address) == address
+        if (peers.noteDiscovered(deviceId, address) || !known) {
+            log("${peers.peer(deviceId)?.name ?: "a Mac"} is on this network at $address")
+            refreshPeers()
+        }
     }
 
     /**
@@ -242,13 +265,16 @@ class MainActivity : AppCompatActivity() {
         text.addView(label(peer.name, Theme.UI, Theme.TEXT))
         text.addView(label(peer.fingerprint, Theme.UI_SMALL, Theme.TEXT_DIM, mono = true))
         val chosen = peer.preferred
-        if (chosen != null) {
-            text.addView(label("always $chosen", Theme.SECTION, Theme.ACCENT, mono = true))
-        } else {
-            text.addView(
-                label(peer.candidates().firstOrNull() ?: "no address", Theme.SECTION, Theme.TEXT_FAINT, mono = true)
-            )
-        }
+        val live = onThisNetwork[peer.deviceId]
+        // Where it actually is beats where it last answered: lastGood can be a Tailscale address
+        // that is dead right now while the Mac sits on the same Wi-Fi as this phone.
+        text.addView(
+            when {
+                chosen != null -> label("always $chosen", Theme.SECTION, Theme.ACCENT, mono = true)
+                live != null -> label(live, Theme.SECTION, Theme.ONLINE, mono = true)
+                else -> label(peer.candidates().firstOrNull() ?: "no address", Theme.SECTION, Theme.TEXT_FAINT, mono = true)
+            }
+        )
         row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         return row
     }
@@ -281,18 +307,28 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Every address this Mac is known by, tappable, with the typed field kept underneath. Tapping
+     * fills the field rather than committing, so an address can still be corrected — a port
+     * changed, a digit fixed — before it is used.
+     */
     private fun askForAddress(peer: Peer) {
         val field = monoField(
             text = peer.preferred ?: peer.candidates().firstOrNull().orEmpty(),
             hint = "100.64.0.10:47500",
         )
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(label("Tap an address to use it, or type one below.", Theme.UI_SECONDARY, Theme.TEXT_DIM))
+        val live = onThisNetwork[peer.deviceId]
+        for (address in (listOfNotNull(live) + peer.candidates()).distinct()) {
+            column.addView(addressChoice(address, noteFor(address, live)) { field.setText(address) }, rowParams(top = 8))
+        }
+        column.addView(label("Or type one", Theme.SECTION, Theme.TEXT_FAINT), rowParams(top = 14))
+        column.addView(field, rowParams(top = 4))
+
         AlertDialog.Builder(this)
             .setTitle("Address for ${peer.name}")
-            .setMessage(
-                "This Mac advertised:\n${peer.addresses.joinToString("\n")}\n\n" +
-                    "A Tailscale address reaches it from any network, as long as this phone is on the same tailnet."
-            )
-            .setView(pad(field))
+            .setView(pad(column))
             .setPositiveButton("Use it") { _, _ ->
                 val typed = field.text.toString().trim()
                 peers.setPreferred(peer.deviceId, typed)
@@ -368,6 +404,26 @@ class MainActivity : AppCompatActivity() {
 
     // View helpers --------------------------------------------------------------------------------
 
+    /** One tappable address. */
+    private fun addressChoice(address: String, note: String, onPick: () -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Theme.PANEL)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            isClickable = true
+            setOnClickListener { onPick() }
+            addView(label(address, Theme.UI_SECONDARY, Theme.TEXT, mono = true))
+            addView(label(note, Theme.SECTION, if (note == ON_THIS_NETWORK) Theme.ONLINE else Theme.TEXT_FAINT))
+        }
+
+    /** Says what an address is for, since the choice between them is really a choice of route. */
+    private fun noteFor(address: String, live: String?): String = when {
+        address == live -> ON_THIS_NETWORK
+        address.startsWith("100.") || address.contains("fd7a:115c:a1e0") -> "Tailscale, reaches it from anywhere"
+        Endpoints.path(address) == "lan" -> "local network"
+        else -> "elsewhere"
+    }
+
     private fun label(text: String, size: Float, color: Int, mono: Boolean = false): TextView =
         TextView(this).apply {
             this.text = text
@@ -431,4 +487,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val ON_THIS_NETWORK = "on this network now"
+    }
 }
