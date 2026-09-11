@@ -23,6 +23,7 @@ public enum DataChannelType: String, Sendable, CaseIterable {
     case text
     case hello
     case displayInfo = "display_info"
+    case captureState = "capture_state"
     case streamSettings = "stream_settings"
     case ping
     case pong
@@ -32,7 +33,7 @@ public enum DataChannelType: String, Sendable, CaseIterable {
         switch self {
         case .mouseMove, .mouseMoveRel: .inputLossy
         case .mouseDown, .mouseUp, .scroll, .keyDown, .keyUp, .text: .inputReliable
-        case .hello, .displayInfo, .streamSettings, .ping, .pong, .bye: .control
+        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye: .control
         }
     }
 }
@@ -41,6 +42,16 @@ public enum MouseButton: String, Sendable, CaseIterable { case left, right, midd
 public enum Modifier: String, Sendable, CaseIterable { case shift, control, alt, meta, capslock }
 public enum ScrollPhase: String, Sendable, CaseIterable { case began, changed, ended, momentum }
 public enum StreamPreference: String, Sendable, CaseIterable { case latency, quality }
+/// Whether the host is really capturing. A motionless desktop and a dead capture look
+/// identical on the wire, so the host says which one it is.
+public enum CaptureState: String, Sendable, CaseIterable {
+    case active
+    case pausedLocked = "paused_locked"
+    case pausedDisplayAsleep = "paused_display_asleep"
+    case pausedError = "paused_error"
+
+    public var isActive: Bool { self == .active }
+}
 public enum AppName: String, Sendable, CaseIterable {
     case macAgent = "mac-agent"
     case macController = "mac-controller"
@@ -80,6 +91,7 @@ public enum DataChannelMessage: Sendable, Equatable {
     case text(String)
     case hello(versions: [Int], app: AppName, appVersion: String)
     case displayInfo(DisplayInfo)
+    case captureState(CaptureState, detail: String?)
     case streamSettings(maxHeight: Int?, maxFps: Int?, prefer: StreamPreference?)
     case ping(nonce: UInt32)
     case pong(nonce: UInt32)
@@ -97,6 +109,7 @@ public enum DataChannelMessage: Sendable, Equatable {
         case .text: .text
         case .hello: .hello
         case .displayInfo: .displayInfo
+        case .captureState: .captureState
         case .streamSettings: .streamSettings
         case .ping: .ping
         case .pong: .pong
@@ -167,6 +180,8 @@ public enum DataChannelCodec {
         case .displayInfo:
             let info = DisplayInfo(display_id: try r.string("display_id", 1...64), width_px: try r.int("width_px", 1...16384), height_px: try r.int("height_px", 1...16384), scale: try r.double("scale", 0.5...4))
             message = .displayInfo(info)
+        case .captureState:
+            message = .captureState(try r.enumValue("state", CaptureState.self), detail: try r.optionalString("detail", 0...200))
         case .streamSettings:
             message = .streamSettings(maxHeight: try r.optionalInt("max_height", 360...4320), maxFps: try r.optionalInt("max_fps", 5...120), prefer: try r.optionalEnum("prefer", StreamPreference.self))
         case .ping:
@@ -202,6 +217,9 @@ public enum DataChannelCodec {
             obj["versions"] = versions; obj["app"] = app.rawValue; obj["app_version"] = appVersion
         case .displayInfo(let d):
             obj["display_id"] = d.display_id; obj["width_px"] = d.width_px; obj["height_px"] = d.height_px; obj["scale"] = d.scale
+        case .captureState(let state, let detail):
+            obj["state"] = state.rawValue
+            if let detail { obj["detail"] = detail }
         case .streamSettings(let maxHeight, let maxFps, let prefer):
             if let maxHeight { obj["max_height"] = maxHeight }
             if let maxFps { obj["max_fps"] = maxFps }
@@ -263,6 +281,10 @@ private struct Reader {
     func string(_ key: String, _ length: ClosedRange<Int>) throws -> String {
         guard let s = obj[key] as? String, length.contains(s.count) else { throw DataChannelError.invalid(key) }
         return s
+    }
+
+    func optionalString(_ key: String, _ length: ClosedRange<Int>) throws -> String? {
+        obj[key] == nil ? nil : try string(key, length)
     }
 
     func keyCode(_ key: String) throws -> String {

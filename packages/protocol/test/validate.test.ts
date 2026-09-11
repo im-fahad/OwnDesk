@@ -73,6 +73,8 @@ test('data channel messages: valid samples parse and land on the right channel',
   ok({ v: 1, type: 'text', ts: 1, text: 'héllo 👋' }, 'input-reliable');
   ok({ v: 1, type: 'hello', ts: 0, versions: [1], app: 'mac-controller', app_version: '0.1.0' }, 'control');
   ok({ v: 1, type: 'display_info', ts: 0, ...SAMPLE.display }, 'control');
+  ok({ v: 1, type: 'capture_state', ts: 0, state: 'paused_locked' }, 'control');
+  ok({ v: 1, type: 'capture_state', ts: 0, state: 'active', detail: 'resumed' }, 'control');
   ok({ v: 1, type: 'stream_settings', ts: 0, max_fps: 30 }, 'control');
   ok({ v: 1, type: 'ping', ts: 0, nonce: 7 }, 'control');
   ok({ v: 1, type: 'pong', ts: 0, nonce: 7 }, 'control');
@@ -94,6 +96,8 @@ test('data channel messages: invalid inputs are rejected with the right reason',
   bad(JSON.stringify({ v: 1, type: 'mouse_move', ts: 1, x: 0.5, y: 0.5 }), 'invalid');
   bad(JSON.stringify({ v: 1, type: 'mouse_move_rel', ts: 1, dx: 5000, dy: 0 }), 'invalid');
   bad(JSON.stringify({ v: 1, type: 'mouse_down', ts: 1, button: 'back' }), 'invalid');
+  bad(JSON.stringify({ v: 1, type: 'capture_state', ts: 1, state: 'asleep' }), 'invalid');
+  bad(JSON.stringify({ v: 1, type: 'capture_state', ts: 1 }), 'invalid');
   bad(JSON.stringify({ v: 1, type: 'scroll', ts: 1, dx: 0, dy: 20000, precise: true }), 'invalid');
   bad(JSON.stringify({ v: 1, type: 'key_down', ts: 1, code: 'Key A', modifiers: [], repeat: false }), 'invalid');
   bad(JSON.stringify({ v: 1, type: 'key_down', ts: 1, code: 'KeyA', modifiers: ['hyper'], repeat: false }), 'invalid');

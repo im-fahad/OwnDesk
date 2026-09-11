@@ -20,6 +20,7 @@ export const DATACHANNEL_TYPES = [
   'text',
   'hello',
   'display_info',
+  'capture_state',
   'stream_settings',
   'ping',
   'pong',

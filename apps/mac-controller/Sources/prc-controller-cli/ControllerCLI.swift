@@ -56,6 +56,7 @@ enum ControllerCLI {
             case .state(let s): states.append(s); print("  state: \(describe(s))")
             case .rtt(let r): rtts.append(r)
             case .display(let d): display = d
+            case .capture(let capture, let detail): print("  host capture: \(capture.rawValue)\(detail.map { " (\($0))" } ?? "")")
             case .remoteVideo: print("  video track received")
             case .log(let t): print("  log: \(t)")
             }

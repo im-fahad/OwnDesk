@@ -1,3 +1,4 @@
+import AppKit
 import CoreMedia
 import Foundation
 import PRCProtocol
@@ -17,6 +18,9 @@ public protocol MediaSessionDelegate: AnyObject, Sendable {
     func media(didOpenChannel label: ChannelLabel)
     func media(didReceive frame: DataChannelFrame, on label: ChannelLabel)
     func media(didRejectMessage error: DataChannelError)
+    /// Capture stopped, or came back. `display` is non-nil only when it came back, and may differ
+    /// from the one the session started with if the display was reconfigured meanwhile.
+    func media(didChangeCapture state: CaptureState, detail: String?, display: MediaDisplay?)
 }
 
 /// The coordinator's view of screen capture plus WebRTC. Injected so tests can run without either.
@@ -48,6 +52,8 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     private var path: ConnectionPath = .lan
     private let config: AgentConfig
     private var announcedConnected = false
+    private var supervisor: CaptureSupervisor?
+    private var observers: [any NSObjectProtocol] = []
 
     public init(config: AgentConfig) throws {
         self.config = config
@@ -77,7 +83,18 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
                 Permissions.requestScreenRecording()
                 throw MediaError.screenRecordingDenied
             }
-            source = ScreenCapturer(frameHandler: handler)
+            let capturer = ScreenCapturer(frameHandler: handler)
+            let supervisor = CaptureSupervisor(source: capturer) { [weak self] state, detail, display in
+                guard let self else { return }
+                if let display { self.webrtc.setCaptureHeight(Int(display.captureSize.height)) }
+                self.delegate?.media(didChangeCapture: state, detail: detail, display: display)
+            }
+            // Both paths mean the same thing to us: no more pixels are coming.
+            capturer.onStopped = { [weak supervisor] error in supervisor?.captureFailed(error.localizedDescription) }
+            capturer.onStalled = { [weak supervisor] in supervisor?.captureFailed("no new frame") }
+            self.supervisor = supervisor
+            source = capturer
+            installSystemObservers()
         }
         self.source = source
         // Capturing at the rate we intend to send saves encode work and keeps pacing honest.
@@ -99,9 +116,34 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
     }
 
     public func stop() async {
+        supervisor?.cancel()
+        supervisor = nil
+        removeSystemObservers()
         await source?.stop()
         source = nil
         webrtc.close()
+    }
+
+    // MARK: Keeping capture alive
+
+    /// Unlock and wake are when a frozen picture is most obviously wrong, so they get an immediate
+    /// look rather than waiting for the next backoff tick.
+    private func installSystemObservers() {
+        let kick: @Sendable (Notification) -> Void = { [weak self] note in
+            self?.supervisor?.kick(reason: note.name.rawValue)
+        }
+        let workspace = NSWorkspace.shared.notificationCenter
+        observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: nil, using: kick))
+        observers.append(workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: nil, using: kick))
+        let distributed = DistributedNotificationCenter.default()
+        observers.append(distributed.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: nil, using: kick))
+    }
+
+    private func removeSystemObservers() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let distributed = DistributedNotificationCenter.default()
+        for o in observers { workspace.removeObserver(o); distributed.removeObserver(o) }
+        observers = []
     }
 
     // MARK: WebRTCSessionDelegate

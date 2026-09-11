@@ -339,6 +339,8 @@ final class AppModel: ObservableObject {
                     }
                 case .rtt(let ms): self.rtt = ms
                 case .display(let d): self.display = d
+                case .capture(let capture, let detail):
+                    self.append("host capture: \(capture.rawValue)\(detail.map { " (\($0))" } ?? "")")
                 case .remoteVideo: self.append("video track received")
                 case .log(let text): self.append(text)
                 }

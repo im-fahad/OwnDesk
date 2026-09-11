@@ -88,6 +88,9 @@ final class AppState: ObservableObject {
     @Published var state: SessionClient.State = .idle
     @Published var rtt: Double?
     @Published var display: DisplayInfo?
+    /// What the host says about its own screen capture. A paused capture leaves the last frame on
+    /// screen, which is indistinguishable from a still desktop unless we say so.
+    @Published var captureState: CaptureState = .active
     @Published var videoSize: CGSize = .zero
     @Published var quality: QualityPreset = .auto { didSet { applyStreamSettings() } }
     @Published var smoothMotion = false { didSet { applyStreamSettings() } }
@@ -400,6 +403,7 @@ final class AppState: ObservableObject {
         state = .connecting
         rtt = nil
         display = nil
+        captureState = .active
         videoSize = .zero
         Task { await connect(to: peer) }
     }
@@ -443,6 +447,9 @@ final class AppState: ObservableObject {
                     }
                 case .rtt(let ms): self.rtt = ms
                 case .display(let d): self.display = d
+                case .capture(let capture, let detail):
+                    self.captureState = capture
+                    self.append(Self.describeCapture(capture, detail: detail))
                 case .remoteVideo: self.append("video track received")
                 case .log(let text): self.append(text)
                 }
@@ -460,6 +467,16 @@ final class AppState: ObservableObject {
     func attach(renderer: RTCVideoRenderer) {
         pendingRenderer = renderer
         if let session { Task { await session.attach(renderer: renderer) } }
+    }
+
+    /// Shown in the log and, for the paused states, over the frozen picture.
+    static func describeCapture(_ state: CaptureState, detail: String? = nil) -> String {
+        switch state {
+        case .active: return "screen capture resumed"
+        case .pausedLocked: return "the other Mac is locked — its screen is frozen until it is unlocked"
+        case .pausedDisplayAsleep: return "the other Mac's display is asleep — its screen is frozen"
+        case .pausedError: return "the other Mac stopped capturing its screen\(detail.map { " (\($0))" } ?? "") — retrying"
+        }
     }
 
     static func describe(_ s: SessionClient.State) -> String {

@@ -21,6 +21,7 @@ public actor SessionClient {
     public enum Event: Sendable {
         case state(State)
         case display(DisplayInfo)
+        case capture(CaptureState, detail: String?)
         case rtt(Double)
         case remoteVideo
         case log(String)
@@ -373,6 +374,8 @@ public actor SessionClient {
         case .displayInfo(let d):
             display = d
             emit(.display(d))
+        case .captureState(let state, let detail):
+            emit(.capture(state, detail: detail))
         case .pong(let nonce):
             if let sent = outstandingPings.removeValue(forKey: nonce) {
                 outstandingPings.removeAll()

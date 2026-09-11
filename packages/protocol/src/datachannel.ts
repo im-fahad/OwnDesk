@@ -31,6 +31,7 @@ export const CHANNEL_FOR_TYPE: Record<DataChannelType, ChannelLabel> = {
   text: 'input-reliable',
   hello: 'control',
   display_info: 'control',
+  capture_state: 'control',
   stream_settings: 'control',
   ping: 'control',
   pong: 'control',

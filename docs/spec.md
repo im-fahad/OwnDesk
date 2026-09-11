@@ -745,6 +745,7 @@ Every message:
 |---|---|---|---|
 | `hello` | both | `versions`, `app`, `app_version` | First message on `control`. Version mismatch closes the session with `bye`. |
 | `display_info` | host to controller | `display_id`, `width_px`, `height_px`, `scale` | Sent on open and whenever the streamed display changes. Controllers must handle a change mid-session. |
+| `capture_state` | host to controller | `state`: `active`, `paused_locked`, `paused_display_asleep`, `paused_error`; optional `detail` | Whether the host is really capturing. Sent when the control channel opens and on every change. Without it a paused capture is indistinguishable from a motionless desktop, because the last frame keeps being re-sent. |
 | `stream_settings` | controller to host | `max_height`, `max_fps`, `prefer`: `latency` or `quality` | Hints. Host clamps to its own limits. `max_height` becomes a `scaleResolutionDownBy` divisor and never upscales; a missing field restores automatic behaviour. `prefer: quality` keeps the resolution and spends frames, `latency` does the reverse. Sent again on every connect, since a new session starts at the host's defaults. |
 | `ping` / `pong` | both | `nonce` | Every 5 s. Three missed pongs trigger RECONNECTING. |
 | `bye` | both | `reason` | Same reasons as `SESSION_END`. |
@@ -803,7 +804,15 @@ Encoder settings:
 - A minimum bitrate under the estimate (1 Mbps on the LAN path, 600 kbps on the cloud path), so quality decisions are not made from the near-zero traffic of a still screen.
 - Keyframe on request only. libwebrtc handles PLI and FIR.
 
-Static screens: ScreenCaptureKit delivers frames only on change. Re-submit the last frame at 2 fps so the encoder keeps a steady cadence and freshly connected decoders converge quickly.
+Static screens: ScreenCaptureKit delivers complete frames only on change. Re-submit the last frame at 2 fps so the encoder keeps a steady cadence and freshly connected decoders converge quickly.
+
+Capture that stops, and comes back: ScreenCaptureKit stops the stream on display sleep, screen lock and display reconfiguration, and never restarts it. Nothing downstream notices — the encoder is simply no longer fed — so the session stays healthy while the picture is frozen, and input keeps working over a dead image. The host therefore:
+
+- treats `didStopWithError`, a sample buffer with status `stopped`, and a stall as the same event, and retries `startCapture` until it both succeeds **and** delivers a frame. Starting is not enough: at the lock screen ScreenCaptureKit opens a stream that never produces anything.
+- distinguishes a dead capture from a still desktop with two signals, never one. Sample buffers of *any* status prove the stream is alive, so silence is measured from the last buffer rather than the last usable frame; and silence only counts as death when the window server agrees the screen is locked or the display is asleep. On one signal alone an idle Mac would restart its own capture every few seconds.
+- retries eagerly for the first five seconds, then backs off to 2 s and 5 s, and cuts the wait short on wake and unlock. A locked Mac may sit there all night.
+- bounds the static-screen repeat. Re-sending the last frame for ever is what turns a dead capture into a frozen picture that both ends report as healthy: frames keep arriving, so the controller's own freeze counters never move.
+- says which it is on the control channel with `capture_state`, and re-sends `display_info` when capture comes back, because the display may have been reconfigured meanwhile.
 
 Retina: capture at the scaled size above, not native pixels. Send `scale` in `display_info` so controllers can map coordinates exactly.
 

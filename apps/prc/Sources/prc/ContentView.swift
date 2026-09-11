@@ -336,6 +336,7 @@ struct ScreenArea: View {
             VideoView()
                 .id(videoGeneration)
             if !model.isConnected { placeholder }
+            if model.isConnected, !model.captureState.isActive { captureBanner }
             if model.showTextField { textOverlay }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -360,6 +361,25 @@ struct ScreenArea: View {
         }
         .padding(28)
         .background(Theme.content.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// A banner rather than a curtain: the picture is stale but input still reaches the other Mac,
+    /// so the frozen desktop stays visible and clickable underneath.
+    private var captureBanner: some View {
+        VStack {
+            HStack(spacing: 7) {
+                Image(systemName: model.captureState == .pausedLocked ? "lock.fill" : "zzz")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(AppState.describeCapture(model.captureState))
+                    .font(Theme.uiSecondary)
+            }
+            .foregroundStyle(Theme.textDim)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Theme.content.opacity(0.92), in: Capsule())
+            .padding(.top, 10)
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 
     private var textOverlay: some View {

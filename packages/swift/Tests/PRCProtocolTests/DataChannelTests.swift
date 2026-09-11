@@ -20,6 +20,8 @@ import Testing
             ("{\"v\":1,\"type\":\"text\",\"ts\":1,\"text\":\"héllo 👋\"}", .text("héllo 👋"), .inputReliable),
             ("{\"v\":1,\"type\":\"hello\",\"ts\":0,\"versions\":[1],\"app\":\"mac-controller\",\"app_version\":\"0.1.0\"}", .hello(versions: [1], app: .macController, appVersion: "0.1.0"), .control),
             ("{\"v\":1,\"type\":\"display_info\",\"ts\":0,\"display_id\":\"main\",\"width_px\":1920,\"height_px\":1080,\"scale\":2}", .displayInfo(DisplayInfo(display_id: "main", width_px: 1920, height_px: 1080, scale: 2)), .control),
+            ("{\"v\":1,\"type\":\"capture_state\",\"ts\":0,\"state\":\"paused_locked\"}", .captureState(.pausedLocked, detail: nil), .control),
+            ("{\"v\":1,\"type\":\"capture_state\",\"ts\":0,\"detail\":\"no new frame\",\"state\":\"paused_error\"}", .captureState(.pausedError, detail: "no new frame"), .control),
             ("{\"v\":1,\"type\":\"stream_settings\",\"ts\":0,\"max_fps\":30}", .streamSettings(maxHeight: nil, maxFps: 30, prefer: nil), .control),
             ("{\"v\":1,\"type\":\"ping\",\"ts\":0,\"nonce\":7}", .ping(nonce: 7), .control),
             ("{\"v\":1,\"type\":\"pong\",\"ts\":0,\"nonce\":4294967295}", .pong(nonce: 4294967295), .control),
@@ -64,6 +66,8 @@ import Testing
         rejects("{\"v\":1,\"type\":\"key_down\",\"ts\":1,\"code\":\"Key A\",\"modifiers\":[],\"repeat\":false}", .invalid("code"))
         rejects("{\"v\":1,\"type\":\"key_down\",\"ts\":1,\"code\":\"KeyA\",\"modifiers\":[\"hyper\"],\"repeat\":false}", .invalid("modifiers"))
         rejects("{\"v\":1,\"type\":\"key_down\",\"ts\":1,\"code\":\"KeyA\",\"modifiers\":[\"shift\",\"shift\"],\"repeat\":false}", .invalid("modifiers"))
+        rejects("{\"v\":1,\"type\":\"capture_state\",\"ts\":1,\"state\":\"asleep\"}", .invalid("state"))
+        rejects("{\"v\":1,\"type\":\"capture_state\",\"ts\":1}", .invalid("state"))
         rejects("{\"v\":1,\"type\":\"text\",\"ts\":1,\"text\":\"\"}", .invalid("text"))
         rejects("{\"v\":1,\"type\":\"text\",\"ts\":1,\"text\":\"\(String(repeating: "a", count: 257))\"}", .invalid("text"))
         rejects("{\"v\":1,\"type\":\"ping\",\"ts\":1}", .invalid("nonce"))

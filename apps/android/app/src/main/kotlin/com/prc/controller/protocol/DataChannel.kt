@@ -20,7 +20,7 @@ object DataChannel {
 
     fun channelFor(type: String): String = when (type) {
         "mouse_move", "mouse_move_rel" -> LOSSY
-        "hello", "display_info", "stream_settings", "ping", "pong", "bye" -> CONTROL
+        "hello", "display_info", "capture_state", "stream_settings", "ping", "pong", "bye" -> CONTROL
         else -> RELIABLE
     }
 

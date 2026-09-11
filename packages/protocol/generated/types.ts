@@ -19,6 +19,7 @@ export interface ProtocolCatalog {
   signaling_SESSION_REQUEST?: SessionRequestPayload;
   signaling_SESSION_RESUME?: SessionResumePayload;
   datachannel_bye?: ByeMessage;
+  datachannel_capture_state?: CaptureStateMessage;
   datachannel_display_info?: DisplayInfoMessage;
   datachannel_hello?: HelloMessage;
   datachannel_key_down?: KeyDownMessage;
@@ -220,6 +221,16 @@ export interface ByeMessage {
   type: "bye";
   ts: number;
   reason: "user" | "idle_timeout" | "revoked" | "remote_access_disabled" | "replaced" | "expired" | "error";
+}
+/**
+ * Host to controller: whether the screen is actually being captured. Without this a stalled capture is indistinguishable from a motionless desktop.
+ */
+export interface CaptureStateMessage {
+  v: number;
+  type: "capture_state";
+  ts: number;
+  state: "active" | "paused_locked" | "paused_display_asleep" | "paused_error";
+  detail?: string;
 }
 export interface DisplayInfoMessage {
   v: number;

@@ -44,6 +44,7 @@ public actor SessionCoordinator {
         var display: MediaDisplay
         var malformedCount = 0
         var malformedWindowStart: Int64
+        var captureState: CaptureState = .active
     }
 
     struct PendingPairing {
@@ -413,6 +414,34 @@ public actor SessionCoordinator {
     func mediaChannelOpened(_ label: ChannelLabel) {
         guard let s = session, label == .control else { return }
         s.media?.send(.displayInfo(s.display.info), ts: 0)
+        // Start the controller from a known state rather than letting it assume.
+        s.media?.send(.captureState(s.captureState, detail: nil), ts: 0)
+    }
+
+    /// Capture stopped or came back. A restarted capture can be a different size, so the display
+    /// goes out again and input is remapped to it before anything else uses it.
+    func mediaCaptureChanged(_ state: CaptureState, detail: String?, display: MediaDisplay?) {
+        guard var s = session else { return }
+        var displayChanged = false
+        if let display {
+            // Announced on its own account, because an outage too short to report can still come
+            // back at a different size.
+            displayChanged = s.display.info != display.info
+            s.display = display
+            deps.input?.configure(display: display)
+        }
+        let stateChanged = s.captureState != state
+        s.captureState = state
+        session = s
+        if displayChanged { s.media?.send(.displayInfo(s.display.info), ts: now()) }
+        guard stateChanged else { return }
+        s.media?.send(.captureState(state, detail: detail), ts: now())
+        switch state {
+        case .active: emit(.info("screen capture resumed"))
+        case .pausedLocked: emit(.info("screen capture paused: this Mac is locked"))
+        case .pausedDisplayAsleep: emit(.info("screen capture paused: the display is asleep"))
+        case .pausedError: emit(.warning("screen capture stopped: \(detail ?? "unknown reason")"))
+        }
     }
 
     func mediaFrame(_ frame: DataChannelFrame, on label: ChannelLabel) async {
@@ -428,7 +457,7 @@ public actor SessionCoordinator {
         case .ping(let nonce):
             session = s
             s.media?.send(.pong(nonce: nonce), ts: t)
-        case .pong, .displayInfo:
+        case .pong, .displayInfo, .captureState:
             session = s
         case .streamSettings(let maxHeight, let maxFps, let prefer):
             session = s
@@ -609,5 +638,8 @@ final class MediaBridge: MediaSessionDelegate, @unchecked Sendable {
     }
     func media(didRejectMessage error: DataChannelError) {
         queue.enqueue { [weak self] in await self?.coordinator?.mediaRejected(error) }
+    }
+    func media(didChangeCapture state: CaptureState, detail: String?, display: MediaDisplay?) {
+        queue.enqueue { [weak self] in await self?.coordinator?.mediaCaptureChanged(state, detail: detail, display: display) }
     }
 }

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prc.local/schemas/datachannel/capture_state.json",
+  "description": "Host to controller: whether the screen is actually being captured. Without this a stalled capture is indistinguishable from a motionless desktop.",
+  "type": "object",
+  "required": ["v", "type", "ts", "state"],
+  "properties": {
+    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "capture_state" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "state": { "enum": ["active", "paused_locked", "paused_display_asleep", "paused_error"] },
+    "detail": { "type": "string", "maxLength": 200 }
+  }
+}

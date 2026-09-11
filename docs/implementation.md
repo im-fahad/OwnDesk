@@ -159,7 +159,7 @@ cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDeb
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes, all passing on 2026-09-10: protocol 27, packages/swift 29, agent 28, controller 15,
+Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 29, agent 45, controller 15,
 android 47, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
@@ -284,6 +284,39 @@ because a plain finger drag has to stay free to point at things. Without that ge
 way to select text or move a window. The logic lives in `Gestures`, away from Android's event
 classes, because multi-touch cannot be synthesised over the debugging bridge and this is the only
 way to test it at all.
+
+**A stream that keeps sending is not a stream that is working.** ScreenCaptureKit stops on display
+sleep, screen lock and display reconfiguration, and never restarts. The agent used to declare
+`onStopped` and never assign it, so the failure was logged and dropped; meanwhile the static-screen
+repeat timer went on re-sending the last frame for ever. The result was the worst kind of bug:
+frames arriving at a healthy rate, bitrate low because identical frames encode to almost nothing,
+WebRTC's own freeze counters at zero, input still working — and a frozen picture that never came
+back, not even after unlocking. Now `CaptureSupervisor` retries until capture both starts and
+delivers a frame, and `capture_state` tells the controller which it is.
+
+**Two signals, never one, when deciding capture is dead.** A motionless desktop produces no
+complete frames either, so silence alone would have the agent restarting its own capture every few
+seconds on an idle Mac. Liveness is measured from sample buffers of *any* status — an idle stream
+still delivers them — and silence only counts when the window server agrees the screen is locked or
+the display is asleep. `CaptureRepeatPolicy` holds that rule and is unit tested from both sides.
+
+**Restarting is not recovering.** At the lock screen ScreenCaptureKit opens a stream quite happily
+and then produces nothing. Reporting that as recovery puts the frozen picture back with no
+explanation, so the supervisor waits for an actual frame before saying `active`.
+
+**A waking display stops capture two or three more times before it settles.** Found by running the
+real thing: `pmset displaysleepnow` during a live session, then `caffeinate -u`. Capture came back,
+delivered a frame, and ScreenCaptureKit stopped it again within a second with "Failed to find any
+displays or windows to capture" while the display list churned — three pause/resume cycles in four
+seconds, flickering the controller's banner. Two rules came out of that, and both are load-bearing:
+a freshly started capture is given `settleAfterStartMs` before anything may call it dead, and an
+outage is not announced to the controller until it has lasted `reportAfterMs`. Restarting through a
+blip is right; narrating it is not.
+
+**Verify this one by watching frames, not the connection.** The proof that the fix works is the
+frame rate going to **0** for the length of the outage. Before the fix it stayed at ~30 fps on a
+frozen picture, because the repeat timer kept feeding the encoder the same frame — which is exactly
+why nothing downstream noticed.
 
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
