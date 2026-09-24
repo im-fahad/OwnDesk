@@ -8,13 +8,11 @@ ScreenCaptureKit into libwebrtc, and CGEvent input injection. Spec sections 4.1,
 [`apps/prc`](../prc), which is what runs on each Mac. See [../../README.md](../../README.md) for how
 the two halves fit together.
 
-Three targets:
+Two targets:
 
 - `PRCAgentCore`: the hosting half, as a library. Used by `apps/prc`.
 - `prc-agent`: a headless runner that prints events and takes commands on stdin, for development,
   the browser harness, and `npm run e2e`.
-- `prc-agent-app`: the v0.1 menu bar app. **Superseded by `apps/prc` and due for removal.** It
-  still builds, and is occasionally useful for running a host without the merged app.
 
 ## Build and run
 
@@ -48,8 +46,7 @@ Options:
 
 Why `--file-identity` exists: a `swift build` binary is ad-hoc signed, and its signature changes on
 every rebuild. The Keychain ties an item to the signature, so each rebuilt binary would prompt for
-Keychain access. The menu bar app in a later step is signed with a persistent identity and uses the
-Keychain path, which is the default when the flag is absent.
+Keychain access. Without the flag the Keychain path is used.
 
 Commands while running:
 
@@ -65,56 +62,10 @@ status            permissions, remote access, session, port
 quit
 ```
 
-## App bundle and start at login
+## The app
 
-```sh
-scripts/build-apps.sh prc          # dist/PRC.app, ad-hoc signed
-scripts/install-prc.sh             # copies it to ~/Applications and starts it at login
-```
-
-The older `scripts/build-apps.sh agent` and `scripts/install-launch-agent.sh` build and install the
-superseded split app under `com.prc.agent`. `scripts/install-prc.sh --replace-agent` removes it.
-
-No certificate, Apple account, or notarization is involved: this is personal use and the apps
-never leave your machines. The one consequence of ad-hoc signing is that macOS remembers the
-Screen Recording and Accessibility grants by code signature, and an ad-hoc signature changes with
-every build. After you rebuild and reinstall the agent, grant both permissions again; the panel
-shows a warning with a button to the right System Settings pane until you do.
-
-If that chore ever gets old, `scripts/make-signing-identity.sh` creates a free local self-signed
-identity (no Apple involvement) and `PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh`
-signs with it, after which the grants survive rebuilds. Optional.
-
-The LaunchAgent uses `RunAtLoad`, and `KeepAlive` limited to `SuccessfulExit: false`, so it starts
-at login and restarts after a crash but stays gone when you choose Quit (spec section 18). Once installed this way, do not also open the app from Finder: launchd
-already runs it, and a second copy exits immediately. To restart it after granting a permission,
-quit it from its menu bar panel and launchd brings it back, or run
-`launchctl kickstart -k gui/$(id -u)/com.prc.agent`. Logs go to `~/Library/Logs/PRC`. `scripts/uninstall-launch-agent.sh`
-removes it and leaves trusted devices and settings in place.
-
-The bundled app keeps its identity backed by the Secure Enclave when available. An ad-hoc signed
-build stores the enclave key's opaque representation in `~/Library/Application Support/PRC/identity.json`
-(mode 0600; the blob is useless on any other device and the private key never leaves the enclave),
-because a Keychain item would prompt after every rebuild. A build signed with a stable identity uses
-the Keychain instead. Trusted devices and settings live in the same folder. Settings are in the
-panel's Settings section and apply after a relaunch.
-
-## Driving the menu bar app from a script
-
-The app opens a same-user control channel: a loopback port plus a random token in
-`~/Library/Application Support/PRC/control.json` (mode 0600). `prc-agent ctl` talks to it:
-
-```sh
-prc-agent ctl status                 # remote access, session, pending pairing request, permissions
-prc-agent ctl pair                   # open the pairing window; prints the payload text
-prc-agent ctl pending [timeout ms]   # wait for a request; prints the controller's fingerprint
-prc-agent ctl approve | deny         # answer it, after comparing fingerprints
-prc-agent ctl devices | revoke <prefix> | end | access on|off | cancel | quit
-```
-
-Every command is a button the panel already has; nothing here reaches the network or runs
-commands. It exists so pairing and connecting can be scripted, for example from a second Mac
-over SSH, which is how the two-app test in this repo was run.
+The hosting half ships inside `PRC.app`. Building, installing, signing, starting at login, and
+driving it from a script are in [`apps/prc`](../prc/README.md).
 
 ## Permissions
 
@@ -129,8 +80,8 @@ Screen Recording, restart the agent. Without it, a controller that authenticates
 
 If System Settings shows the switch already on while the agent still reports the permission as
 missing, the entry belongs to a previous build: macOS binds each grant to the app's signature, and
-an ad-hoc signature changes per build. `scripts/install-launch-agent.sh` clears the stale entries
-with `tccutil reset` on every reinstall; by hand, remove PRC Agent from the list with the minus
+an ad-hoc signature changes per build. `scripts/install-prc.sh` clears the stale entries
+with `tccutil reset` on every reinstall; by hand, remove the entry from the list with the minus
 button, let it ask again, grant, and restart it.
 
 ## First end-to-end test with the browser harness

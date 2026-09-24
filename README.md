@@ -432,9 +432,6 @@ assets/                    AppIcon.icns, copied into every bundle by the build
 services/, infra/          empty: the rendezvous server and TURN were deferred
 ```
 
-The two SwiftUI app targets inside `apps/mac-agent` and `apps/mac-controller` are what `apps/prc`
-replaced. Their libraries and CLIs are still used; the app targets are due for removal.
-
 ---
 
 ## 8. Building and testing
@@ -505,7 +502,6 @@ The short version:
 - Audio, in either direction.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.
 - Waking a sleeping host.
-- Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
 
 ---
 

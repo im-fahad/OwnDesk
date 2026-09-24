@@ -1,8 +1,8 @@
 # PRC
 
 One app per Mac. It can control another Mac, be controlled by one, or both at the same time.
-The split `mac-agent` and `mac-controller` apps are what this replaces; their libraries still
-provide the two halves, and their headless CLIs remain for testing.
+The libraries in `apps/mac-agent` and `apps/mac-controller` provide the two halves, and their
+headless CLIs remain for testing.
 
 [../../README.md](../../README.md) is the guided tour: the technology, the full flow from pairing to
 a moving picture, and the user guide. This file is the app's own reference.
@@ -13,7 +13,7 @@ a moving picture, and the user guide. This file is the app's own reference.
 scripts/build-apps.sh prc      # dist/PRC.app, ad-hoc signed; no certificate needed
 scripts/install-prc.sh         # to ~/Applications, started in the menu bar and again at login
 scripts/install-prc.sh --stage # copy it into place but run nothing, for a Mac you are away from
-scripts/install-prc.sh --replace-agent   # also stop and remove the older split agent
+scripts/install-prc.sh --replace-agent   # also stop and remove an old v0.1 "PRC Agent" install
 ```
 
 | Flag | Effect |
@@ -60,11 +60,11 @@ at login adds nothing to the Dock, and an open window can still take keyboard fo
 
 `~/Library/Application Support/PRC`: the identity, the peer list, settings, and `control.json` for
 the script channel. Logs are in `~/Library/Logs/PRC`. Nothing there is a secret except the identity,
-which is an opaque Secure Enclave reference on a Mac that has one.
+which is an opaque Secure Enclave reference on a Mac that has one, and the token in `control.json`.
 
-## Migrating from the split apps
+## Migrating from the v0.1 split apps
 
-The first launch brings forward whichever of the old apps ran on this Mac: its identity, so other
+The first launch brings forward whichever of the old v0.1 apps ran on this Mac: its identity, so other
 Macs still recognise it, and its pairings. The old stores recorded only one direction, so after
 upgrading you can still control what you could before. To add the reverse, either pair once more or
 turn on the matching permission on each Mac.
@@ -75,9 +75,14 @@ turn on the matching permission on each Mac.
 `apps/mac-controller` speaks to it:
 
 ```sh
-prc-controller-cli app status | peers | hosting on|off
-prc-controller-cli app offer-pairing | pending | approve | deny | pair <payload|@file> [address]
-prc-controller-cli app connect <peer> [address] | disconnect | end-incoming
-prc-controller-cli app allow <peer> control-us|we-control [on|off] | forget <peer>
+prc-controller-cli app status | peers | hosting off
+prc-controller-cli app pending | deny
+prc-controller-cli app connect <peer> [address] | disconnect | end-incoming | stats
+prc-controller-cli app allow <peer> control-us|we-control off | forget <peer>
 prc-controller-cli app quality <preset> | panels [sidebar|log|text] | quit
 ```
+
+Any program running as you can read that token, and PRC holds Screen Recording and Accessibility.
+So the channel can only take access away. Switching hosting on, showing or using a pairing code,
+approving a pairing, and granting a permission are clicks in the app. On a Mac without a display,
+make them over Screen Sharing.

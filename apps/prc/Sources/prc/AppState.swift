@@ -626,6 +626,9 @@ final class AppState: ObservableObject {
         return d
     }
 
+    /// Nothing on this channel may make this Mac more reachable or trust anyone new: any program
+    /// running as this user can read the token, and PRC holds Screen Recording and Accessibility.
+    /// Switching hosting on, pairing in either direction, approving, and granting control are clicks only.
     func handleControl(_ request: ControlRequest) async -> ControlResponse {
         switch request.command {
         case "status":
@@ -636,34 +639,21 @@ final class AppState: ObservableObject {
             }
             return ControlResponse(ok: true, message: lines.isEmpty ? "none" : lines.joined(separator: "\n"), data: ["count": String(peerList.count)])
         case "hosting":
-            guard let arg = request.args.first, ["on", "off"].contains(arg) else { return .failure("hosting needs on or off") }
-            setHosting(arg == "on")
-            _ = await waitUntil(4000, { hosting == (arg == "on") })
+            guard request.args.first == "off" else { return .failure("hosting can only be switched off from here; switch it on in the app") }
+            setHosting(false)
+            _ = await waitUntil(4000, { !hosting })
             return ControlResponse(ok: true, message: "hosting \(hosting ? "on" : "off")", data: statusData)
-        case "offer-pairing":
-            offerPairing()
-            guard await waitUntil(4000, { invite != nil }), let invite else { return .failure(pairingStatus.isEmpty ? "pairing did not open" : pairingStatus) }
-            return ControlResponse(ok: true, message: invite.payloadText, data: ["fingerprint": fingerprint])
         case "pending":
             guard await waitUntil(Int(request.args.first ?? "") ?? 120_000, { pendingRequest != nil || invite == nil }), let p = pendingRequest else {
                 return .failure(invite == nil ? "pairing window closed" : "no request yet")
             }
             return ControlResponse(ok: true, message: "\(p.name) fingerprint \(p.fingerprint)", data: ["name": p.name, "fingerprint": p.fingerprint, "device_id": p.deviceId])
-        case "approve", "deny":
+        case "deny":
             guard pendingRequest != nil else { return .failure("no pending pairing request") }
             pairingOutcome = nil
-            request.command == "approve" ? approvePairing() : denyPairing()
+            denyPairing()
             _ = await waitUntil(5000, { pairingOutcome != nil })
-            return ControlResponse(ok: pairingOutcome?.hasPrefix("Paired") == true || request.command == "deny", message: pairingOutcome ?? "no outcome")
-        case "pair":
-            guard var text = request.args.first else { return .failure("pair needs the payload text or @file") }
-            if text.hasPrefix("@") { text = (try? String(contentsOfFile: String(text.dropFirst()), encoding: .utf8)) ?? "" }
-            pairingText = text
-            pairingAddress = request.args.count > 1 ? request.args[1] : ""
-            usePairingCode()
-            guard isPairing else { return .failure(pairingStatus) }
-            _ = await waitUntil(135_000, { !isPairing })
-            return ControlResponse(ok: pairingStatus.hasPrefix("Paired"), message: pairingStatus)
+            return ControlResponse(ok: true, message: pairingOutcome ?? "no outcome")
         case "connect":
             guard let needle = request.args.first else { return .failure("connect needs a peer name or id prefix") }
             guard let peer = hostablePeers.first(where: { $0.deviceId.hasPrefix(needle.lowercased()) || $0.name == needle || $0.fingerprint.hasPrefix(needle.uppercased()) }) else {
@@ -698,11 +688,11 @@ final class AppState: ObservableObject {
             _ = await waitUntil(5000, { incoming == nil })
             return ControlResponse(ok: incoming == nil, message: incoming == nil ? "incoming session ended" : "still active")
         case "allow":
-            guard request.args.count >= 2, let peer = peerList.first(where: { $0.deviceId.hasPrefix(request.args[0].lowercased()) || $0.fingerprint.hasPrefix(request.args[0].uppercased()) }) else {
-                return .failure("allow needs <peer> <control-us|we-control> [on|off]")
+            guard request.args.count == 3, request.args[2] == "off", ["control-us", "we-control"].contains(request.args[1]),
+                  let peer = peerList.first(where: { $0.deviceId.hasPrefix(request.args[0].lowercased()) || $0.fingerprint.hasPrefix(request.args[0].uppercased()) }) else {
+                return .failure("allow needs <peer> <control-us|we-control> off; permissions are granted in the app")
             }
-            let on = request.args.count < 3 || request.args[2] == "on"
-            if request.args[1] == "control-us" { setMayControlUs(peer.deviceId, on) } else { setWeMayControl(peer.deviceId, on) }
+            if request.args[1] == "control-us" { setMayControlUs(peer.deviceId, false) } else { setWeMayControl(peer.deviceId, false) }
             let after = peers.peer(peer.deviceId)
             return ControlResponse(ok: true, message: "\(peer.name): may-control-us \(after?.mayControlUs ?? false), we-may-control \(after?.weMayControl ?? false)")
         case "forget":

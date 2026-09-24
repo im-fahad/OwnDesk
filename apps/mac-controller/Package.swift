@@ -9,7 +9,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "PRCControllerCore", targets: ["PRCControllerCore"]),
-        .executable(name: "prc-controller", targets: ["prc-controller"]),
         .executable(name: "prc-controller-cli", targets: ["prc-controller-cli"]),
     ],
     dependencies: [
@@ -28,7 +27,6 @@ let package = Package(
             ],
             swiftSettings: mode
         ),
-        .executableTarget(name: "prc-controller", dependencies: ["PRCControllerCore", .product(name: "PRCLocalControl", package: "PRCSwift")], swiftSettings: mode),
         .executableTarget(name: "prc-controller-cli", dependencies: ["PRCControllerCore", .product(name: "PRCLocalControl", package: "PRCSwift"), .product(name: "WebRTC", package: "WebRTC")], swiftSettings: mode),
         .testTarget(
             name: "PRCControllerCoreTests",

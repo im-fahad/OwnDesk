@@ -7,13 +7,12 @@ WebRTC, and forwarding mouse, scroll, keyboard, and text. Spec sections 4.2, 7, 
 [`apps/prc`](../prc), which is what runs on each Mac. See [../../README.md](../../README.md) for how
 the two halves fit together.
 
-Three targets:
+Two targets:
 
 - `PRCControllerCore`: discovery, pairing, the session state machine with reconnection, the
   WebRTC offerer, and input mapping. Used by `apps/prc`.
 - `prc-controller-cli`: the same core without a window, for scripts and remote testing. It is also
-  how the merged app is driven from a script, through `prc-controller-cli app …`.
-- `prc-controller`: the v0.1 SwiftUI app. **Superseded by `apps/prc` and due for removal.**
+  how `PRC.app` is driven from a script, through `prc-controller-cli app …`.
 
 ## Build and run
 
@@ -27,49 +26,10 @@ swift run prc-controller-cli discover
 |---|---|
 | `--name <text>` | Name shown to hosts when pairing. Default: this Mac's name. |
 | `--data-dir <path>` | Where paired hosts live. Default `~/Library/Application Support/PRC Controller` |
-| `--file-identity` | **Development only.** Software identity in `<data-dir>/identity.key` instead of the Keychain and Secure Enclave, so rebuilt ad-hoc binaries do not prompt for Keychain access. |
+| `--keychain` | Keep the identity in the Keychain instead of `<data-dir>/identity.json`. |
 
-No macOS permissions are needed. From the repo root, `scripts/build-apps.sh controller` produces
-`dist/PRC Controller.app` (ad-hoc signed; no certificate is needed for personal use) and
-`scripts/install-controller.sh` copies it to `~/Applications`. An ad-hoc signed build keeps its
-Secure Enclave backed identity in its data folder rather than the Keychain, so rebuilds do not
-prompt; see the agent README for the reasoning.
-
-## Layout
-
-An editor-style window: a header, panels that come and go, and the remote screen filling whatever is
-left. Only the screen is permanent.
-
-| Control | What it does |
-|---|---|
-| Sidebar button, ⌘B | Paired hosts, nearby hosts, this Mac's fingerprint, and pairing |
-| Log button, ⌘J | Event log along the bottom |
-| Quality menu | Resolution cap and the sharp-text or smooth-motion trade-off |
-| Keys menu | Shortcuts macOS never lets a window see, plus the text sender |
-| Pointer button | Pauses input without disconnecting |
-| ⌘K | Connect or disconnect |
-
-The keyboard shortcuts only reach the app when the pointer is off the video: while it is over the
-stream every key belongs to the host, deliberately. `prc-controller-cli app panels [sidebar|log|text]`
-reports or toggles the panels for scripted use.
-
-## Using it
-
-Day to day this is all done in `apps/prc`; see [../../README.md](../../README.md) section 6. The
-flow below is the same one, described against the CLI and the superseded app.
-
-1. On the Mac to be controlled, open PRC and choose **Pair a Mac…** → **Show a code**.
-2. On this Mac, **Pair a Mac…**, paste the code, **Pair**.
-3. Each side shows the other's fingerprint. If they match, **Approve** on the host.
-4. Macs on the current network show a green dot. Select one and **Connect**. On another network the
-   stored addresses are probed too, so a Tailscale address such as `100.64.0.10:47500` is tried
-   without being typed.
-5. Move the pointer over the video to control the host. While the pointer is over the video and the
-   window is active, every key including Cmd+Q and Cmd+W goes to the host. Move the pointer off the
-   video to get your keyboard back.
-
-Toolbar buttons send the shortcuts macOS never lets a window see: Cmd+Tab, Cmd+Space, Cmd+Q. The
-text field sends a whole string as one `text` event, useful for passwords and non-Latin input.
+No macOS permissions are needed. Day to day, controlling another Mac is done in `PRC.app`; see
+[../../README.md](../../README.md) section 6.
 
 ## Headless CLI, for scripts and remote testing
 
@@ -89,17 +49,8 @@ It is how the two-device test was run: the agent on the Mac Mini, the CLI on a M
 with the pairing fingerprint compared on both sides before approval. Keep `--data-dir` outside any
 folder you sync to the other machine.
 
-## Driving the app from a script
-
-Like the agent, the app opens a same-user control channel (`control.json` in its data folder).
-`prc-controller-cli app` talks to it:
-
-```sh
-prc-controller-cli app status
-prc-controller-cli app pair @payload.json [address]   # the app sends PAIR_REQUEST; approve on the host
-prc-controller-cli app connect <host name | id prefix> [address]
-prc-controller-cli app disconnect | hosts | forget <host> | quit
-```
+`prc-controller-cli app <command>` drives the running `PRC.app` instead; the commands are listed in
+[`apps/prc`](../prc/README.md#driving-it-from-a-script).
 
 ## Choosing an address
 

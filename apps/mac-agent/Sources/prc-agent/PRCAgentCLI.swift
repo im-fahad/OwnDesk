@@ -1,6 +1,5 @@
 import Foundation
 import PRCAgentCore
-import PRCLocalControl
 import PRCProtocol
 
 /// Headless development runner for the agent. The menu bar app arrives in a later step; until then this
@@ -9,10 +8,6 @@ import PRCProtocol
 enum PRCAgentCLI {
     static let usage = """
     prc-agent [options]                run the headless agent
-    prc-agent ctl <command> [args]     talk to the running PRC Agent menu bar app
-
-    ctl commands: status | pair | pending [timeout ms] | approve | deny | cancel | devices |
-                  revoke <prefix> | end | access on|off | quit
 
       --name <text>       Host name shown to controllers (default: this Mac's name)
       --port <n>          Signaling port (default 47500, 0 = ephemeral)
@@ -39,10 +34,6 @@ enum PRCAgentCLI {
     static func main() async throws {
         // Line-buffer stdout so a parent process (the headless test, a UI wrapper) sees events as they happen.
         setlinebuf(stdout)
-        if CommandLine.arguments.dropFirst().first == "ctl" {
-            await control(Array(CommandLine.arguments.dropFirst(2)))
-            return
-        }
         var config = AgentConfig.standard()
         var useFileIdentity = false
         var args = Array(CommandLine.arguments.dropFirst())
@@ -133,29 +124,6 @@ enum PRCAgentCLI {
         _ = await stdinTask.value
         eventTask.cancel()
         await agent.stop()
-    }
-
-    /// `prc-agent ctl …`: drives the running menu bar app through its local control channel.
-    static func control(_ argsIn: [String]) async {
-        var args = argsIn
-        var dataDir = AgentConfig.standard().dataDirectory
-        if let i = args.firstIndex(of: "--data-dir"), i + 1 < args.count {
-            dataDir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
-            args.removeSubrange(i...(i + 1))
-        }
-        guard let command = args.first else { print(usage); exit(2) }
-        do {
-            let response = try await LocalControlClient.send(ControlRequest(command: command, args: Array(args.dropFirst())), controlFile: dataDir.appendingPathComponent("control.json"))
-            print(response.message)
-            for key in response.data.keys.sorted() { print("  \(key): \(response.data[key]!)") }
-            exit(response.ok ? 0 : 1)
-        } catch LocalControlError.notRunning {
-            print("PRC Agent is not running (no control.json in \(dataDir.path))")
-            exit(3)
-        } catch {
-            print("control error: \(error)")
-            exit(3)
-        }
     }
 
     static func printPermissions(_ config: AgentConfig) {

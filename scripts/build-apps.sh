@@ -1,8 +1,7 @@
 #!/bin/bash
-# Builds "PRC Agent.app" and "PRC Controller.app" into dist/.
+# Builds "PRC.app" into dist/.
 #
-#   scripts/build-apps.sh                       the merged app, release build, ad-hoc signature
-#   scripts/build-apps.sh all                   also the two older split apps (prc | agent | controller | all)
+#   scripts/build-apps.sh                       release build, ad-hoc signature
 #   PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh
 #   CONFIG=debug scripts/build-apps.sh
 #
@@ -61,7 +60,7 @@ bundle() {
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><$uielement/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSHumanReadableCopyright</key><string>Personal use.</string>
+  <key>NSHumanReadableCopyright</key><string>MIT License.</string>
 </dict>
 </plist>
 PLIST
@@ -73,26 +72,14 @@ PLIST
   echo "built $app  [$signer]"
 }
 
-WHAT="${1:-prc}"
-case "$WHAT" in
-  prc|agent|controller|all) ;;
-  *) echo "usage: $0 [prc|agent|controller|all]"; exit 2 ;;
+case "${1:-prc}" in
+  prc) ;;
+  *) echo "usage: $0 [prc]"; exit 2 ;;
 esac
 
-if [ "$WHAT" = "prc" ] || [ "$WHAT" = "all" ]; then
-  build apps/prc prc
-  # LSUIElement: it lives in the menu bar and only claims a Dock icon while a window is open.
-  bundle "PRC" prc apps/prc com.prc.app true
-fi
-
-if [ "$WHAT" = "agent" ] || [ "$WHAT" = "all" ]; then
-  build apps/mac-agent prc-agent-app
-  bundle "PRC Agent" prc-agent-app apps/mac-agent com.prc.agent true
-fi
-if [ "$WHAT" = "controller" ] || [ "$WHAT" = "all" ]; then
-  build apps/mac-controller prc-controller
-  bundle "PRC Controller" prc-controller apps/mac-controller com.prc.controller false
-fi
+build apps/prc prc
+# LSUIElement: it lives in the menu bar and only claims a Dock icon while a window is open.
+bundle "PRC" prc apps/prc com.prc.app true
 
 echo
-echo "Install: scripts/install-launch-agent.sh (agent, starts at login)   scripts/install-controller.sh (controller, to ~/Applications)"
+echo "Install: scripts/install-prc.sh"

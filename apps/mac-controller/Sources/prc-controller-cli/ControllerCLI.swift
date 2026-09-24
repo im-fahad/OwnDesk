@@ -28,10 +28,11 @@ enum ControllerCLI {
       connect <host id prefix | name> [--address a] [--seconds N] [--probe-input]
                                                    authenticate, receive video, measure RTT, then disconnect
       hosts                                        list paired hosts
-      app <command> [args]                         drive the running PRC Controller app:
-                                                   status | hosts | pair <payload|@file> [address] |
-                                                   connect <host> [address] | disconnect | stats |
-                                                   forget <host> | quit
+      app <command> [args]                         drive the running PRC app:
+                                                   status | peers | hosting off | pending | deny |
+                                                   connect <peer> [address] | disconnect | end-incoming |
+                                                   stats | allow <peer> control-us|we-control off |
+                                                   forget <peer> | quality <preset> | panels | quit
 
     Options: --data-dir <path>  --name <text>  --keychain (use the Keychain instead of <data-dir>/identity.key)
     """
@@ -167,10 +168,11 @@ enum ControllerCLI {
         exit(failures == 0 ? 0 : 1)
     }
 
-    /// `prc-controller-cli app …`: drives the running PRC Controller app through its local control channel.
+    /// `prc-controller-cli app …`: drives the running PRC app through its local control channel.
     static func controlApp(_ argsIn: [String]) async {
         var args = argsIn
-        var dataDir = ControllerConfig.standard().dataDirectory
+        // PRC.app keeps its data, and so its control file, beside this CLI's own folder.
+        var dataDir = ControllerConfig.standard().dataDirectory.deletingLastPathComponent().appendingPathComponent("PRC", isDirectory: true)
         if let i = args.firstIndex(of: "--data-dir"), i + 1 < args.count {
             dataDir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
             args.removeSubrange(i...(i + 1))
@@ -182,7 +184,7 @@ enum ControllerCLI {
             for key in response.data.keys.sorted() { print("  \(key): \(response.data[key]!)") }
             exit(response.ok ? 0 : 1)
         } catch LocalControlError.notRunning {
-            print("PRC Controller is not running (no control.json in \(dataDir.path))")
+            print("PRC is not running (no control.json in \(dataDir.path))")
             exit(3)
         } catch {
             print("control error: \(error)")

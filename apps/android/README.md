@@ -115,16 +115,14 @@ the phone disagrees with a vector it disagrees with both Macs, so these are the 
 
 ## Driving it from a computer
 
-A debug build accepts two intent extras, the way the Mac app can be driven by its control CLI. A
-release build ignores them, so no other app can start a pairing.
+A debug build accepts two intent extras. A release build ignores them, so no other app can start
+a pairing.
 
-    # pair, passing the Mac's code as base64url
-    CODE=$(prc-controller-cli app offer-pairing --data-dir "$HOME/Library/Application Support/PRC" | head -1)
+    # pair, passing the code from Show a code on the Mac as base64url
     adb shell am start -n com.prc.controller/.ui.MainActivity \
       --es pairing_code_b64 "$(printf '%s' "$CODE" | base64 | tr '+/' '-_' | tr -d '=')"
 
-    # then approve on the Mac
-    prc-controller-cli app approve --data-dir "$HOME/Library/Application Support/PRC"
+    # then approve in PRC on the Mac, after comparing fingerprints
 
     # connect, naming the Mac by the start of its fingerprint
     adb shell am start -n com.prc.controller/.ui.MainActivity --es connect 25AA

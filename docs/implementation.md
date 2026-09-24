@@ -37,7 +37,7 @@ packages/swift             Swift libraries used by both halves
   PRCIdentity              P-256 keys, Secure Enclave, encodings, code-signing check
   PRCProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
   PRCPeers                 the peer list: who is trusted, in which direction
-  PRCLocalControl          a same-user control channel so scripts can drive the GUI apps
+  PRCLocalControl          a same-user control channel so scripts can drive PRC.app
 apps/prc                   the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only, with video and touch input
 apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-agent CLI
@@ -52,8 +52,8 @@ The icon is drawn, not painted: `scripts/make-app-icon.swift` renders it as vect
 and packs the result with `iconutil`. Run it only when the artwork changes, since the build uses
 the committed `assets/AppIcon.icns`.
 
-`apps/mac-agent` and `apps/mac-controller` still carry their own SwiftUI app targets from v0.1.
-Those are superseded by `apps/prc` and are due for removal; their libraries and CLIs stay.
+The v0.1 SwiftUI app targets in `apps/mac-agent` and `apps/mac-controller` were removed once
+`apps/prc` replaced them; their libraries and CLIs stay.
 
 ## 3. How a session happens
 
@@ -132,9 +132,10 @@ its control CLI, which is how the flow is tested without typing on the phone.
 
 - `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
   Recording permission and no display.
-- `PRCLocalControl` gives each app a loopback port and a token in its data folder, so a script can
-  press the same buttons a person would. This is how pairing, connecting and measuring were driven
-  from a second Mac over SSH.
+- `PRCLocalControl` gives the app a loopback port and a token in its data folder, so a script can
+  read state, connect, measure, and take access away. It cannot switch hosting on, pair, approve,
+  or grant a permission: any program running as the user can read the token, and the app holds
+  Screen Recording and Accessibility, so those stay clicks.
 - `tools/e2e` spawns the real agent binary and drives it from Node using werift, a WebRTC
   implementation independent of libwebrtc, which is a genuine interoperability check.
 
@@ -394,7 +395,6 @@ why a direct path is unavailable: on this network the home router offers no port
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,
   `capture_state` and `bye`.
-- Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
 
 ## 9. Conventions
 
