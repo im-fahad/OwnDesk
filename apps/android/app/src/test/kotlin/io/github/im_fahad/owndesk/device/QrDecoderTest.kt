@@ -40,6 +40,27 @@ class QrDecoderTest {
         assertEquals(payload, QrDecoder.decode(bytes, width, height))
     }
 
+    /** What a bright screen does to a photographed code: the white spreads into the black. */
+    private fun washOut(luminance: ByteArray, width: Int, height: Int, radius: Int): ByteArray {
+        val inverted = ByteArray(luminance.size) { (255 - (luminance[it].toInt() and 0xFF)).toByte() }
+        val grown = QrDecoder.darken(inverted, width, height, radius)
+        return ByteArray(grown.size) { (255 - (grown[it].toInt() and 0xFF)).toByte() }
+    }
+
+    @Test
+    fun `a code washed out by a bright screen reads again once its dark is grown back`() {
+        val (bytes, width, height) = luminanceOf(payload, 600)
+        val washed = washOut(bytes, width, height, 2)
+        assertNull("the washed-out code should not read as it is", QrDecoder.decode(washed, width, height))
+        assertEquals(payload, QrDecoder.decode(QrDecoder.darken(washed, width, height, 2), width, height))
+    }
+
+    @Test
+    fun `darkening by nothing leaves the picture alone`() {
+        val (bytes, width, height) = luminanceOf(payload, 600)
+        assertEquals(payload, QrDecoder.decode(QrDecoder.darken(bytes, width, height, 0), width, height))
+    }
+
     @Test
     fun `a frame with no code in it reads as nothing rather than failing`() {
         val blank = ByteArray(320 * 240) { 200.toByte() }

@@ -46,6 +46,39 @@ object QrDecoder {
     }
 
     /**
+     * Grows every dark area by [radius] pixels: each pixel takes the darkest value around it.
+     *
+     * A code on a bright screen photographs with its black modules eaten away, because the white
+     * around them bleeds into the camera's pixels. The finder patterns lose the 1:1:3:1:1 shape the
+     * detector looks for and the code is not even found. Growing the dark back restores it.
+     */
+    fun darken(luminance: ByteArray, width: Int, height: Int, radius: Int): ByteArray {
+        if (radius <= 0) return luminance
+        val across = ByteArray(width * height)
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                var darkest = 255
+                for (k in maxOf(0, x - radius)..minOf(width - 1, x + radius)) {
+                    darkest = minOf(darkest, luminance[row + k].toInt() and 0xFF)
+                }
+                across[row + x] = darkest.toByte()
+            }
+        }
+        val out = ByteArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                var darkest = 255
+                for (k in maxOf(0, y - radius)..minOf(height - 1, y + radius)) {
+                    darkest = minOf(darkest, across[k * width + x].toInt() and 0xFF)
+                }
+                out[y * width + x] = darkest.toByte()
+            }
+        }
+        return out
+    }
+
+    /**
      * Camera rows can be padded, so a frame's bytes are not always width by height. This copies the
      * useful part of each row out, which is what the decoder expects.
      */

@@ -35,7 +35,7 @@ import androidx.core.content.ContextCompat
 import io.github.im_fahad.owndesk.BuildConfig
 import io.github.im_fahad.owndesk.device.QrDecoder
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 /**
  * Points the camera at the code a Mac is showing and hands back what it reads.
@@ -88,7 +88,7 @@ class ScanActivity : AppCompatActivity() {
         root.addView(target, FrameLayout.LayoutParams(dp(240), dp(240), Gravity.CENTER))
 
         hint = TextView(this).apply {
-            text = "Point at the code on the Mac"
+            text = "Hold the phone 15 to 25 cm from the code on the Mac. Tap the picture to focus."
             setTextColor(Theme.TEXT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, Theme.UI_SECONDARY)
             gravity = Gravity.CENTER
@@ -124,29 +124,42 @@ class ScanActivity : AppCompatActivity() {
                 .also { it.setAnalyzer(analysisExecutor, ::analyze) }
 
             provider.unbindAll()
-            camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, previewUse, analysis)
-            // Screens are close, and a camera left to itself often settles on the room behind them.
-            // Focusing on the middle of the frame, and again on a tap, is what makes it snap to the
-            // code rather than to the wall.
-            preview.post { focusOn(preview.width / 2f, preview.height / 2f) }
+            val bound = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, previewUse, analysis)
+            camera = bound
+            // A phone's main camera cannot focus much closer than ten centimetres, and a pairing
+            // code on a laptop screen is only a few centimetres wide, so held close enough to fill
+            // the frame it is always a blur. Zooming in lets it be held further back, where the
+            // lens can focus, with the code still large in the frame.
+            val maxZoom = bound.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
+            bound.cameraControl.setZoomRatio(minOf(SCAN_ZOOM, maxZoom))
+            // The code is a bright white square in a dark window. Metered on the whole frame the
+            // camera exposes for the dark, the white burns out and bleeds into the black modules
+            // until too few are left to read. So it meters on the middle of the aiming frame,
+            // which is inside the code, holds that, and exposes well below it. Focus stays
+            // continuous.
+            val exposure = bound.cameraInfo.exposureState
+            if (exposure.isExposureCompensationSupported) {
+                val index = (SCAN_EXPOSURE_EV / exposure.exposureCompensationStep.toFloat()).roundToInt()
+                bound.cameraControl.setExposureCompensationIndex(
+                    index.coerceIn(exposure.exposureCompensationRange.lower, exposure.exposureCompensationRange.upper)
+                )
+            }
+            preview.post { meterOn(preview.width / 2f, preview.height / 2f, AIM_SIZE, FocusMeteringAction.FLAG_AE) }
+            // A tap focuses and meters on that spot and holds both, until the next tap.
             preview.setOnTouchListener { _, event ->
                 if (event.action == MotionEvent.ACTION_UP) {
-                    focusOn(event.x, event.y)
-                    hint.text = "Focusing..."
+                    meterOn(event.x, event.y, TAP_SIZE, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                    hint.text = "Focused where you tapped. Tap again if you move the phone."
                 }
                 true
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun focusOn(x: Float, y: Float) {
+    private fun meterOn(x: Float, y: Float, size: Float, flags: Int) {
         val control = camera?.cameraControl ?: return
-        val point = preview.meteringPointFactory.createPoint(x, y)
-        control.startFocusAndMetering(
-            FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
-                .setAutoCancelDuration(4, TimeUnit.SECONDS)
-                .build()
-        )
+        val point = preview.meteringPointFactory.createPoint(x, y, size)
+        control.startFocusAndMetering(FocusMeteringAction.Builder(point, flags).disableAutoCancel().build())
     }
 
     private fun analyze(image: ImageProxy) {
@@ -154,17 +167,18 @@ class ScanActivity : AppCompatActivity() {
             if (handled) return
             val plane = image.planes.firstOrNull() ?: return
             val luminance = QrDecoder.packRows(plane.buffer, plane.rowStride, image.width, image.height)
-            val text = QrDecoder.decode(luminance, image.width, image.height)
+            // How far the white has bled into the black depends on the screen and the distance,
+            // so successive frames try the picture as it is and then with the dark grown back
+            // by one, two and three pixels. Each frame stays cheap and one of them lands.
+            val radius = DARKEN_STEPS[frames % DARKEN_STEPS.size]
+            val text = QrDecoder.decode(QrDecoder.darken(luminance, image.width, image.height, radius), image.width, image.height)
             frames += 1
             if (BuildConfig.DEBUG && frames % 15 == 0) {
                 Log.i("OwnDesk", "scanning ${image.width}x${image.height}, $frames frames, nothing read yet")
             }
-            if (text == null) {
-                // Refocus every so often: a hand-held camera that settled on the wrong distance
-                // will otherwise stare at a blur forever.
-                if (frames % 30 == 0) runOnUiThread { focusOn(preview.width / 2f, preview.height / 2f) }
-                return
-            }
+            // No refocusing from here. Restarting autofocus every second or so, as this once did,
+            // keeps the lens searching and it never settles on anything.
+            if (text == null) return
             handled = true
             Log.i("OwnDesk", "read a code of ${text.length} characters")
             runOnUiThread { finishWith(text) }
@@ -187,6 +201,18 @@ class ScanActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CODE = "code"
+
+        /** Enough to hold the phone beyond its closest focus while the code still fills the frame. */
+        private const val SCAN_ZOOM = 2f
+
+        /** Well below what the meter asks for, so the white of the code does not flood the black. */
+        private const val SCAN_EXPOSURE_EV = -2f
+
+        /** Metering areas as a fraction of the preview: the middle of the code, and a tapped spot. */
+        private const val AIM_SIZE = 0.25f
+        private const val TAP_SIZE = 0.3f
+
+        private val DARKEN_STEPS = intArrayOf(0, 1, 2, 3)
 
         fun intent(context: Context): Intent = Intent(context, ScanActivity::class.java)
     }

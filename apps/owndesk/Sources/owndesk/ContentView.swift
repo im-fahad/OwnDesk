@@ -565,16 +565,21 @@ struct PairingSheet: View {
                 }
             }
         } else if let invite = model.invite {
-            HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 if let image = invite.image {
-                    Image(nsImage: image).interpolation(.none).resizable().frame(width: 200, height: 200)
-                        .background(Color.white).cornerRadius(6)
+                    // Large, and on a white margin: a phone has to resolve some eighty modules
+                    // across from a distance its lens can focus at, and a code with no quiet zone
+                    // is hard to find against a dark window.
+                    Image(nsImage: image).interpolation(.none).resizable().frame(width: 300, height: 300)
+                        .padding(18).background(Color.white).cornerRadius(8)
+                        .frame(maxWidth: .infinity)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Scan this, or copy the text and paste it on the other Mac.")
-                        .font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
+                Text("Scan this with the phone, or copy the text and paste it on the other Mac.")
+                    .font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text("This Mac's fingerprint").font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
                     Text(model.fingerprint).font(.system(size: 18, design: .monospaced)).foregroundStyle(Theme.text)
+                    Spacer()
                     Button("Copy code") { model.copyInvite() }.buttonStyle(HeaderButtonStyle(tint: Theme.accent))
                     Button("Cancel") { model.cancelPairing() }.buttonStyle(HeaderButtonStyle(tint: Theme.textDim))
                 }

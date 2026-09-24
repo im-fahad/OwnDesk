@@ -267,10 +267,25 @@ by hand is the worst part of pairing, and the Mac already draws it as a QR.
 looked alive — preview moving, frames arriving — and never read a code. Analysis frames default to
 640x480, which is not enough pixels for a QR holding a public key hash and several addresses, and
 nothing ever asked the camera to focus, so the picture stayed soft at the distance a phone is
-naturally held from a screen. The fix was all three together: ask for 1920x1080 analysis frames,
-trigger a focus on open, on tap, and again after every thirty frames that decoded nothing, and turn
-on the reader's `TRY_HARDER` hint. A scanner that does nothing gives no clue which of the three is
-missing, so check all three at once.
+naturally held from a screen. The first fix asked for 1920x1080 analysis frames, a focus on open
+and on tap, and the reader's `TRY_HARDER` hint.
+
+That was not the end of it, and on a Redmi K80 it still read nothing. Three more things, found by
+pulling the phone's own preview over adb and feeding it to decoders on a Mac:
+
+- *Refocusing kills focus.* It also re-triggered autofocus every thirty empty frames, a little over
+  a second at full rate, so the lens was always searching. Continuous autofocus left alone settles.
+- *A phone cannot focus on a code small enough to fill its frame.* The Mac's code is a few
+  centimetres wide, and a main camera will not focus much closer than ten. A 2x zoom lets it be held
+  15 to 25 cm away with the code still large.
+- *A bright screen eats the black.* Metered on a dark window, the white of the code burns out and
+  bleeds into the black modules until the finder patterns lose their 1:1:3:1:1 shape and zxing
+  cannot even locate the code, although Apple's Vision could still read the same picture. The
+  scanner now meters on the middle of the code at -2 EV, and each frame is also tried with its dark
+  areas grown back by one to three pixels, which is what made a captured failing frame read.
+
+The Mac helps from its side too: the code is drawn at 300 points on a white margin of about four
+modules, the quiet zone a QR needs and `CIQRCodeGenerator` does not add.
 
 **Probe every address at once.** A Mac advertises a local address and a tailnet address, and trying
 them in turn means waiting out a timeout on the wrong network before the right one is attempted at
