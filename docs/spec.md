@@ -881,7 +881,7 @@ fingerprint 25AA-F3B7-4F82
 Let other Macs control this one          [ ON ]
 
 Incoming
-  My MacBook   Direct (LAN)            [Disconnect]
+  My MacBook           Direct (LAN)            [Disconnect]
 
 [Open OwnDesk…]                                        [Quit]
 ```
