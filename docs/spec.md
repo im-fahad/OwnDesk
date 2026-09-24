@@ -42,7 +42,7 @@ decision by the owner removed a whole component.
 | Area | v2 as written | As built |
 |---|---|---|
 | Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phone controls only. |
-| Apps | `mac-agent` and `mac-controller` as separate apps | One `OwnDesk.app` containing both halves as libraries. The old app targets are superseded. |
+| Apps | `mac-agent` and `mac-controller` as separate apps | One `OwnDesk.app` containing both halves as libraries. The old app targets were removed. |
 | Trust store | One direction, "trusted controllers" | One peer record per device with two independent permissions: may control us, we may control it. Key lookup is gated on the relevant one, so revoking a direction fails closed. |
 | Internet path | Rendezvous server plus TURN on a VPS | Tailscale. Same signed protocol over a tailnet address, no server to run, no VPS to pay for. The rendezvous protocol in section 11 is still specified and still unbuilt. |
 | Signing | A persistent identity from day one, ideally Developer ID | Ad-hoc, by the owner's decision: these apps are personal and never distributed. The cost is re-granting Screen Recording and Accessibility after each rebuild, which the install script handles with `tccutil reset`. |
@@ -78,7 +78,7 @@ Personal use only. No public distribution.
 ```text
         ┌───────────────────────────┐      ┌───────────────────────────┐
         │         Mac mini          │      │          MacBook          │
-        │          OwnDesk.app          │      │          OwnDesk.app          │
+        │        OwnDesk.app        │      │        OwnDesk.app        │
         │  ┌─────────────────────┐  │      │  ┌─────────────────────┐  │
         │  │ hosting half        │  │◄────►│  │ controlling half    │  │
         │  │  WebSocket :47500   │  │      │  └─────────────────────┘  │
@@ -890,7 +890,7 @@ The window, when controlling:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●●  OwnDesk   Mac mini M4 · Direct (LAN)   [Quality] [Keys] [⏸] │  header, doubles as the title bar
+│ ●●● OwnDesk  Mac mini M4 · Direct (LAN) [Quality] [Keys] [⏸] │  header, doubles as the title bar
 ├──────────────┬───────────────────────────────────────────────┤
 │ THIS MAC     │                                               │
 │  Let others  │                                               │
@@ -1053,7 +1053,7 @@ owndesk/
     spec.md                 this document
     implementation.md       what exists, and what it cost to learn
   apps/
-    owndesk/                    the Mac app: menu bar plus a window, hosts and controls
+    owndesk/                the Mac app: menu bar plus a window, hosts and controls
     android/                the phone app: controls only
     mac-agent/              OwnDeskAgentCore, the hosting half, plus the owndesk-agent CLI
     mac-controller/         OwnDeskControllerCore, the controlling half, plus owndesk-controller-cli
@@ -1070,12 +1070,11 @@ owndesk/
     web-harness/            browser test client, dev only
   scripts/                  build, install, uninstall, draw the app icon
   assets/                   AppIcon.icns
-  services/, infra/         empty: the rendezvous server and TURN were deferred
   README.md
 ```
 
 Two differences from what v2 planned. There is no separate `identity` package: the per-platform key
-wrappers live in `packages/swift/OwnDeskIdentity` and in the phone's `device/` folder, because a wrapper
+wrappers live in `packages/swift/Sources/OwnDeskIdentity` and in the phone's `device/` folder, because a wrapper
 that thin is not worth a package boundary. And codegen emits TypeScript types and the Swift key
 table only; the Kotlin protocol layer is written by hand against the same schemas and proved by the
 same vectors, which is what actually matters.

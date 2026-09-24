@@ -4,8 +4,8 @@ What exists today, how it works, and the things that were learned the hard way. 
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
 been amended to match.
 
-Written 2026-09-09 and brought up to date 2026-09-10, at commit `8cb60cf` on branch `v0.2-hybrid`.
-Tag `v0.1.0` on `main` is the last state where the agent and the controller were separate apps.
+Written 2026-09-09 and brought up to date 2026-09-25. Tag `v0.1.0` is the last state where the
+agent and the controller were separate apps. The project was called PRC until 2026-09-25.
 [../README.md](../README.md) is the guided tour: the technology, the flow, and how to use it. This
 file is the record of decisions and traps.
 
@@ -34,11 +34,11 @@ packages/protocol          the single source of truth for the wire format
   src/                     the TypeScript reference implementation
   scripts/                 codegen (types + the Swift key table) and vector generation
 packages/swift             Swift libraries used by both halves
-  OwnDeskIdentity              P-256 keys, Secure Enclave, encodings, code-signing check
-  OwnDeskProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
-  OwnDeskPeers                 the peer list: who is trusted, in which direction
-  OwnDeskLocalControl          a same-user control channel so scripts can drive OwnDesk.app
-apps/owndesk                   the Mac app: menu bar plus a window, hosts and controls
+  OwnDeskIdentity          P-256 keys, Secure Enclave, encodings, code-signing check
+  OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
+  OwnDeskPeers             the peer list: who is trusted, in which direction
+  OwnDeskLocalControl      a same-user control channel so scripts can drive OwnDesk.app
+apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only, with video and touch input
 apps/mac-agent             hosting half (OwnDeskAgentCore) plus the headless owndesk-agent CLI
 apps/mac-controller        controlling half (OwnDeskControllerCore) plus owndesk-controller-cli
@@ -154,13 +154,13 @@ npm run android-frames                     # the phone's frames against the real
 scripts/build-apps.sh owndesk                  # dist/OwnDesk.app, ad-hoc signed
 scripts/install-owndesk.sh                     # ~/Applications, menu bar, starts at login
 scripts/install-owndesk.sh --stage             # copy only, for a Mac you are away from
-scripts/install-owndesk.sh --replace-agent     # also remove the older split agent
+scripts/install-owndesk.sh --replace-agent     # also remove an old v0.1 "PRC Agent"
 
 cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes, all passing on 2026-09-11: protocol 27, packages/swift 31, agent 45, controller 15,
+Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 31, agent 45, controller 15,
 android 58, end to end 16 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
@@ -366,13 +366,13 @@ screenshots settled several questions that eyes could not.
 
 ## 7. Where it runs today
 
-Both Macs run only `~/Applications/OwnDesk.app` under the `io.github.im-fahad.owndesk` LaunchAgent, hosting on, with
-Screen Recording and Accessibility granted. Identities survived the migration from the split apps,
-so nothing needed re-pairing: Mac mini `25AA-F3B7-4F82`, MacBook `FF28-84B1-1F62`, each holding the
-other in both directions.
+The author's own setup: a Mac mini and a MacBook, each running only `~/Applications/OwnDesk.app`
+under its LaunchAgent with hosting on, each holding the other in both directions, and an Android
+phone running the debug build as a controller, reaching both Macs on the LAN and over the tailnet.
 
-The phone is an Android phone running the debug build, paired with both Macs, reaching them on the LAN
-and over the tailnet.
+Both Macs kept their identities through the move from the split apps and through the rename from
+PRC, so neither needed pairing again. The phone pairs once more after the rename, because its new
+application id gives it a new Keystore key.
 
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at

@@ -62,6 +62,14 @@ at login adds nothing to the Dock, and an open window can still take keyboard fo
 the script channel. Logs are in `~/Library/Logs/OwnDesk`. Nothing there is a secret except the identity,
 which is an opaque Secure Enclave reference on a Mac that has one, and the token in `control.json`.
 
+## Upgrading from PRC
+
+OwnDesk was called PRC until September 2026. `scripts/install-owndesk.sh` stops and removes
+`PRC.app`, and the first launch takes over `~/Library/Application Support/PRC` and the old app's
+settings, so the Mac keeps its identity, its pairings, and its hosting switch. macOS treats the new
+bundle id as a new app, so grant Screen Recording and Accessibility again. The phone app has a new
+application id too: install it, pair it once more, and forget the old phone entry on each Mac.
+
 ## Migrating from the v0.1 split apps
 
 The first launch brings forward whichever of the old v0.1 apps ran on this Mac: its identity, so other

@@ -97,7 +97,7 @@ speaks WebRTC without libwebrtc, and a browser harness for poking at a host by h
 
 ```text
    ┌────────────────────────────────┐        ┌────────────────────────────────┐
-   │ Mac mini · OwnDesk.app             │        │ MacBook · OwnDesk.app              │
+   │ Mac mini · OwnDesk.app         │        │ MacBook · OwnDesk.app          │
    │                                │        │                                │
    │ hosting half — a switch, off   │        │ hosting half — a switch, off   │
    │ until you turn it on           │        │ until you turn it on           │
@@ -116,7 +116,7 @@ speaks WebRTC without libwebrtc, and a browser harness for poking at a host by h
                    └─────────────┐            ┌───────────────┘
                                  │            │
                           ┌──────┴────────────┴──────┐
-                          │ Android phone · OwnDesk      │
+                          │ Android phone · OwnDesk  │
                           │  Keystore identity       │
                           │  controlling half only   │
                           │  touch → pointer, keys   │
@@ -304,7 +304,11 @@ flowchart TD
 
 ### 6.2 Install on a Mac
 
+You need macOS 14 or newer and Xcode 26 or newer. No Apple account or certificate is involved.
+
 ```sh
+git clone https://github.com/im-fahad/OwnDesk.git
+cd OwnDesk
 scripts/build-apps.sh owndesk      # dist/OwnDesk.app, ad-hoc signed, no certificate needed
 scripts/install-owndesk.sh         # to ~/Applications, in the menu bar, and again at login
 ```
@@ -320,6 +324,10 @@ those grants to the signature. The install script clears the stale entry for you
 to use for a Mac you are not sitting at.
 
 ### 6.3 Install on the phone
+
+You need a JDK 17 or newer and the Android SDK; Android Studio brings both. Without a separate JDK,
+point `JAVA_HOME` at the one inside Android Studio:
+`export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`.
 
 ```sh
 cd apps/android
@@ -420,11 +428,11 @@ packages/protocol          the single source of truth for the wire format
   vectors/                 shared test vectors, run by all three languages
   src/                     the TypeScript reference implementation
 packages/swift             Swift libraries used by both halves
-  OwnDeskIdentity              P-256 keys, Secure Enclave, encodings, code-signing checks
-  OwnDeskProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
-  OwnDeskPeers                 the peer list: who is trusted, in which direction
-  OwnDeskLocalControl          a same-user control channel so scripts can drive the apps
-apps/owndesk                   the Mac app: menu bar plus a window, hosts and controls
+  OwnDeskIdentity          P-256 keys, Secure Enclave, encodings, code-signing checks
+  OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
+  OwnDeskPeers             the peer list: who is trusted, in which direction
+  OwnDeskLocalControl      a same-user control channel so scripts can drive the apps
+apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only
 apps/mac-agent             the hosting half, plus the headless owndesk-agent CLI
 apps/mac-controller        the controlling half, plus owndesk-controller-cli
@@ -432,7 +440,6 @@ tools/e2e                  headless end-to-end test driving the real agent from 
 tools/web-harness          browser controller, development only
 scripts/                   build, install, uninstall, draw the app icon
 assets/                    AppIcon.icns, copied into every bundle by the build
-services/, infra/          empty: the rendezvous server and TURN were deferred
 ```
 
 ---
@@ -460,10 +467,10 @@ Last run, all passing:
 | Suite | Size | What it proves |
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
-| `packages/swift` | 29 tests | The same vectors on Swift, plus peers and the control channel |
-| `apps/mac-agent` | 28 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
+| `packages/swift` | 31 tests | The same vectors on Swift, plus peers and the control channel |
+| `apps/mac-agent` | 45 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
 | `apps/mac-controller` | 15 tests | Geometry, key maps, and an in-process agent round trip with real video |
-| `apps/android` | 47 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
+| `apps/android` | 58 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
 | `npm run e2e` | 16 steps | The real agent binary, driven from Node by an independent WebRTC stack |
 | `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
 

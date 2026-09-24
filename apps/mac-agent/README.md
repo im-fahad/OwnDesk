@@ -41,7 +41,7 @@ Options:
 | `--no-media` | Signaling and sessions only. Offers are answered with `SESSION_END error`. |
 | `--no-input` | Validate input messages but never inject them |
 | `--no-bonjour` | Do not advertise on the LAN |
-| `--file-identity` | **Development only.** Keep the identity as a software key in `<data-dir>/identity.key` instead of the Keychain and Secure Enclave. |
+| `--file-identity` | **Development only.** Keep the identity in `<data-dir>/identity.json` (mode 0600) instead of the Keychain. With a Secure Enclave the file holds only the key's opaque reference. |
 | `--synthetic-screen` | **Test only.** Stream a generated 720p pattern instead of the screen. No Screen Recording needed. |
 
 Why `--file-identity` exists: a `swift build` binary is ad-hoc signed, and its signature changes on
