@@ -117,7 +117,7 @@ plain http so it can open the agent's `ws://` endpoint.
 | `ScreenCapturer.swift` | SCStream to NV12 pixel buffers, static-frame repeat |
 | `WebRTCSession.swift` | Peer connection as answerer, video sender, data channels, path detection |
 | `InputInjector.swift` | CGEvent posting with rate limits, click counting, drag, scroll phases, Unicode text |
-| `OwnDeskPeers` (in `packages/swift`) | The peer list on disk, with a permission per direction |
+| `OwnDeskPeers` (in `packages/swift`) | The peer list on disk: who is paired, and whether it can host |
 | `Agent.swift` | Wiring and the dev file identity store |
 
 ## Headless end-to-end test

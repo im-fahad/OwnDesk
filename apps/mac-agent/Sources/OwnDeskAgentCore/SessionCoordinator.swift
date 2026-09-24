@@ -90,9 +90,10 @@ public actor SessionCoordinator {
         port = deps.config.port
         sender = EnvelopeSender(identity: deps.identity, now: deps.now)
         let peers = deps.peers
-        // Only a peer allowed to control us can have its envelopes verified, so revocation fails
-        // closed without a separate check on every message.
-        receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.controllerKey($0) }, now: deps.now)
+        // Any paired device's envelopes verify, so one whose control is switched off can be told so
+        // instead of being treated as a stranger. Nothing starts without SESSION_REQUEST, which
+        // checks the switch, and every later message is bound to the session that request opened.
+        receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
         unpairReceiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
         var continuation: AsyncStream<AgentEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation = $0 }
@@ -276,7 +277,10 @@ public actor SessionCoordinator {
 
     private func handleSessionRequest(_ env: Envelope, _ p: SessionRequestPayload, connection: ConnectionID) async {
         guard remoteAccessEnabled else { reject(env.from, .remoteAccessDisabled, connection: connection); return }
-        guard let device = deps.peers.controller(env.from) else { reject(env.from, .untrusted, connection: connection); return }
+        guard let device = deps.peers.peer(env.from) else { reject(env.from, .untrusted, connection: connection); return }
+        // Paired, but this Mac has switched off that device's control: say so, so it can tell the
+        // person why, rather than answer as if it were a stranger and have it drop the pairing.
+        guard device.mayControlUs else { reject(env.from, .revoked, connection: connection); return }
         guard p.versions.contains(where: { Envelope.supportedVersions.contains($0) }) else {
             reject(env.from, .versionUnsupported, connection: connection); return
         }
@@ -538,6 +542,12 @@ public actor SessionCoordinator {
         await tearDown(reason: reason, notify: true)
     }
 
+    /// Ends the session only if it belongs to this device, as when its control is switched off.
+    public func endSession(of deviceId: String, reason: SessionEndReason) async {
+        guard session?.deviceId == deviceId else { return }
+        await tearDown(reason: reason, notify: true)
+    }
+
     private func tearDown(reason: SessionEndReason, notify: Bool) async {
         guard let s = session else { return }
         session = nil
@@ -558,11 +568,11 @@ public actor SessionCoordinator {
 
     // MARK: Trust and kill switch
 
-    /// Revoking here withdraws only the right to control us. If we are also paired to control that
-    /// Mac, that stays: they are separate permissions.
+    /// Revoking removes the device and ends its session. It must pair again from scratch (spec
+    /// section 20): between two Macs the directions are not separate permissions.
     public func revoke(deviceId: String) async {
-        guard deps.peers.controller(deviceId) != nil else { return }
-        try? deps.peers.setMayControlUs(deviceId, false)
+        guard deps.peers.peer(deviceId) != nil else { return }
+        _ = try? deps.peers.forget(deviceId)
         receiver.forgetSender(deviceId)
         if let s = session, s.deviceId == deviceId {
             await tearDown(reason: .revoked, notify: true)

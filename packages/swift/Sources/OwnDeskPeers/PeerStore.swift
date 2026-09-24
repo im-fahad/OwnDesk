@@ -15,7 +15,9 @@ public final class PeerStore: @unchecked Sendable {
         fileURL = directory.appendingPathComponent("peers.json")
         if let data = try? Data(contentsOf: fileURL) {
             let list = try JSONDecoder().decode([Peer].self, from: data)
-            peers = Dictionary(list.map { ($0.deviceId, $0) }, uniquingKeysWith: { a, _ in a })
+            peers = Dictionary(list.map { ($0.deviceId, $0.normalized) }, uniquingKeysWith: { a, _ in a })
+            // Records written when each direction could be switched off on its own come back with both.
+            if list.contains(where: { $0 != $0.normalized }) { try save() }
         }
     }
 
@@ -72,8 +74,8 @@ public final class PeerStore: @unchecked Sendable {
 
     // MARK: Writing
 
-    /// Records a pairing. Existing permissions are widened, never narrowed: pairing again should not
-    /// silently revoke a direction the user already approved.
+    /// Records a pairing. Existing permissions are widened, never narrowed: pairing grants control
+    /// in both directions between two Macs, and each Mac can later switch off one device's control.
     @discardableResult
     public func pair(
         deviceId: String,
@@ -97,17 +99,16 @@ public final class PeerStore: @unchecked Sendable {
         for address in addresses.reversed() where !peer.addresses.contains(address) {
             peer.addresses.insert(address, at: 0)
         }
+        peer = peer.normalized
         peers[deviceId] = peer
         try save()
         return peer
     }
 
+    /// The per-device switch "Allow it to control this Mac". Off keeps the pairing: the device is
+    /// told it may not, and switching it on again needs no new pairing.
     public func setMayControlUs(_ deviceId: String, _ allowed: Bool) throws {
         try update(deviceId) { $0.mayControlUs = allowed }
-    }
-
-    public func setWeMayControl(_ deviceId: String, _ allowed: Bool) throws {
-        try update(deviceId) { $0.weMayControl = allowed }
     }
 
     /// Forgets a peer entirely, in both directions.
@@ -137,8 +138,8 @@ public final class PeerStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard var peer = peers[deviceId] else { return }
         change(&peer)
-        // A peer allowed to do nothing is not worth a signature check on every message.
-        if peer.isTrustedEitherWay { peers[deviceId] = peer } else { peers.removeValue(forKey: deviceId) }
+        // Only forgetting removes a peer. A phone whose control is switched off stays paired.
+        peers[deviceId] = peer
         try save()
     }
 

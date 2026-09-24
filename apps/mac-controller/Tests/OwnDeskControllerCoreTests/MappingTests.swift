@@ -122,10 +122,5 @@ import Testing
         #expect(reloaded.host(id)?.lastConnected == 5)
         #expect(reloaded.host(id)?.addresses == ["10.0.0.3:47500", "10.0.0.2:47500"])
 
-        // Dropping it from our host list leaves the other direction intact.
-        try reloaded.setWeMayControl(id, false)
-        #expect(reloaded.hosts.isEmpty)
-        #expect(reloaded.controllers.count == 1)
-        #expect(reloaded.hostKey(id) == nil)
     }
 }

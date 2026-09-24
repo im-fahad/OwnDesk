@@ -31,8 +31,8 @@ enum ControllerCLI {
       app <command> [args]                         drive the running OwnDesk app:
                                                    status | peers | hosting off | pending | deny |
                                                    connect <peer> [address] | disconnect | end-incoming |
-                                                   stats | allow <peer> control-us|we-control off |
-                                                   unpair <peer> | forget <peer> | quality <preset> | panels | quit
+                                                   stats | allow <peer> off | unpair <peer> | forget <peer> |
+                                                   quality <preset> | panels | quit
 
     Options: --data-dir <path>  --name <text>  --keychain (use the Keychain instead of <data-dir>/identity.key)
     """

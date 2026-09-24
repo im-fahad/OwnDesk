@@ -131,7 +131,7 @@ connection (spec section 10).
 | `SessionClient.swift` | Authentication, offer, ICE, keepalive, reconnection, teardown |
 | `WebRTCClient.swift` | Peer connection as offerer, data channels, remote track, path detection |
 | `InputMapper.swift` | Letterbox-aware coordinate mapping, key code inversion, modifier and scroll mapping |
-| `OwnDeskPeers` (in `packages/swift`) | Paired Macs on disk, with a permission per direction |
+| `OwnDeskPeers` (in `packages/swift`) | Paired Macs on disk: who is paired, and whether it can host |
 | `apps/owndesk/Sources/owndesk/VideoView.swift` | Metal video view plus the input overlay and keyboard capture |
 
 ## Tests

@@ -36,7 +36,7 @@ packages/protocol          the single source of truth for the wire format
 packages/swift             Swift libraries used by both halves
   OwnDeskIdentity          P-256 keys, Secure Enclave, encodings, code-signing check
   OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
-  OwnDeskPeers             the peer list: who is trusted, in which direction
+  OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive OwnDesk.app
 apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only, with video and touch input
@@ -92,14 +92,19 @@ retry starts again at 1.
 
 ### OwnDeskPeers
 
-One record per peer holding the key once and two independent permissions: **may control us** and
-**we may control it**. Key lookups are gated on the relevant permission, so revoking a direction
-makes verification fail closed rather than relying on a check at the call site. A peer allowed
-neither is dropped.
+One record per peer holding the key once and two flags: **may control us** and **we may control
+it**. Key lookups are gated on the relevant flag, so a record without it fails verification closed
+rather than relying on a check at the call site.
 
-Pairing sets both directions. That costs nothing in trust, because a single pairing already
-exchanges both public keys and both people compare fingerprints. What stops a Mac being controlled
-is its own hosting switch, which is off until turned on.
+Between two Macs a pairing grants both. **We may control it** is always set for a Mac: whether it
+lets us in is that Mac's decision, not ours. An earlier build had a switch for it on each side, and
+that was a trap: switching control off on one Mac also switched it off on the other the first time
+it was refused, and switching it back on then needed both Macs, with nothing saying so. **May control
+us** is the one switch, "Allow it to control this Mac", on after pairing. Off keeps the pairing, and
+the device's next request gets `SESSION_REJECT revoked` rather than `untrusted`, so it says why
+instead of dropping the pairing. For that the agent now verifies any paired device's envelopes and
+checks the switch at `SESSION_REQUEST`; nothing starts without one. What ends a pairing is
+unpairing, on either side. A phone has only **may control us**, because it cannot host.
 
 ### The app
 
@@ -160,7 +165,7 @@ cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDeb
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 31, agent 50, controller 17,
+Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 34, agent 52, controller 17,
 android 61, end to end 17 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice

@@ -325,7 +325,9 @@ final class AppState: ObservableObject {
     var hostablePeers: [Peer] { peerList.filter(\.isHostForUs) }
     /// Paired devices that can drive this Mac but that we cannot open a session to: every phone,
     /// and any Mac whose permission we revoked in that direction.
-    var inboundOnlyPeers: [Peer] { peerList.filter { $0.mayControlUs && !$0.isHostForUs } }
+    /// Devices that can only control this Mac, such as a phone, including one whose control is
+    /// switched off: it is still paired, and the switch is on its row.
+    var inboundOnlyPeers: [Peer] { peerList.filter { !$0.isHostForUs } }
 
     func discoveredPeer(for deviceId: String) -> HostDiscovery.DiscoveredHost? {
         discovered.first { $0.deviceId == deviceId }
@@ -387,26 +389,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: Permissions per direction
-
-    func setMayControlUs(_ deviceId: String, _ allowed: Bool) {
-        try? peers.setMayControlUs(deviceId, allowed)
-        refreshPeers()
-        if !allowed, let agent, incoming != nil {
-            Task { await agent.coordinator.revoke(deviceId: deviceId) }
-        }
-    }
-
-    func setWeMayControl(_ deviceId: String, _ allowed: Bool) {
-        try? peers.setWeMayControl(deviceId, allowed)
-        refreshPeers()
-        if selectedPeerId == deviceId, !allowed { selectedPeerId = peers.hosts.first?.deviceId }
-    }
-
     func forget(_ deviceId: String) {
         try? peers.forget(deviceId)
         refreshPeers()
         if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
+    }
+
+    /// "Allow it to control this Mac", per device. Off keeps the pairing and ends that device's
+    /// session if it has one; the device is told why the next time it tries.
+    func setMayControlUs(_ deviceId: String, _ allowed: Bool) {
+        try? peers.setMayControlUs(deviceId, allowed)
+        refreshPeers()
+        if !allowed, let agent { Task { await agent.coordinator.endSession(of: deviceId, reason: .revoked) } }
     }
 
     /// Removes a pairing on both sides, so both must pair again. Another Mac is told with a signed
@@ -436,16 +430,13 @@ final class AppState: ObservableObject {
     }
 
     /// A Mac we tried to control answered, with its own signature, that it does not know this Mac any
-    /// more: it unpaired us, or stopped letting us control it. Mirror that here, instead of offering a
-    /// connection it can only refuse.
+    /// more: it was unpaired there, while this Mac could not be told. Drop it here too, so both must
+    /// pair again, instead of offering a connection it can only refuse.
     private func turnedAway(by peer: Peer) {
-        try? peers.setWeMayControl(peer.deviceId, false)
-        if peers.peer(peer.deviceId)?.mayControlUs == false { _ = try? peers.forget(peer.deviceId) }
+        _ = try? peers.forget(peer.deviceId)
         refreshPeers()
         if selectedPeerId == peer.deviceId { selectedPeerId = peers.hosts.first?.deviceId }
-        let text = peers.peer(peer.deviceId) == nil
-            ? "\(peer.name) no longer has this Mac paired. Pair again to control it."
-            : "\(peer.name) no longer lets this Mac control it."
+        let text = "\(peer.name) no longer has this Mac paired, so it was removed here too. Pair again to use it."
         lastMessage = text
         append(text)
     }
@@ -499,8 +490,12 @@ final class AppState: ObservableObject {
                 case .state(let s):
                     self.state = s
                     self.append(Self.describe(s))
-                    if case .ended(let reason) = s, reason == "rejected: \(SessionRejectReason.untrusted.rawValue)" {
-                        self.turnedAway(by: peer)
+                    if case .ended(let reason) = s {
+                        if reason == "rejected: \(SessionRejectReason.untrusted.rawValue)" {
+                            self.turnedAway(by: peer)
+                        } else {
+                            self.lastMessage = Self.explainEnd(reason, peer: peer.name)
+                        }
                     }
                     if case .connected = s {
                         self.peers.touchConnected(peer.deviceId, at: currentMs(), address: addressUsed)
@@ -574,9 +569,29 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Why a connection ended, in words that say what to do about it. The controller reports terse
+    /// reasons; the refusals are the ones a person can act on, so they name the other Mac and the
+    /// switch to change there.
+    static func explainEnd(_ reason: String, peer name: String) -> String {
+        switch reason {
+        case "rejected: \(SessionRejectReason.revoked.rawValue)":
+            "\(name) has turned off control for this Mac. On \(name), right-click this Mac in the sidebar and switch on “Allow it to control this Mac”."
+        case "rejected: \(SessionRejectReason.remoteAccessDisabled.rawValue)":
+            "\(name) is not letting others control it. On \(name), switch on “Let others control it”."
+        case "rejected: \(SessionRejectReason.untrusted.rawValue)":
+            "\(name) no longer has this Mac paired, so it was removed here too. Pair again to use it."
+        case "no address":
+            "Could not reach \(name). It may be asleep or offline, or “Let others control it” may be off on it."
+        case "disconnected":
+            "You disconnected."
+        default:
+            reason.hasPrefix("host ended the session") ? "\(name) ended the session." : reason
+        }
+    }
+
     var placeholderDetail: String? {
         switch state {
-        case .ended(let reason): reason
+        case .ended(let reason): Self.explainEnd(reason, peer: selectedPeerId.flatMap { peers.peer($0)?.name } ?? "The other Mac")
         case .reconnecting(let why): why
         case .idle where hostablePeers.isEmpty: "Pair with the Mac you want to control, using the button in the sidebar."
         default: nil
@@ -743,13 +758,13 @@ final class AppState: ObservableObject {
             _ = await waitUntil(5000, { incoming == nil })
             return ControlResponse(ok: incoming == nil, message: incoming == nil ? "incoming session ended" : "still active")
         case "allow":
-            guard request.args.count == 3, request.args[2] == "off", ["control-us", "we-control"].contains(request.args[1]),
+            // Only off: control is granted by a click in the app, never from a script.
+            guard request.args.count == 2, request.args[1] == "off",
                   let peer = peerList.first(where: { $0.deviceId.hasPrefix(request.args[0].lowercased()) || $0.fingerprint.hasPrefix(request.args[0].uppercased()) }) else {
-                return .failure("allow needs <peer> <control-us|we-control> off; permissions are granted in the app")
+                return .failure("allow needs <peer> off; control is switched on in the app")
             }
-            if request.args[1] == "control-us" { setMayControlUs(peer.deviceId, false) } else { setWeMayControl(peer.deviceId, false) }
-            let after = peers.peer(peer.deviceId)
-            return ControlResponse(ok: true, message: "\(peer.name): may-control-us \(after?.mayControlUs ?? false), we-may-control \(after?.weMayControl ?? false)")
+            setMayControlUs(peer.deviceId, false)
+            return ControlResponse(ok: true, message: "\(peer.name) may no longer control this Mac")
         case "unpair":
             guard let needle = request.args.first, let peer = peerList.first(where: { $0.deviceId.hasPrefix(needle.lowercased()) || $0.fingerprint.hasPrefix(needle.uppercased()) }) else {
                 return .failure("unpair needs a peer id or fingerprint prefix")

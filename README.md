@@ -223,10 +223,11 @@ sequenceDiagram
 ```
 
 The window lasts 120 seconds and closes on the first success. Three wrong proofs close it too.
-Between two Macs, one pairing records both directions at once — that costs nothing in trust,
-because a single pairing already exchanges both public keys and both people looked at the
-fingerprints. What each Mac may actually do stays two separate permissions you can withdraw one at
-a time.
+Between two Macs, one pairing lets each control the other: click Connect on either. That costs
+nothing in trust, because a single pairing already exchanges both public keys and both people looked
+at the fingerprints. Each Mac still decides for itself: **Let others control it** turns all control
+off, and **Allow it to control this Mac**, in a device's right-click menu, turns off one device. A
+device refused that way is told so in plain words and stays paired; to end the pairing, unpair it.
 
 ### 5.3 Connecting
 
@@ -441,7 +442,7 @@ packages/protocol          the single source of truth for the wire format
 packages/swift             Swift libraries used by both halves
   OwnDeskIdentity          P-256 keys, Secure Enclave, encodings, code-signing checks
   OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
-  OwnDeskPeers             the peer list: who is trusted, in which direction
+  OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive the apps
 apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only
@@ -478,8 +479,8 @@ Last run, all passing:
 | Suite | Size | What it proves |
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
-| `packages/swift` | 31 tests | The same vectors on Swift, plus peers and the control channel |
-| `apps/mac-agent` | 50 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
+| `packages/swift` | 34 tests | The same vectors on Swift, plus peers and the control channel |
+| `apps/mac-agent` | 52 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
 | `apps/mac-controller` | 17 tests | Geometry, key maps, and an in-process agent round trip with real video |
 | `apps/android` | 61 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |

@@ -26,19 +26,24 @@ scripts/install-owndesk.sh --replace-agent   # also stop and remove an old v0.1 
 | `--file-identity` | Development: keep the identity in the data folder rather than the Keychain |
 | `--synthetic-screen` | Test: stream a generated pattern instead of the screen |
 
-## The two directions
+## Hosting, and who controls whom
 
 Hosting is off until you switch it on, so installing this never makes a Mac remotely controllable
 on its own. The switch is in the sidebar under **This Mac** and in the menu bar panel. Turning it on
 is also what asks for Screen Recording and Accessibility: a Mac you only control *from* never sees
 those prompts.
 
-Pairing records both directions at once, which costs nothing in trust because a single pairing
-already exchanges both public keys and both people compare fingerprints. What each Mac may do is
-then two separate permissions you can withdraw one at a time, from a peer's context menu:
+Two paired Macs control each other: click **Connect** on either one to control the other. A single
+pairing already exchanges both public keys and both people compare fingerprints, so granting both
+costs nothing in trust. Each Mac still decides who may control it:
 
-- **This Mac may control it**, which puts it under "Macs you can control".
-- **It may control this Mac**, which lets it open a session here when hosting is on.
+- **Let others control it**, in the sidebar, turns all control of this Mac on or off.
+- **Allow it to control this Mac**, in a device's right-click menu, is on after pairing and turns one
+  device off. That device stays paired and is told why when it tries: "Mac mini has turned off
+  control for this Mac", with the switch to change. Its row here says it can't control this Mac.
+
+To end a pairing, unpair it. A phone only ever controls, so it is listed under "Devices that can
+control this one", with the same switch.
 
 Pair from either end: **Show a code** on one Mac and paste it on the other. A phone pairs from the
 same code, by scanning the QR with its camera. **Show full screen** fills the display with the code
@@ -80,9 +85,8 @@ application id too: install it, pair it once more, and forget the old phone entr
 ## Migrating from the v0.1 split apps
 
 The first launch brings forward whichever of the old v0.1 apps ran on this Mac: its identity, so other
-Macs still recognise it, and its pairings. The old stores recorded only one direction, so after
-upgrading you can still control what you could before. To add the reverse, either pair once more or
-turn on the matching permission on each Mac.
+Macs still recognise it, and its pairings. The old stores recorded one direction each; a pairing
+between two Macs now covers both, so after upgrading each can control the other.
 
 ## Driving it from a script
 
@@ -93,7 +97,7 @@ turn on the matching permission on each Mac.
 owndesk-controller-cli app status | peers | hosting off
 owndesk-controller-cli app pending | deny
 owndesk-controller-cli app connect <peer> [address] | disconnect | end-incoming | stats
-owndesk-controller-cli app allow <peer> control-us|we-control off | unpair <peer> | forget <peer>
+owndesk-controller-cli app allow <peer> off | unpair <peer> | forget <peer>
 owndesk-controller-cli app quality <preset> | panels [sidebar|log|text] | quit
 ```
 

@@ -262,14 +262,13 @@ struct SidebarPanel: View {
     }
 
     @ViewBuilder private func peerMenu(_ peer: Peer) -> some View {
-        if peer.weMayControl {
+        // Paired Macs control each other. The one choice here is whether this device may control
+        // this Mac: the other side has none to make, and is told when this one is off.
+        if peer.isHostForUs {
             Button("Connect") { model.selectedPeerId = peer.deviceId; model.connect() }
             Divider()
         }
-        Toggle("This Mac may control it", isOn: Binding(
-            get: { peer.weMayControl },
-            set: { model.setWeMayControl(peer.deviceId, $0) }))
-        Toggle("It may control this Mac", isOn: Binding(
+        Toggle("Allow it to control this Mac", isOn: Binding(
             get: { peer.mayControlUs },
             set: { model.setMayControlUs(peer.deviceId, $0) }))
         Divider()
@@ -325,7 +324,12 @@ struct HostRow: View {
                 Text(host.name).font(Theme.sidebarItem).foregroundStyle(Theme.text).lineLimit(1)
                 // The fingerprint is what tells two entries for the same Mac apart, so it has to be
                 // readable rather than decorative.
-                Text(host.fingerprint).font(Theme.sidebarMono).foregroundStyle(Theme.textDim)
+                HStack(spacing: 6) {
+                    Text(host.fingerprint).font(Theme.sidebarMono).foregroundStyle(Theme.textDim)
+                    if !host.mayControlUs {
+                        Text("can't control this Mac").font(Theme.sidebarSecondary).foregroundStyle(Theme.warn)
+                    }
+                }
             }
             Spacer(minLength: 0)
             // Shown on hover so the list stays quiet, and also in the row's menu.

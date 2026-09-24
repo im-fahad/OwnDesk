@@ -271,7 +271,7 @@ import Testing
 }
 
 @Suite struct AgentPeerStoreTests {
-    @Test func pairingRecordsBothDirectionsAndRevokingOneKeepsTheOther() async throws {
+    @Test func pairingRecordsBothDirectionsAndRevokingRemovesTheDevice() async throws {
         let h = Harness()
         let qr = await h.coordinator.openPairing()
         let code = try #require(qr.pairingCodeBytes)
@@ -285,10 +285,9 @@ import Testing
         #expect(peer.mayControlUs, "it may control this Mac")
         #expect(peer.weMayControl, "and this Mac may control it, once that Mac enables hosting")
 
-        // Revoking on the host side withdraws only the inbound permission.
+        // Revoking removes the device in both directions: it must pair again.
         await h.coordinator.revoke(deviceId: h.controller.deviceId)
-        let after = try #require(h.peers.peer(h.controller.deviceId))
-        #expect(!after.mayControlUs && after.weMayControl)
+        #expect(h.peers.peer(h.controller.deviceId) == nil)
         #expect(h.peers.controllerKey(h.controller.deviceId) == nil, "verification fails closed once revoked")
     }
 }
@@ -355,5 +354,32 @@ import Testing
         _ = try await h.send(.unpair(UnpairPayload()))
         #expect(await h.coordinator.hasActiveSession == false)
         #expect(h.peers.peer(h.controller.deviceId) == nil)
+    }
+}
+
+@Suite struct ControlSwitchTests {
+    @Test func aDeviceWhoseControlIsSwitchedOffIsToldSoAndStaysPaired() async throws {
+        let h = Harness()
+        h.trustController()
+        try h.peers.setMayControlUs(h.controller.deviceId, false)
+        let replies = try await h.send(Harness.request)
+        guard replies.count == 1, case .sessionReject(let r) = replies[0].1 else { Issue.record("expected SESSION_REJECT"); return }
+        #expect(r.reason == .revoked, "not untrusted: it is paired, and must not drop the pairing")
+        #expect(h.peers.peer(h.controller.deviceId) != nil)
+
+        try h.peers.setMayControlUs(h.controller.deviceId, true)
+        h.controller.receiver.forgetSession(from: h.hostId, session: "")
+        let (_, accept) = try await h.authenticate()
+        #expect(accept.display.width_px > 0, "switched on again, it connects with no new pairing")
+    }
+
+    @Test func switchingOffEndsOnlyThatDevicesSession() async throws {
+        let h = Harness()
+        h.trustController()
+        _ = try await h.authenticate()
+        await h.coordinator.endSession(of: String(repeating: "f", count: 64), reason: .revoked)
+        #expect(await h.coordinator.hasActiveSession, "another device's switch leaves this session alone")
+        await h.coordinator.endSession(of: h.controller.deviceId, reason: .revoked)
+        #expect(await h.coordinator.hasActiveSession == false)
     }
 }

@@ -333,8 +333,8 @@ class RemoteSession(
 
     private fun explain(reason: String): String = when (reason) {
         "untrusted" -> "that Mac no longer has this phone paired, so it was removed here too. Pair again to control it"
-        "revoked" -> "this phone's access was revoked on that Mac"
-        "remote_access_disabled" -> "that Mac is not letting others control it; turn Remote Access on"
+        "revoked" -> "that Mac has turned off control for this phone. On the Mac, right-click this phone in the sidebar and switch on “Allow it to control this Mac”"
+        "remote_access_disabled" -> "that Mac is not letting others control it. On the Mac, switch on “Let others control it”"
         "busy" -> "that Mac is already in a session"
         "auth_failed" -> "the Mac refused this phone's signature"
         "version_unsupported" -> "the two sides speak different protocol versions"

@@ -43,7 +43,7 @@ decision by the owner removed a whole component.
 |---|---|---|
 | Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phone controls only. |
 | Apps | `mac-agent` and `mac-controller` as separate apps | One `OwnDesk.app` containing both halves as libraries. The old app targets were removed. |
-| Trust store | One direction, "trusted controllers" | One peer record per device with two independent permissions: may control us, we may control it. Key lookup is gated on the relevant one, so revoking a direction fails closed. |
+| Trust store | One direction, "trusted controllers" | One peer record per device with two flags: may control us (a per-device switch on the host) and we may control it (always set for a Mac). Key lookup is gated on the relevant one, so revoking a direction fails closed. |
 | Internet path | Rendezvous server plus TURN on a VPS | Tailscale. Same signed protocol over a tailnet address, no server to run, no VPS to pay for. The rendezvous protocol in section 11 is still specified and still unbuilt. |
 | Signing | A persistent identity from day one, ideally Developer ID | Ad-hoc, by the owner's decision: these apps are personal and never distributed. The cost is re-granting Screen Recording and Accessibility after each rebuild, which the install script handles with `tccutil reset`. |
 | Android input | Trackpad first, screen view second | Both, switchable, with touch as the default: on a phone the whole desktop is visible at once, so putting the pointer where the finger lands is quicker to aim than nudging it. Pinch magnifies on the phone alone. |
@@ -426,9 +426,8 @@ Unpairing on either side ends the pairing on both, so both must pair again from 
   that is not newer, so a captured copy cannot end a pairing made again inside the clock window.
 - Only hosts listen, so a phone cannot be told. It finds out the next time it tries to connect: the
   host answers `SESSION_REJECT` with `untrusted`, signed with the host's key the phone already
-  holds, and the phone removes the host. A Mac that gets the same answer withdraws only its right to
-  control that host, because `untrusted` also means the host stopped letting it control it, and
-  removes the peer entirely when no direction is left.
+  holds, and the phone removes the host. A Mac that gets the same answer, from a Mac that was
+  unpaired while this one could not be told, removes that Mac too.
 - A host that is off, asleep or not hosting cannot be told either. The side that unpaired says so,
   and the person unpairs on the other device too.
 
@@ -955,15 +954,19 @@ that someone is connected.
 ## 20. Trusted devices, revocation, kill switch
 
 - The peer store lives in Application Support on each device: one record per peer holding
-  device_id, public key, name, type, paired date, last seen, known addresses, and **two independent
-  permissions** — may control us, and we may control it. No secrets, so no protection beyond file
-  permissions.
-- Key lookup is gated on the permission for the direction being checked, so withdrawing one makes
-  verification fail closed rather than relying on a check at the call site. A peer allowed neither
-  is dropped.
-- Pairing sets both directions between two Macs. That costs nothing in trust: one pairing already
-  exchanges both public keys and both people compared fingerprints. What stops a Mac being
-  controlled is its own hosting switch.
+  device_id, public key, name, type, paired date, last seen, known addresses, and two flags — may
+  control us, and we may control it. No secrets, so no protection beyond file permissions.
+- Between two Macs a pairing grants both directions: either can connect to the other. That costs
+  nothing in trust: one pairing already exchanges both public keys and both people compared
+  fingerprints. "We may control it" is always set for a Mac, because whether it lets us in is its
+  decision; older records without it are corrected when the store loads.
+- "May control us" is the host's per-device switch, "Allow it to control this Mac", on after
+  pairing. Off keeps the pairing: the host verifies the device's envelopes with its paired key and
+  answers its `SESSION_REQUEST` with `SESSION_REJECT` reason `revoked`, and ends a session it has.
+  The device shows why and keeps the pairing; switching it on again needs no new pairing. A stranger
+  still gets `untrusted`. A phone only controls: it has only "may control us".
+- What stops a Mac being controlled altogether is its own hosting switch; what ends a pairing is
+  unpairing.
 - Revoke: remove the entry, send `SESSION_END` with `revoked`, and close any active session from
   that device. It must pair again from scratch.
 - Unpair: revoke, remove the entry in both directions, and tell the other device with `UNPAIR`

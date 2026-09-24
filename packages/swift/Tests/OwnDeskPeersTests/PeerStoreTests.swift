@@ -63,17 +63,45 @@ private let mini = SoftwareIdentity()
         #expect(store.hostKey(mini.deviceId) == mini.publicKeyRaw)
         #expect(store.controllers.count == 1 && store.hosts.count == 1)
 
-        // Revoking one direction leaves the other, and the key lookup for the revoked side fails
-        // closed rather than needing a separate check at the call site.
-        try store.setMayControlUs(mini.deviceId, false)
+        // Forgetting drops the record in both directions, and both key lookups fail closed.
+        try store.forget(mini.deviceId)
         #expect(store.controllerKey(mini.deviceId) == nil)
-        #expect(store.hostKey(mini.deviceId) == mini.publicKeyRaw)
-        #expect(store.controllers.isEmpty && store.hosts.count == 1)
-
-        // Revoking the last direction drops the record entirely.
-        try store.setWeMayControl(mini.deviceId, false)
-        #expect(store.peer(mini.deviceId) == nil)
+        #expect(store.hostKey(mini.deviceId) == nil)
         #expect(store.all.isEmpty)
+    }
+
+    @Test func aPairedMacCanAlwaysBeConnectedToFromHere() throws {
+        let dir = tempDir()
+        // A record from when this side could switch off its own right to connect.
+        let old = Peer(deviceId: mini.deviceId, publicKey: mini.publicKeyB64, name: "Mini", type: .mac,
+                       mayControlUs: true, weMayControl: false, pairedAt: 1)
+        try JSONEncoder().encode([old]).write(to: dir.appendingPathComponent("peers.json"))
+        let store = try PeerStore(directory: dir)
+        #expect(store.host(mini.deviceId) != nil, "whether it lets us in is that Mac's decision, not ours")
+        let rewritten = try JSONDecoder().decode([Peer].self, from: Data(contentsOf: dir.appendingPathComponent("peers.json")))
+        #expect(rewritten.first?.weMayControl == true)
+    }
+
+    @Test func switchingOffControlKeepsThePairing() throws {
+        let store = try PeerStore(directory: tempDir())
+        try store.pair(deviceId: mini.deviceId, publicKey: mini.publicKeyB64, name: "Mini", type: .mac,
+                       mayControlUs: true, weMayControl: true, now: 1)
+        try store.setMayControlUs(mini.deviceId, false)
+        #expect(store.peer(mini.deviceId) != nil, "switched off, still paired")
+        #expect(store.controllerKey(mini.deviceId) == nil)
+        #expect(store.pairedKey(mini.deviceId) == mini.publicKeyRaw, "so it can still be told why")
+        try store.setMayControlUs(mini.deviceId, true)
+        #expect(store.controllerKey(mini.deviceId) == mini.publicKeyRaw, "and on again needs no new pairing")
+    }
+
+    @Test func aPhoneOnlyEverControls() throws {
+        let store = try PeerStore(directory: tempDir())
+        try store.pair(deviceId: mini.deviceId, publicKey: mini.publicKeyB64, name: "Phone", type: .android,
+                       mayControlUs: true, weMayControl: false, now: 1)
+        #expect(store.controller(mini.deviceId) != nil)
+        #expect(store.host(mini.deviceId) == nil, "a phone is never offered as something to control")
+        try store.setMayControlUs(mini.deviceId, false)
+        #expect(store.peer(mini.deviceId) != nil, "a phone switched off stays paired too")
     }
 
     @Test func pairingWidensButNeverNarrows() throws {
@@ -137,10 +165,12 @@ private let mini = SoftwareIdentity()
         #expect(result == .init(controllersImported: 1, hostsImported: 1))
 
         let controller = try #require(store.peer(macBook.deviceId))
-        #expect(controller.mayControlUs && !controller.weMayControl)
+        // A Mac that could control us can now also be connected to from here.
+        #expect(controller.mayControlUs && controller.weMayControl)
         #expect(controller.lastSeen == 99 && controller.pairedAt == 10)
 
         let host = try #require(store.peer(mini.deviceId))
+        // It could control that Mac; being controlled back is that Mac's to allow, here with the switch.
         #expect(host.weMayControl && !host.mayControlUs)
         #expect(host.addresses == ["192.168.1.20:47500"] && host.lastConnected == 88)
         #expect(host.type == .mac)
