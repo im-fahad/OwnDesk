@@ -78,10 +78,15 @@ import Testing
         rejects(.sessionEnd, "{\"reason\":\"execute_shell\"}", "end reason enum")
         rejects(.sdpOffer, "{\"sdp\":\"\",\"ice_restart\":false}", "empty sdp")
         rejects(.sessionResume, "[]", "array is not an object")
+        rejects(.unpair, "[]", "array is not an object")
+        rejects(.unpair, "\"now\"", "string is not an object")
         rejects(.sessionAccept, "{\"client_nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"host_nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"display\":{\"display_id\":\"main\",\"width_px\":0,\"height_px\":1080,\"scale\":2},\"resume_window_s\":600}", "display width")
 
         let ok = try SignalingPayload.decode(type: .sessionResume, from: Data("{}".utf8))
         #expect(ok == .sessionResume(SessionResumePayload()))
+        let unpair = try SignalingPayload.decode(type: .unpair, from: Data("{}".utf8))
+        #expect(unpair == .unpair(UnpairPayload()))
+        #expect(try unpair.encoded() == Data("{}".utf8))
         let accept = try SignalingPayload.decode(type: .sessionAccept, from: Data("{\"client_nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"host_nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"display\":{\"display_id\":\"main\",\"width_px\":1920,\"height_px\":1080,\"scale\":2},\"resume_window_s\":600}".utf8))
         #expect(accept.type == .sessionAccept)
     }

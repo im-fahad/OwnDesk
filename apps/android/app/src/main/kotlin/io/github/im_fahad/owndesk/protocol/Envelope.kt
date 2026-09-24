@@ -30,7 +30,7 @@ data class Envelope(
         val TYPES = setOf(
             "PAIR_REQUEST", "PAIR_RESULT", "SESSION_REQUEST", "SESSION_CHALLENGE", "SESSION_AUTH",
             "SESSION_ACCEPT", "SESSION_REJECT", "SDP_OFFER", "SDP_ANSWER", "ICE_CANDIDATE",
-            "SESSION_RESUME", "SESSION_END",
+            "SESSION_RESUME", "SESSION_END", "UNPAIR",
         )
 
         val json = Json { ignoreUnknownKeys = false; encodeDefaults = true; explicitNulls = true }

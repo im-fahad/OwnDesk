@@ -63,6 +63,28 @@ enum E2E {
 }
 
 @Suite(.serialized) struct ControllerEndToEndTests {
+    @Test func unpairingRemovesThePairingOnTheHostToo() async throws {
+        let (agent, agentEvents) = try await E2E.startAgent(media: false)
+        let address = "127.0.0.1:\(agent.port)"
+        let identity = SoftwareIdentity()
+        let qr = await agent.coordinator.openPairing()
+        _ = try await PairingClient(identity: identity, deviceName: "Test MacBook").pair(qr: qr, preferredAddress: address)
+        #expect(agent.peers.peer(identity.deviceId) != nil)
+
+        let url = try #require(Endpoints.url(for: address))
+        let told = await UnpairClient.send(to: agent.identity.deviceId, urls: [url], identity: identity)
+        #expect(told, "the host took the UNPAIR and closed")
+        try await E2E.waitUntil("host forgets the device") { agent.peers.peer(identity.deviceId) == nil }
+        #expect(agentEvents.get().contains { if case .deviceUnpaired(let id, _) = $0 { return id == identity.deviceId } else { return false } })
+        await agent.stop()
+    }
+
+    @Test func unpairingAnUnreachableMacSaysSo() async throws {
+        let url = try #require(Endpoints.url(for: "127.0.0.1:1"))
+        let told = await UnpairClient.send(to: String(repeating: "a", count: 64), urls: [url], identity: SoftwareIdentity(), timeoutMs: 1000)
+        #expect(told == false)
+    }
+
     @Test func pairConnectStreamPingAndDisconnect() async throws {
         let (agent, agentEvents) = try await E2E.startAgent(media: true)
         let address = "127.0.0.1:\(agent.port)"

@@ -58,6 +58,12 @@ class RemoteSession(
         /** Whether the Mac is really capturing. A paused capture leaves the last frame on screen. */
         fun onCapture(state: String, detail: String?)
         fun onEnded(reason: String)
+
+        /**
+         * The Mac answered, with its own signature, that it does not have this phone paired: it was
+         * unpaired there. The phone drops the Mac too, so both sides must pair again.
+         */
+        fun onTurnedAway() {}
     }
 
     private var client: SignalingClient? = null
@@ -268,6 +274,7 @@ class RemoteSession(
             "SESSION_REJECT" -> {
                 val payload = Envelope.json.decodeFromString(SessionRejectPayload.serializer(), received.payloadJson)
                 val error = ProtocolException(explain(payload.reason))
+                if (payload.reason == "untrusted") listener.onTurnedAway()
                 challenge.completeExceptionally(error)
                 accepted.completeExceptionally(error)
                 if (challenge.isCompleted && accepted.isCompleted) listener.onEnded(explain(payload.reason))
@@ -325,7 +332,7 @@ class RemoteSession(
     private fun now(): Long = System.currentTimeMillis()
 
     private fun explain(reason: String): String = when (reason) {
-        "untrusted" -> "that Mac does not have this phone paired"
+        "untrusted" -> "that Mac no longer has this phone paired, so it was removed here too. Pair again to control it"
         "revoked" -> "this phone's access was revoked on that Mac"
         "remote_access_disabled" -> "that Mac is not letting others control it; turn Remote Access on"
         "busy" -> "that Mac is already in a session"

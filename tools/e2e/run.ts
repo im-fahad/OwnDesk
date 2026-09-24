@@ -251,6 +251,23 @@ async function main() {
     await runMedia(sessionId);
   }
 
+  await step('UNPAIR removes the controller on the host, which then turns it away', async () => {
+    const byController = async () => {
+      const s = new Signaling(signaling!.identity, hostId);
+      await s.connect(port, async (id) => (id === hostId ? hostKey : null));
+      return s;
+    };
+    const unpair = await byController();
+    await unpair.send('UNPAIR', '', {});
+    await agent.waitFor(/unpaired itself/, 5000);
+    unpair.close();
+    const again = await byController();
+    await again.send('SESSION_REQUEST', '', { client_nonce: randomNonce(), versions: [1], path: 'lan', capabilities: { codecs: ['H264'], max_height: 1080, max_fps: 60 } });
+    const { payload } = await again.waitFor(['SESSION_REJECT']);
+    again.close();
+    if (payload.reason !== 'untrusted') throw new Error(`reason ${payload.reason}`);
+  });
+
   await step('agent shuts down cleanly', async () => {
     await agent.stop();
     await agent.waitFor(/<<agent exited 0>>/, 5000);
@@ -370,6 +387,7 @@ async function runMedia(sessionId: string) {
     await peer.close();
     pc = null;
   });
+
 }
 
 function randomNonce() {

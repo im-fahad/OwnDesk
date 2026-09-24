@@ -127,6 +127,7 @@ connection (spec section 10).
 | `Endpoints.swift` | Address parsing and Bonjour service resolution to a `ws://` URL |
 | `SignalingClient.swift` | WebSocket client on Network.framework |
 | `PairingClient.swift` | PAIR_REQUEST with proof, PAIR_RESULT verified against the QR's key hash |
+| `UnpairClient.swift` | UNPAIR to a paired Mac, so it removes the pairing too |
 | `SessionClient.swift` | Authentication, offer, ICE, keepalive, reconnection, teardown |
 | `WebRTCClient.swift` | Peer connection as offerer, data channels, remote track, path detection |
 | `InputMapper.swift` | Letterbox-aware coordinate mapping, key code inversion, modifier and scroll mapping |

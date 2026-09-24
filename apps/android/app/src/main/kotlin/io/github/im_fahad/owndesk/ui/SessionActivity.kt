@@ -105,7 +105,7 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
         val peer = deviceId?.let { PeerStore(this).peer(it) }
         if (peer == null) {
-            Toast.makeText(this, "That Mac is not paired any more", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "That Mac is not paired any more. Pair again to control it.", Toast.LENGTH_LONG).show()
             finish()
             return
         }
@@ -653,6 +653,10 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         "paused_locked" -> "The Mac is locked. Its screen is frozen until it is unlocked."
         "paused_display_asleep" -> "The Mac's display is asleep. Its screen is frozen."
         else -> "The Mac stopped capturing its screen${detail?.let { " ($it)" } ?: ""}. Retrying."
+    }
+
+    override fun onTurnedAway() {
+        intent.getStringExtra(EXTRA_DEVICE_ID)?.let { PeerStore(this).forget(it) }
     }
 
     override fun onEnded(reason: String) {

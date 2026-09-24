@@ -160,8 +160,8 @@ cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDeb
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 31, agent 45, controller 15,
-android 58, end to end 16 steps, android frames 13.
+Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 31, agent 50, controller 17,
+android 61, end to end 17 steps, android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
 

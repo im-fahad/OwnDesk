@@ -25,6 +25,7 @@ export const SIGNALING_TYPES = [
   'ICE_CANDIDATE',
   'SESSION_RESUME',
   'SESSION_END',
+  'UNPAIR',
 ] as const;
 export type SignalingType = (typeof SIGNALING_TYPES)[number];
 

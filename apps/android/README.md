@@ -69,7 +69,9 @@ network first. Whatever answered last time is tried first the next time.
 Long press a Mac in the list for its options. **Choose an address** pins one, which is what to use
 when only Tailscale will reach it and the local address belongs to some other network's router.
 **Use any address** goes back to probing. The dot beside each Mac turns green when an address
-answers.
+answers. **Unpair this Mac** removes the pairing on both sides: the Mac is told when it can be
+reached, and both must pair again. When a Mac was unpaired on its side, the phone finds out on its
+next connection attempt and removes the Mac too.
 
 Reaching a Mac over Tailscale needs Tailscale running on the phone and on that Mac, both signed
 into the same tailnet.

@@ -158,6 +158,8 @@ enum OwnDeskAgentCLI {
             print("remote access \(on ? "ON" : "OFF")")
         case .deviceRevoked(let deviceId):
             print("revoked \(deviceId.prefix(12))…")
+        case .deviceUnpaired(let deviceId, let name):
+            print("\"\(name)\" unpaired itself (\(deviceId.prefix(12))…)")
         case .warning(let text):
             print("warning: \(text)")
         case .info(let text):

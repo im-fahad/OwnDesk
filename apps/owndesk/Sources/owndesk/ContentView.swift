@@ -204,6 +204,7 @@ struct HeaderButtonStyle: ButtonStyle {
 struct SidebarPanel: View {
     @EnvironmentObject var model: AppState
     @Binding var showPairing: Bool
+    @State private var unpairing: Peer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -211,7 +212,7 @@ struct SidebarPanel: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(model.hostablePeers) { peer in
-                        HostRow(host: peer, isSelected: model.selectedPeerId == peer.deviceId)
+                        HostRow(host: peer, isSelected: model.selectedPeerId == peer.deviceId, onUnpair: { unpairing = peer })
                             .onTapGesture { model.selectedPeerId = peer.deviceId }
                             .contextMenu { peerMenu(peer) }
                     }
@@ -228,7 +229,7 @@ struct SidebarPanel: View {
                         ForEach(inbound) { peer in
                             // No reachability dot: there is nothing on a controller for us to
                             // reach, so a grey one would only read as "offline".
-                            HostRow(host: peer, isSelected: false, showsReachability: false)
+                            HostRow(host: peer, isSelected: false, showsReachability: false, onUnpair: { unpairing = peer })
                                 .contextMenu { peerMenu(peer) }
                         }
                     }
@@ -249,6 +250,15 @@ struct SidebarPanel: View {
             HRule()
             thisMac
         }
+        .confirmationDialog(unpairing.map { "Unpair \($0.name)?" } ?? "", isPresented: Binding(
+            get: { unpairing != nil }, set: { if !$0 { unpairing = nil } }), presenting: unpairing) { peer in
+            Button("Unpair", role: .destructive) { model.unpair(peer.deviceId) }
+            Button("Cancel", role: .cancel) {}
+        } message: { peer in
+            Text(peer.type == .mac
+                 ? "Both Macs forget each other, in both directions, and must pair again to connect. If \(peer.name) cannot be reached now, unpair this Mac on it too."
+                 : "This Mac forgets it. The next time it tries to connect it is turned away and forgets this Mac too, and it must pair again.")
+        }
     }
 
     @ViewBuilder private func peerMenu(_ peer: Peer) -> some View {
@@ -263,7 +273,7 @@ struct SidebarPanel: View {
             get: { peer.mayControlUs },
             set: { model.setMayControlUs(peer.deviceId, $0) }))
         Divider()
-        Button("Forget \(peer.fingerprint)", role: .destructive) { model.forget(peer.deviceId) }
+        Button("Unpair \(peer.name)…", role: .destructive) { unpairing = peer }
     }
 
     private var thisMac: some View {
@@ -303,6 +313,7 @@ struct HostRow: View {
     let isSelected: Bool
     /// False for a device we never connect to, where a dot could only ever say "offline".
     var showsReachability: Bool = true
+    var onUnpair: (() -> Void)? = nil
     @State private var hovering = false
 
     var body: some View {
@@ -317,6 +328,14 @@ struct HostRow: View {
                 Text(host.fingerprint).font(Theme.sidebarMono).foregroundStyle(Theme.textDim)
             }
             Spacer(minLength: 0)
+            // Shown on hover so the list stays quiet, and also in the row's menu.
+            if hovering, let onUnpair {
+                Button(action: onUnpair) {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.textDim)
+                }
+                .buttonStyle(.plain)
+                .help("Unpair \(host.name)")
+            }
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background(isSelected ? Theme.selection : (hovering ? Theme.hover : .clear))
@@ -492,6 +511,8 @@ struct PairingSheet: View {
     @EnvironmentObject var model: AppState
     @Binding var isPresented: Bool
     @State private var mode = Mode.enter
+    /// When the code was last copied, for the confirmation that follows; nil once it has faded.
+    @State private var copiedAt: Date?
 
     enum Mode: String, CaseIterable, Identifiable {
         case enter, show
@@ -526,6 +547,17 @@ struct PairingSheet: View {
         .padding(20)
         .frame(width: 560)
         .background(Theme.header)
+        .overlay(alignment: .bottom) {
+            if copiedAt != nil {
+                Label("Code copied. Paste it on the other Mac within two minutes.", systemImage: "checkmark.circle.fill")
+                    .font(Theme.uiSecondary).foregroundStyle(Theme.text)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Theme.content, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.border))
+                    .padding(.bottom, 14)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .preferredColorScheme(.dark)
     }
 
@@ -546,6 +578,17 @@ struct PairingSheet: View {
                 .padding(.horizontal, 7).padding(.vertical, 4)
                 .background(Theme.content, in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border))
+        }
+    }
+
+    /// Copies the code and says so for two seconds; a second copy restarts the two seconds.
+    private func copyCode() {
+        model.copyInvite()
+        let now = Date()
+        withAnimation(.easeOut(duration: 0.2)) { copiedAt = now }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if copiedAt == now { withAnimation(.easeIn(duration: 0.3)) { copiedAt = nil } }
         }
     }
 
@@ -574,13 +617,19 @@ struct PairingSheet: View {
                         .padding(18).background(Color.white).cornerRadius(8)
                         .frame(maxWidth: .infinity)
                 }
-                Text("Scan this with the phone, or copy the text and paste it on the other Mac.")
+                Text("Scan this with the phone, or copy the text and paste it on the other Mac. If the phone struggles, show it full screen and hold the phone further back.")
                     .font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text("This Mac's fingerprint").font(Theme.uiSecondary).foregroundStyle(Theme.textDim)
                     Text(model.fingerprint).font(.system(size: 18, design: .monospaced)).foregroundStyle(Theme.text)
+                }
+                HStack(spacing: 10) {
+                    if let image = invite.image {
+                        Button("Show full screen") { PairingCodeWindow.show(image: image, fingerprint: model.fingerprint) }
+                            .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
+                    }
+                    Button(copiedAt == nil ? "Copy code" : "Copied ✓") { copyCode() }.buttonStyle(HeaderButtonStyle(tint: Theme.accent))
                     Spacer()
-                    Button("Copy code") { model.copyInvite() }.buttonStyle(HeaderButtonStyle(tint: Theme.accent))
                     Button("Cancel") { model.cancelPairing() }.buttonStyle(HeaderButtonStyle(tint: Theme.textDim))
                 }
             }

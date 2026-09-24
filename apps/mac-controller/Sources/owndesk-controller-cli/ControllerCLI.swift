@@ -32,7 +32,7 @@ enum ControllerCLI {
                                                    status | peers | hosting off | pending | deny |
                                                    connect <peer> [address] | disconnect | end-incoming |
                                                    stats | allow <peer> control-us|we-control off |
-                                                   forget <peer> | quality <preset> | panels | quit
+                                                   unpair <peer> | forget <peer> | quality <preset> | panels | quit
 
     Options: --data-dir <path>  --name <text>  --keychain (use the Keychain instead of <data-dir>/identity.key)
     """

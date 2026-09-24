@@ -346,6 +346,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 If they do not match, deny: someone else is trying to pair. That comparison is the whole security
 of pairing, so it is worth the two seconds.
 
+If the phone will not read the code, choose **Show full screen** under it. The code fills the display,
+and the phone can read it from further back, where its camera focuses. Click or press Esc to go back;
+it also goes away by itself when the phone's request arrives, so the approval is never hidden.
+
+To unpair, hover over a device in the sidebar and click ⓧ, or right-click it and choose
+**Unpair…**. On the phone, long-press the Mac and choose **Unpair this Mac**. Unpairing on either
+side ends the pairing on both, and they must pair again. Another Mac is told at once when it can be
+reached. A phone never listens, so it finds out the next time it tries to connect: the Mac turns it
+away and the phone removes the Mac itself. If the other side cannot be reached, OwnDesk says so, and
+you unpair there too.
+
 ### 6.5 Control from a Mac
 
 | Control | What it does |
@@ -468,10 +479,10 @@ Last run, all passing:
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
 | `packages/swift` | 31 tests | The same vectors on Swift, plus peers and the control channel |
-| `apps/mac-agent` | 45 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
-| `apps/mac-controller` | 15 tests | Geometry, key maps, and an in-process agent round trip with real video |
-| `apps/android` | 58 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
-| `npm run e2e` | 16 steps | The real agent binary, driven from Node by an independent WebRTC stack |
+| `apps/mac-agent` | 50 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
+| `apps/mac-controller` | 17 tests | Geometry, key maps, and an in-process agent round trip with real video |
+| `apps/android` | 61 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
+| `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
 | `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
 
 The vectors are the ones that matter: if the phone disagrees with a vector it disagrees with both

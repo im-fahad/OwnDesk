@@ -292,3 +292,68 @@ import Testing
         #expect(h.peers.controllerKey(h.controller.deviceId) == nil, "verification fails closed once revoked")
     }
 }
+
+@Suite struct UnpairTests {
+    private func unpaired(_ h: Harness, _ deviceId: String) -> Bool {
+        h.events.get().contains { if case .deviceUnpaired(let id, _) = $0 { return id == deviceId } else { return false } }
+    }
+
+    @Test func aDeviceThatUnpairsIsForgottenAndCannotReconnect() async throws {
+        let h = Harness()
+        h.trustController()
+        let replies = try await h.send(.unpair(UnpairPayload()))
+        #expect(replies.isEmpty)
+        #expect(h.peers.peer(h.controller.deviceId) == nil)
+        #expect(h.transport.closed.contains(h.controller.connection))
+        try await waitUntil("unpaired event") { unpaired(h, h.controller.deviceId) }
+
+        let after = try await h.send(Harness.request)
+        guard after.count == 1, case .sessionReject(let r) = after[0].1 else { Issue.record("expected SESSION_REJECT"); return }
+        #expect(r.reason == .untrusted)
+    }
+
+    @Test func aMacWeControlButThatCannotControlUsCanUnpairToo() async throws {
+        let h = Harness()
+        try h.peers.pair(deviceId: h.controller.deviceId, publicKey: h.controller.identity.publicKeyB64, name: "Other Mac", type: .mac,
+                         mayControlUs: false, weMayControl: true, now: h.clock.now())
+        _ = try await h.send(.unpair(UnpairPayload()))
+        #expect(h.peers.peer(h.controller.deviceId) == nil)
+        try await waitUntil("unpaired event") { unpaired(h, h.controller.deviceId) }
+    }
+
+    @Test func nobodyElseCanUnpairADevice() async throws {
+        let h = Harness()
+        h.trustController()
+        let stranger = TestController(hostPublicKey: h.hostIdentity.publicKeyRaw, now: h.clock.now)
+        // Unknown to the host: refused.
+        await h.coordinator.handleText(try stranger.text(.unpair(UnpairPayload()), to: h.hostId, session: ""), from: stranger.connection)
+        // Claiming to be the paired device, signed with the wrong key: refused.
+        let forged = try stranger.text(.unpair(UnpairPayload()), to: h.hostId, session: "")
+            .replacingOccurrences(of: stranger.deviceId, with: h.controller.deviceId)
+        await h.coordinator.handleText(forged, from: stranger.connection)
+        #expect(h.peers.peer(h.controller.deviceId) != nil)
+        #expect(!unpaired(h, h.controller.deviceId))
+        #expect(h.transport.closed.contains(stranger.connection))
+    }
+
+    @Test func aReplayedUnpairDoesNotEndAPairingMadeAgain() async throws {
+        let h = Harness()
+        h.trustController()
+        let unpair = try h.controller.text(.unpair(UnpairPayload()), to: h.hostId, session: "")
+        await h.coordinator.handleText(unpair, from: h.controller.connection)
+        #expect(h.peers.peer(h.controller.deviceId) == nil)
+        h.trustController()
+        await h.coordinator.handleText(unpair, from: h.controller.connection)
+        #expect(h.peers.peer(h.controller.deviceId) != nil, "the same UNPAIR again must not undo the new pairing")
+    }
+
+    @Test func unpairingDuringASessionEndsIt() async throws {
+        let h = Harness()
+        h.trustController()
+        _ = try await h.authenticate()
+        #expect(await h.coordinator.hasActiveSession)
+        _ = try await h.send(.unpair(UnpairPayload()))
+        #expect(await h.coordinator.hasActiveSession == false)
+        #expect(h.peers.peer(h.controller.deviceId) == nil)
+    }
+}

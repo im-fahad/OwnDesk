@@ -29,6 +29,7 @@ import io.github.im_fahad.owndesk.protocol.Encoding
 import io.github.im_fahad.owndesk.protocol.Identity
 import io.github.im_fahad.owndesk.protocol.Peer
 import io.github.im_fahad.owndesk.session.PairingClient
+import io.github.im_fahad.owndesk.session.UnpairClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -289,7 +290,7 @@ class MainActivity : AppCompatActivity() {
     private fun showPeerOptions(peer: Peer) {
         AlertDialog.Builder(this)
             .setTitle(peer.name)
-            .setItems(arrayOf("Choose an address", "Use any address", "Forget this Mac")) { _, which ->
+            .setItems(arrayOf("Choose an address", "Use any address", "Unpair this Mac")) { _, which ->
                 when (which) {
                     0 -> askForAddress(peer)
                     1 -> {
@@ -297,13 +298,34 @@ class MainActivity : AppCompatActivity() {
                         log("${peer.name} will use whichever address answers")
                         refreshPeers()
                     }
-                    2 -> {
-                        peers.forget(peer.deviceId)
-                        log("forgot ${peer.name}")
-                        refreshPeers()
-                    }
+                    2 -> confirmUnpair(peer)
                 }
             }
+            .show()
+    }
+
+    /**
+     * Removes the pairing on both sides, so both must pair again. The Mac is told with a signed
+     * UNPAIR when it can be reached; when it cannot, it still lists this phone, and the person is
+     * asked to unpair the phone there too.
+     */
+    private fun confirmUnpair(peer: Peer) {
+        AlertDialog.Builder(this)
+            .setTitle("Unpair ${peer.name}?")
+            .setMessage("This phone and the Mac forget each other, and must pair again before this phone can control it.")
+            .setPositiveButton("Unpair") { _, _ ->
+                val addresses = (listOfNotNull(onThisNetwork[peer.deviceId]) + peer.candidates()).distinct()
+                peers.forget(peer.deviceId)
+                refreshPeers()
+                lifecycleScope.launch {
+                    val told = UnpairClient(identity).unpair(peer.deviceId, addresses)
+                    log(
+                        if (told) "unpaired ${peer.name} on both sides"
+                        else "unpaired ${peer.name} here, but it could not be reached: unpair this phone on the Mac too"
+                    )
+                }
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

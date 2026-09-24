@@ -264,6 +264,17 @@ public struct SessionEndPayload: WirePayload {
     public func validate() throws {}
 }
 
+/// The sender has removed the pairing and asks the host to remove it too. It carries nothing: the
+/// signature on the envelope is what proves it came from the paired device itself.
+public struct UnpairPayload: WirePayload {
+    // An empty struct's synthesized Codable accepts any JSON. Require a JSON object like the schema does.
+    private enum CodingKeys: CodingKey {}
+    public init() {}
+    public init(from decoder: Decoder) throws { _ = try decoder.container(keyedBy: CodingKeys.self) }
+    public func encode(to encoder: Encoder) throws { _ = encoder.container(keyedBy: CodingKeys.self) }
+    public func validate() throws {}
+}
+
 public enum SignalingType: String, CaseIterable, Sendable {
     case pairRequest = "PAIR_REQUEST"
     case pairResult = "PAIR_RESULT"
@@ -277,6 +288,7 @@ public enum SignalingType: String, CaseIterable, Sendable {
     case iceCandidate = "ICE_CANDIDATE"
     case sessionResume = "SESSION_RESUME"
     case sessionEnd = "SESSION_END"
+    case unpair = "UNPAIR"
 }
 
 /// A decoded and validated signaling payload.
@@ -293,6 +305,7 @@ public enum SignalingPayload: Sendable, Equatable {
     case iceCandidate(IceCandidatePayload)
     case sessionResume(SessionResumePayload)
     case sessionEnd(SessionEndPayload)
+    case unpair(UnpairPayload)
 
     public var type: SignalingType {
         switch self {
@@ -308,6 +321,7 @@ public enum SignalingPayload: Sendable, Equatable {
         case .iceCandidate: .iceCandidate
         case .sessionResume: .sessionResume
         case .sessionEnd: .sessionEnd
+        case .unpair: .unpair
         }
     }
 
@@ -332,6 +346,7 @@ public enum SignalingPayload: Sendable, Equatable {
         case .iceCandidate: return .iceCandidate(try dec(IceCandidatePayload.self))
         case .sessionResume: return .sessionResume(try dec(SessionResumePayload.self))
         case .sessionEnd: return .sessionEnd(try dec(SessionEndPayload.self))
+        case .unpair: return .unpair(try dec(UnpairPayload.self))
         }
     }
 
@@ -351,6 +366,7 @@ public enum SignalingPayload: Sendable, Equatable {
         case .iceCandidate(let p): return try e.encode(p)
         case .sessionResume(let p): return try e.encode(p)
         case .sessionEnd(let p): return try e.encode(p)
+        case .unpair(let p): return try e.encode(p)
         }
     }
 }

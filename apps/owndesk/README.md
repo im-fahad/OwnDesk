@@ -41,7 +41,14 @@ then two separate permissions you can withdraw one at a time, from a peer's cont
 - **It may control this Mac**, which lets it open a session here when hosting is on.
 
 Pair from either end: **Show a code** on one Mac and paste it on the other. A phone pairs from the
-same code, by scanning the QR with its camera.
+same code, by scanning the QR with its camera. **Show full screen** fills the display with the code
+for a phone that struggles with the small one; it closes on a click, on Esc, or by itself when the
+phone's request arrives.
+
+**Unpair…** in a device's right-click menu, or the ⓧ that appears on hover, ends the pairing on both
+sides, and both must pair again. Another Mac is told at once with a signed `UNPAIR` when it can be
+reached; a phone finds out the next time it tries to connect, when this Mac turns it away. If the
+other device cannot be reached, OwnDesk says so, and you unpair it there too.
 
 ## The window, and the menu bar
 
@@ -86,7 +93,7 @@ turn on the matching permission on each Mac.
 owndesk-controller-cli app status | peers | hosting off
 owndesk-controller-cli app pending | deny
 owndesk-controller-cli app connect <peer> [address] | disconnect | end-incoming | stats
-owndesk-controller-cli app allow <peer> control-us|we-control off | forget <peer>
+owndesk-controller-cli app allow <peer> control-us|we-control off | unpair <peer> | forget <peer>
 owndesk-controller-cli app quality <preset> | panels [sidebar|log|text] | quit
 ```
 

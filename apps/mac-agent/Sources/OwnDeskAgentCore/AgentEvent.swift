@@ -16,6 +16,8 @@ public enum AgentEvent: Sendable {
     case rejected(deviceId: String, reason: SessionRejectReason)
     case remoteAccessChanged(Bool)
     case deviceRevoked(deviceId: String)
+    /// The device removed the pairing on its side, and it is now gone here too.
+    case deviceUnpaired(deviceId: String, deviceName: String)
     case warning(String)
     case info(String)
 }

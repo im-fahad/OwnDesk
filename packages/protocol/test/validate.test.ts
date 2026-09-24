@@ -37,6 +37,7 @@ const validSignaling: Record<(typeof SIGNALING_TYPES)[number], object> = {
   ICE_CANDIDATE: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host', sdp_mid: '0', sdp_mline_index: 0 },
   SESSION_RESUME: {},
   SESSION_END: { reason: 'user' },
+  UNPAIR: {},
 };
 
 test('every signaling payload has a passing sample and fails when a required field is missing', () => {

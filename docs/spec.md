@@ -406,6 +406,32 @@ Rejection reasons: `denied`, `expired`, `bad_proof`, `busy`.
 - Three failed proofs cancel the pairing session.
 - The local CLI can print the pairing text and approve a fingerprint for headless setups over LAN SSH. It is a local command, not a remote protocol.
 
+### 7.6 Unpairing
+
+Unpairing on either side ends the pairing on both, so both must pair again from scratch.
+
+- The side that unpairs removes the peer first, so nothing can reconnect meanwhile, and ends any
+  session with it.
+- It then tells the other device with `UNPAIR`, an envelope with an empty payload, in the empty
+  session namespace, sent over the other device's signaling endpoint:
+
+  ```json
+  {}
+  ```
+
+  A host accepts `UNPAIR` from any paired device, whichever way the pairing goes, checked against
+  that device's key and by a receiver that handles no other type. It removes the peer in both
+  directions, ends a session from it, and closes the connection, which is the sender's
+  acknowledgement. It keeps the timestamp of the newest `UNPAIR` from each device and refuses any
+  that is not newer, so a captured copy cannot end a pairing made again inside the clock window.
+- Only hosts listen, so a phone cannot be told. It finds out the next time it tries to connect: the
+  host answers `SESSION_REJECT` with `untrusted`, signed with the host's key the phone already
+  holds, and the phone removes the host. A Mac that gets the same answer withdraws only its right to
+  control that host, because `untrusted` also means the host stopped letting it control it, and
+  removes the peer entirely when no direction is left.
+- A host that is off, asleep or not hosting cannot be told either. The side that unpaired says so,
+  and the person unpairs on the other device too.
+
 ---
 
 ## 8. Session establishment and authentication
@@ -940,6 +966,8 @@ that someone is connected.
   controlled is its own hosting switch.
 - Revoke: remove the entry, send `SESSION_END` with `revoked`, and close any active session from
   that device. It must pair again from scratch.
+- Unpair: revoke, remove the entry in both directions, and tell the other device with `UNPAIR`
+  (section 7.6), so that neither keeps a trust the other has dropped.
 - Hosting off: reject new sessions with `remote_access_disabled`, end existing ones, stop Bonjour,
   close the endpoint. On: reverse all of that. This switch is local-only and cannot be flipped
   remotely — that is the point of it.

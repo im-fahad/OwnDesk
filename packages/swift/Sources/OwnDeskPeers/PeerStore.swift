@@ -64,6 +64,12 @@ public final class PeerStore: @unchecked Sendable {
         return p.publicKeyRaw
     }
 
+    /// The key of any paired device, whichever way the pairing goes. Only an UNPAIR is checked with
+    /// it: every other message needs the narrower key for its direction above.
+    public func pairedKey(_ deviceId: String) -> Data? {
+        peer(deviceId)?.publicKeyRaw
+    }
+
     // MARK: Writing
 
     /// Records a pairing. Existing permissions are widened, never narrowed: pairing again should not

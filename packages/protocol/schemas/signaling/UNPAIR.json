@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owndesk.local/schemas/signaling/UNPAIR.json",
+  "description": "The sender has removed the pairing and asks the host to remove it too. Signed like every envelope, so only the paired device itself can end the pairing.",
+  "type": "object",
+  "properties": {}
+}

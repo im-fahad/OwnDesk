@@ -66,6 +66,12 @@ public actor SessionCoordinator {
     private nonisolated let deps: Dependencies
     private var sender: EnvelopeSender
     private var receiver: EnvelopeReceiver
+    /// UNPAIR alone may come from a device that is not allowed to control us, such as a Mac we
+    /// control, so it is checked against any paired key, by a receiver that handles nothing else.
+    private var unpairReceiver: EnvelopeReceiver
+    /// The newest UNPAIR accepted from each device. A copy replayed after the two pair again, still
+    /// inside the clock window, is older than this and is refused.
+    private var lastUnpairTs: [String: Int64] = [:]
     private var connections: [ConnectionID: String] = [:]
     private var deviceConnections: [String: ConnectionID] = [:]
     private var pairing: PairingState?
@@ -87,6 +93,7 @@ public actor SessionCoordinator {
         // Only a peer allowed to control us can have its envelopes verified, so revocation fails
         // closed without a separate check on every message.
         receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.controllerKey($0) }, now: deps.now)
+        unpairReceiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
         var continuation: AsyncStream<AgentEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation = $0 }
         eventContinuation = continuation
@@ -109,6 +116,14 @@ public actor SessionCoordinator {
 
     public func handleText(_ text: String, from connection: ConnectionID) async {
         let data = Data(text.utf8)
+        if (try? JSONDecoder().decode(Envelope.self, from: data))?.type == SignalingType.unpair.rawValue {
+            if case .accepted(let env, .unpair, _) = unpairReceiver.receive(data) {
+                await handleUnpair(env, connection: connection)
+            } else {
+                deps.transport.close(connection)
+            }
+            return
+        }
         let result = receiver.receive(data)
         switch result {
         case .rejected(let reason, let detail):
@@ -131,7 +146,7 @@ public actor SessionCoordinator {
             case .iceCandidate(let p): handleIceCandidate(env, p)
             case .sessionResume: await handleSessionResume(env, connection: connection)
             case .sessionEnd(let p): await handleSessionEnd(env, p)
-            case .pairResult, .sessionChallenge, .sessionAccept, .sessionReject, .sdpAnswer:
+            case .pairResult, .sessionChallenge, .sessionAccept, .sessionReject, .sdpAnswer, .unpair:
                 Log.session.notice("ignoring controller-bound type \(env.type, privacy: .public)")
             }
         }
@@ -554,6 +569,25 @@ public actor SessionCoordinator {
         }
         if let connection = deviceConnections[deviceId] { deps.transport.close(connection) }
         emit(.deviceRevoked(deviceId: deviceId))
+    }
+
+    /// A paired device removed the pairing on its side and asks us to do the same, so neither end
+    /// keeps a trust the other has dropped. The envelope is signed with that device's own key, so
+    /// nobody else can end its pairing.
+    private func handleUnpair(_ env: Envelope, connection: ConnectionID) async {
+        guard let peer = deps.peers.peer(env.from), env.ts > (lastUnpairTs[env.from] ?? 0) else {
+            deps.transport.close(connection)
+            return
+        }
+        lastUnpairTs[env.from] = env.ts
+        if let s = session, s.deviceId == env.from {
+            await tearDown(reason: .revoked, notify: true)
+        }
+        _ = try? deps.peers.forget(env.from)
+        receiver.forgetSender(env.from)
+        unpairReceiver.forgetSender(env.from)
+        deps.transport.close(connection)
+        emit(.deviceUnpaired(deviceId: env.from, deviceName: peer.name))
     }
 
     public func setRemoteAccess(_ enabled: Bool) async {

@@ -18,6 +18,7 @@ export interface ProtocolCatalog {
   signaling_SESSION_REJECT?: SessionRejectPayload;
   signaling_SESSION_REQUEST?: SessionRequestPayload;
   signaling_SESSION_RESUME?: SessionResumePayload;
+  signaling_UNPAIR?: UnpairPayload;
   datachannel_bye?: ByeMessage;
   datachannel_capture_state?: CaptureStateMessage;
   datachannel_display_info?: DisplayInfoMessage;
@@ -216,6 +217,10 @@ export interface SessionRequestPayload {
   };
 }
 export interface SessionResumePayload {}
+/**
+ * The sender has removed the pairing and asks the host to remove it too. Signed like every envelope, so only the paired device itself can end the pairing.
+ */
+export interface UnpairPayload {}
 export interface ByeMessage {
   v: number;
   type: "bye";

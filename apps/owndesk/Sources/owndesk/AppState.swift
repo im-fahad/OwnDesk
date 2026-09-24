@@ -74,8 +74,14 @@ final class AppState: ObservableObject {
     @Published var hostPort: UInt16 = 0
     @Published var hostAddresses: [String] = []
     @Published var incoming: IncomingSession?
-    @Published var pendingRequest: PendingRequest?
-    @Published var invite: PairingInvite?
+    /// A request to compare and approve must never sit behind the full-screen code.
+    @Published var pendingRequest: PendingRequest? {
+        didSet { if pendingRequest != nil { PairingCodeWindow.close() } }
+    }
+    /// The full-screen code shows this invite, so it goes when the invite does.
+    @Published var invite: PairingInvite? {
+        didSet { if invite == nil { PairingCodeWindow.close() } }
+    }
     @Published var pairingOutcome: String?
     @Published var screenRecording = Permissions.screenRecordingGranted
     @Published var accessibility = Permissions.accessibilityGranted
@@ -300,6 +306,11 @@ final class AppState: ObservableObject {
             if !on { incoming = nil }
         case .deviceRevoked:
             refreshPeers()
+        case .deviceUnpaired(let deviceId, let name):
+            refreshPeers()
+            if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
+            append("\(name) unpaired itself from this Mac")
+            notify("\(name) unpaired", "It removed its pairing with this Mac. Pair again to use it.")
         case .warning(let text), .info(let text):
             lastMessage = text
             append(text)
@@ -398,6 +409,47 @@ final class AppState: ObservableObject {
         if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
     }
 
+    /// Removes a pairing on both sides, so both must pair again. Another Mac is told with a signed
+    /// UNPAIR when it can be reached. A phone never listens, so it finds out the next time it tries to
+    /// connect: this Mac turns it away, and the phone drops the pairing itself.
+    func unpair(_ deviceId: String) {
+        guard let peer = peers.peer(deviceId) else { return }
+        if selectedPeerId == deviceId, isBusy { disconnect() }
+        let found = discoveredPeer(for: deviceId)
+        Task {
+            if let agent { await agent.coordinator.revoke(deviceId: deviceId) }
+            forget(deviceId)
+            guard peer.type == .mac else {
+                append("unpaired \(peer.name); it must pair again to connect")
+                return
+            }
+            var urls: [URL] = []
+            if let found, let url = await Endpoints.resolve(found.endpoint) { urls.append(url) }
+            urls += peer.addresses.compactMap { Endpoints.url(for: $0) }
+            if await UnpairClient.send(to: deviceId, urls: urls, identity: identity) {
+                append("unpaired \(peer.name) on both Macs")
+            } else {
+                append("unpaired \(peer.name) here, but it could not be reached: unpair this Mac on it too")
+                notify("\(peer.name) was not told", "It could not be reached, so it still lists this Mac. Unpair this Mac on it too.")
+            }
+        }
+    }
+
+    /// A Mac we tried to control answered, with its own signature, that it does not know this Mac any
+    /// more: it unpaired us, or stopped letting us control it. Mirror that here, instead of offering a
+    /// connection it can only refuse.
+    private func turnedAway(by peer: Peer) {
+        try? peers.setWeMayControl(peer.deviceId, false)
+        if peers.peer(peer.deviceId)?.mayControlUs == false { _ = try? peers.forget(peer.deviceId) }
+        refreshPeers()
+        if selectedPeerId == peer.deviceId { selectedPeerId = peers.hosts.first?.deviceId }
+        let text = peers.peer(peer.deviceId) == nil
+            ? "\(peer.name) no longer has this Mac paired. Pair again to control it."
+            : "\(peer.name) no longer lets this Mac control it."
+        lastMessage = text
+        append(text)
+    }
+
     func endIncoming() {
         guard let agent else { return }
         Task { await agent.coordinator.endSession(reason: .user) }
@@ -447,6 +499,9 @@ final class AppState: ObservableObject {
                 case .state(let s):
                     self.state = s
                     self.append(Self.describe(s))
+                    if case .ended(let reason) = s, reason == "rejected: \(SessionRejectReason.untrusted.rawValue)" {
+                        self.turnedAway(by: peer)
+                    }
                     if case .connected = s {
                         self.peers.touchConnected(peer.deviceId, at: currentMs(), address: addressUsed)
                         self.refreshPeers()
@@ -695,6 +750,13 @@ final class AppState: ObservableObject {
             if request.args[1] == "control-us" { setMayControlUs(peer.deviceId, false) } else { setWeMayControl(peer.deviceId, false) }
             let after = peers.peer(peer.deviceId)
             return ControlResponse(ok: true, message: "\(peer.name): may-control-us \(after?.mayControlUs ?? false), we-may-control \(after?.weMayControl ?? false)")
+        case "unpair":
+            guard let needle = request.args.first, let peer = peerList.first(where: { $0.deviceId.hasPrefix(needle.lowercased()) || $0.fingerprint.hasPrefix(needle.uppercased()) }) else {
+                return .failure("unpair needs a peer id or fingerprint prefix")
+            }
+            unpair(peer.deviceId)
+            _ = await waitUntil(8000, { log.first?.contains("unpaired \(peer.name)") == true })
+            return ControlResponse(ok: true, message: log.first ?? "unpaired \(peer.name)")
         case "forget":
             guard let needle = request.args.first, let peer = peerList.first(where: { $0.deviceId.hasPrefix(needle.lowercased()) || $0.fingerprint.hasPrefix(needle.uppercased()) }) else {
                 return .failure("forget needs a peer id or fingerprint prefix")
@@ -739,6 +801,9 @@ final class AppState: ObservableObject {
         guard let invite else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(invite.payloadText, forType: .string)
+        // A pairing code is a secret. Clipboard managers that keep a history skip items marked as
+        // concealed, the convention described at nspasteboard.org.
+        NSPasteboard.general.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
     }
 
     func quit() {

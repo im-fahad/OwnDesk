@@ -133,6 +133,22 @@ class ProtocolVectorTest {
     }
 
     @Test
+    fun `an UNPAIR the phone sends is accepted by the Mac it is addressed to`() {
+        val keys = Vectors.load("test-keys.json").jsonObject["keys"]!!.jsonObject["controller"]!!.jsonObject
+        val identity = TestIdentity(keys["x"]!!.jsonPrimitive.content, keys["y"]!!.jsonPrimitive.content, keys["d"]!!.jsonPrimitive.content)
+        val host = "2".repeat(64)
+        val envelope = EnvelopeSender(identity) { 1_757_203_200_000L }.build("UNPAIR", host, "", "{}")
+        val receiver = EnvelopeReceiver(
+            selfDeviceId = host,
+            resolveKey = { if (it == identity.deviceId) Identity.publicKey(identity.publicKeyRaw) else null },
+            now = { 1_757_203_200_000L },
+        )
+        val result = receiver.receive(envelope.serialize())
+        assertTrue("expected UNPAIR to be accepted, got $result", result is ReceiveResult.Accepted)
+        assertEquals("UNPAIR", (result as ReceiveResult.Accepted).envelope.type)
+    }
+
+    @Test
     fun `seq counts up per recipient and session`() {
         val keys = Vectors.load("test-keys.json").jsonObject["keys"]!!.jsonObject["controller"]!!.jsonObject
         val identity = TestIdentity(keys["x"]!!.jsonPrimitive.content, keys["y"]!!.jsonPrimitive.content, keys["d"]!!.jsonPrimitive.content)
