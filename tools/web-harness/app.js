@@ -41,9 +41,9 @@ const state = {
 const ts = () => Math.round(performance.now() - state.t0);
 
 function loadHosts() {
-  try { state.hosts = JSON.parse(localStorage.getItem('prc.hosts') || '{}'); } catch { state.hosts = {}; }
+  try { state.hosts = JSON.parse(localStorage.getItem('owndesk.hosts') || '{}'); } catch { state.hosts = {}; }
 }
-function saveHosts() { localStorage.setItem('prc.hosts', JSON.stringify(state.hosts)); }
+function saveHosts() { localStorage.setItem('owndesk.hosts', JSON.stringify(state.hosts)); }
 
 function renderHosts() {
   const select = $('host');
@@ -101,7 +101,7 @@ function waitFor(types, timeoutMs = 15000) {
 async function pair() {
   let qr;
   try { qr = JSON.parse($('qr').value.trim()); } catch { log('paste the QR payload JSON first', 'err'); return; }
-  if (qr.kind !== 'prc-pair') { log('not a PRC pairing payload', 'err'); return; }
+  if (qr.kind !== 'owndesk-pair') { log('not a OwnDesk pairing payload', 'err'); return; }
   if (Date.now() > qr.expires_at) { log('this pairing payload has expired', 'err'); return; }
   const address = $('pairAddress').value.trim() || qr.addresses[0];
   setStatus(`pairing with ${qr.host_name} at ${address}`);
@@ -437,7 +437,7 @@ async function boot() {
   $('forget').addEventListener('click', () => { delete state.hosts[$('host').value]; saveHosts(); $('address').value = ''; renderHosts(); });
   $('resetIdentity').addEventListener('click', () => {
     if (!confirm('Reset this browser\'s identity? Every host will need to pair again.')) return;
-    P.resetIdentity(); localStorage.removeItem('prc.hosts'); location.reload();
+    P.resetIdentity(); localStorage.removeItem('owndesk.hosts'); location.reload();
   });
   log(`identity ${state.identity.fingerprint} ready`);
 }

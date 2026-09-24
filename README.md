@@ -1,16 +1,19 @@
-# PRC: Personal Remote Control
+# OwnDesk
 
-Private, self-hosted remote control for your own machines. A Mac shows its screen to another Mac
-or to an Android phone, and takes that device's mouse, trackpad, touch and keyboard. Nothing is
-published, no account is created, no third party is involved, and no remote-control port is ever
-exposed to the Internet.
+Private remote control for your own devices.
 
-Screen and input travel only inside an encrypted WebRTC connection. Every message that sets up a
-session is signed by a per-device key, so neither the network, nor a relay, nor anything in the
-middle can impersonate a device, read a session, or inject a keystroke.
+Control a Mac from another Mac or an Android phone (screen, mouse, trackpad, touch and keyboard)
+with no account, no cloud service, and no port open to the Internet. Devices pair once by scanning
+a code. Every session is end-to-end encrypted over WebRTC, and every message that sets one up is
+signed by a key that never leaves its device, so neither the network, nor a relay, nor anything in
+the middle can impersonate a device, read a session, or inject a keystroke.
 
-- The design: [docs/spec.md](docs/spec.md)
-- What was built and what it cost to learn: [docs/implementation.md](docs/implementation.md)
+**Runs on:** macOS 14+ (host and controller) · Android 8+ (controller)<br>
+**Away from home:** through [Tailscale](https://tailscale.com), with no port forwarding<br>
+**Status:** early, used daily on the author's own devices
+
+[Quick start](#6-user-guide) · [How it works](#3-architecture) · [Security](SECURITY.md) ·
+[The design](docs/spec.md) · [What was built](docs/implementation.md) · [License: MIT](LICENSE)
 
 **Contents** — [The devices](#1-the-devices) · [Technology](#2-technology) ·
 [Architecture](#3-architecture) · [The two halves](#4-the-two-halves-hosting-and-controlling) ·
@@ -25,9 +28,9 @@ middle can impersonate a device, read a session, or inject a keystroke.
 
 | Device | Runs | Can host | Can control |
 |---|---|---|---|
-| Mac mini | `PRC.app` | yes | yes |
-| MacBook | `PRC.app` | yes | yes |
-| Android phone | `PRC` (`com.prc.controller`) | no | yes |
+| Mac mini | `OwnDesk.app` | yes | yes |
+| MacBook | `OwnDesk.app` | yes | yes |
+| Android phone | `OwnDesk` (`io.github.im_fahad.owndesk`) | no | yes |
 
 One Mac app fills both roles. A Mac can be controlled, control another, or do both at once.
 Hosting is a switch that is **off** until you turn it on, so installing the app never makes a Mac
@@ -57,14 +60,14 @@ remotely controllable on its own. The phone only controls, which is why its app 
 |---|---|
 | Language | Swift 6 toolchain, Swift 5 language mode, macOS 14+ |
 | App | SwiftUI + AppKit: a menu bar item with a window on demand |
-| Key storage | Secure Enclave via `PRCIdentity`, or the Keychain, or a file in development |
+| Key storage | Secure Enclave via `OwnDeskIdentity`, or the Keychain, or a file in development |
 | Signaling transport | WebSocket over Network.framework, port 47500 |
-| Discovery | Bonjour, `_prc._tcp`, device id in the TXT record |
+| Discovery | Bonjour, `_owndesk._tcp`, device id in the TXT record |
 | Screen capture | ScreenCaptureKit → NV12 pixel buffers |
 | Encode / decode | libwebrtc ([stasel/WebRTC](https://github.com/stasel/WebRTC) 152) with VideoToolbox H.264 |
 | Input injection | CGEvent (Quartz), with rate limits and click-count tracking |
 | Video display | `RTCMTLNSVideoView`, Metal |
-| Runs at login | LaunchAgent `com.prc.app`, restarts after a crash, not after Quit |
+| Runs at login | LaunchAgent `io.github.im-fahad.owndesk`, restarts after a crash, not after Quit |
 | Signing | Ad-hoc. No certificate, by choice: these apps never leave your machines |
 
 ### On Android
@@ -94,7 +97,7 @@ speaks WebRTC without libwebrtc, and a browser harness for poking at a host by h
 
 ```text
    ┌────────────────────────────────┐        ┌────────────────────────────────┐
-   │ Mac mini · PRC.app             │        │ MacBook · PRC.app              │
+   │ Mac mini · OwnDesk.app             │        │ MacBook · OwnDesk.app              │
    │                                │        │                                │
    │ hosting half — a switch, off   │        │ hosting half — a switch, off   │
    │ until you turn it on           │        │ until you turn it on           │
@@ -113,7 +116,7 @@ speaks WebRTC without libwebrtc, and a browser harness for poking at a host by h
                    └─────────────┐            ┌───────────────┘
                                  │            │
                           ┌──────┴────────────┴──────┐
-                          │ Android phone · PRC      │
+                          │ Android phone · OwnDesk      │
                           │  Keystore identity       │
                           │  controlling half only   │
                           │  touch → pointer, keys   │
@@ -140,34 +143,34 @@ Two planes, kept apart on purpose:
 
 ## 4. The two halves: hosting and controlling
 
-Inside `PRC.app` there are two independent halves. They share the identity, the peer list and the
+Inside `OwnDesk.app` there are two independent halves. They share the identity, the peer list and the
 window, and nothing else.
 
-### The hosting half — `PRCAgentCore` (`apps/mac-agent`)
+### The hosting half — `OwnDeskAgentCore` (`apps/mac-agent`)
 
 Constructed only when you turn hosting on, which is also when macOS is asked for Screen Recording
 and Accessibility. A Mac you only control *from* never sees those prompts.
 
 | File | Role |
 |---|---|
-| [SignalingServer.swift](apps/mac-agent/Sources/PRCAgentCore/SignalingServer.swift) | WebSocket server on port 47500, Bonjour advertisement |
-| [SessionCoordinator.swift](apps/mac-agent/Sources/PRCAgentCore/SessionCoordinator.swift) | Envelope verification, pairing, the session state machine, timers, kill switch |
-| [ScreenCapturer.swift](apps/mac-agent/Sources/PRCAgentCore/ScreenCapturer.swift) | ScreenCaptureKit into NV12 buffers, repeating the last frame when the screen is still |
-| [WebRTCSession.swift](apps/mac-agent/Sources/PRCAgentCore/WebRTCSession.swift) | Answers the offer, prefers H.264, opens the video sender, classifies the path |
-| [InputInjector.swift](apps/mac-agent/Sources/PRCAgentCore/InputInjector.swift) | CGEvent posting: clicks, drags, scroll phases, Unicode text, relative cursor accumulation |
-| [MediaSession.swift](apps/mac-agent/Sources/PRCAgentCore/MediaSession.swift) | The seam between the coordinator and the real capture + encode stack |
-| [PowerAssertion.swift](apps/mac-agent/Sources/PRCAgentCore/PowerAssertion.swift) | Keeps the Mac awake while a session is live |
+| [SignalingServer.swift](apps/mac-agent/Sources/OwnDeskAgentCore/SignalingServer.swift) | WebSocket server on port 47500, Bonjour advertisement |
+| [SessionCoordinator.swift](apps/mac-agent/Sources/OwnDeskAgentCore/SessionCoordinator.swift) | Envelope verification, pairing, the session state machine, timers, kill switch |
+| [ScreenCapturer.swift](apps/mac-agent/Sources/OwnDeskAgentCore/ScreenCapturer.swift) | ScreenCaptureKit into NV12 buffers, repeating the last frame when the screen is still |
+| [WebRTCSession.swift](apps/mac-agent/Sources/OwnDeskAgentCore/WebRTCSession.swift) | Answers the offer, prefers H.264, opens the video sender, classifies the path |
+| [InputInjector.swift](apps/mac-agent/Sources/OwnDeskAgentCore/InputInjector.swift) | CGEvent posting: clicks, drags, scroll phases, Unicode text, relative cursor accumulation |
+| [MediaSession.swift](apps/mac-agent/Sources/OwnDeskAgentCore/MediaSession.swift) | The seam between the coordinator and the real capture + encode stack |
+| [PowerAssertion.swift](apps/mac-agent/Sources/OwnDeskAgentCore/PowerAssertion.swift) | Keeps the Mac awake while a session is live |
 
-### The controlling half — `PRCControllerCore` (`apps/mac-controller`)
+### The controlling half — `OwnDeskControllerCore` (`apps/mac-controller`)
 
 | File | Role |
 |---|---|
-| [HostDiscovery.swift](apps/mac-controller/Sources/PRCControllerCore/HostDiscovery.swift) | Bonjour browser for hosts on this network |
-| [Endpoints.swift](apps/mac-controller/Sources/PRCControllerCore/Endpoints.swift) | Address parsing, and probing every known address at once |
-| [PairingClient.swift](apps/mac-controller/Sources/PRCControllerCore/PairingClient.swift) | `PAIR_REQUEST` with proof, and checking the reply against the code's key hash |
-| [SessionClient.swift](apps/mac-controller/Sources/PRCControllerCore/SessionClient.swift) | Authentication, the offer, ICE, keepalive, reconnection, teardown |
-| [WebRTCClient.swift](apps/mac-controller/Sources/PRCControllerCore/WebRTCClient.swift) | Offerer, data channels, the remote track, path detection |
-| [InputMapper.swift](apps/mac-controller/Sources/PRCControllerCore/InputMapper.swift) | Letterbox-aware coordinates, key code inversion, modifiers, scroll |
+| [HostDiscovery.swift](apps/mac-controller/Sources/OwnDeskControllerCore/HostDiscovery.swift) | Bonjour browser for hosts on this network |
+| [Endpoints.swift](apps/mac-controller/Sources/OwnDeskControllerCore/Endpoints.swift) | Address parsing, and probing every known address at once |
+| [PairingClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/PairingClient.swift) | `PAIR_REQUEST` with proof, and checking the reply against the code's key hash |
+| [SessionClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/SessionClient.swift) | Authentication, the offer, ICE, keepalive, reconnection, teardown |
+| [WebRTCClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/WebRTCClient.swift) | Offerer, data channels, the remote track, path detection |
+| [InputMapper.swift](apps/mac-controller/Sources/OwnDeskControllerCore/InputMapper.swift) | Letterbox-aware coordinates, key code inversion, modifiers, scroll |
 
 ### The phone — `apps/android`
 
@@ -284,8 +287,8 @@ are ignored.
 ```mermaid
 flowchart TD
     A[I want to control a Mac] --> B{From what?}
-    B -->|Another Mac| C[Install PRC.app on both]
-    B -->|My phone| D[Install PRC.app on the Mac<br/>and the phone app on the phone]
+    B -->|Another Mac| C[Install OwnDesk.app on both]
+    B -->|My phone| D[Install OwnDesk.app on the Mac<br/>and the phone app on the phone]
     C --> E[Turn hosting ON<br/>on the Mac to be controlled]
     D --> E
     E --> F{Same network?}
@@ -302,8 +305,8 @@ flowchart TD
 ### 6.2 Install on a Mac
 
 ```sh
-scripts/build-apps.sh prc      # dist/PRC.app, ad-hoc signed, no certificate needed
-scripts/install-prc.sh         # to ~/Applications, in the menu bar, and again at login
+scripts/build-apps.sh owndesk      # dist/OwnDesk.app, ad-hoc signed, no certificate needed
+scripts/install-owndesk.sh         # to ~/Applications, in the menu bar, and again at login
 ```
 
 Then open it from the menu bar. To let this Mac be controlled, switch **Let others control it**
@@ -313,7 +316,7 @@ both and the app picks them up.
 After a rebuild macOS asks again, because an ad-hoc signature changes on every build and macOS ties
 those grants to the signature. The install script clears the stale entry for you.
 
-`scripts/install-prc.sh --stage` copies the app into place without starting anything, which is what
+`scripts/install-owndesk.sh --stage` copies the app into place without starting anything, which is what
 to use for a Mac you are not sitting at.
 
 ### 6.3 Install on the phone
@@ -328,7 +331,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 | On the host Mac | On the controller |
 |---|---|
-| Open PRC, **Pair a Mac…** → **Show a code** | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On the phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
+| Open OwnDesk, **Pair a Mac…** → **Show a code** | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On the phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
 | It shows the other device's fingerprint | It shows its own fingerprint |
 | Compare the two. If they match, **Approve** | The Mac appears in the list |
 
@@ -397,7 +400,7 @@ Tailscale will reach it, or go back to **Use any address**.
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | Connect hangs, then gives up after 15 s | This device is paired with a *different* Mac than the one at that address | Compare fingerprints in the list; forget the stale entry |
-| The picture is soft | The link is narrow, or the path is relayed | `prc-controller-cli app stats`, or the phone's info panel; `tailscale status` names a relay |
+| The picture is soft | The link is narrow, or the path is relayed | `owndesk-controller-cli app stats`, or the phone's info panel; `tailscale status` names a relay |
 | Everything lags evenly | Jitter, not bandwidth — the receiver's buffer grew | Get a direct path: `tailscale netcheck`, and enable UPnP/NAT-PMP on the router |
 | Screen Recording looks granted but hosting fails | The grant belongs to a previous build's signature | Reinstall with the script, which clears it with `tccutil` |
 | The phone shows a black screen | The host has no display attached | ScreenCaptureKit needs one: use an HDMI dummy plug on a headless Mac |
@@ -417,14 +420,14 @@ packages/protocol          the single source of truth for the wire format
   vectors/                 shared test vectors, run by all three languages
   src/                     the TypeScript reference implementation
 packages/swift             Swift libraries used by both halves
-  PRCIdentity              P-256 keys, Secure Enclave, encodings, code-signing checks
-  PRCProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
-  PRCPeers                 the peer list: who is trusted, in which direction
-  PRCLocalControl          a same-user control channel so scripts can drive the apps
-apps/prc                   the Mac app: menu bar plus a window, hosts and controls
+  OwnDeskIdentity              P-256 keys, Secure Enclave, encodings, code-signing checks
+  OwnDeskProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
+  OwnDeskPeers                 the peer list: who is trusted, in which direction
+  OwnDeskLocalControl          a same-user control channel so scripts can drive the apps
+apps/owndesk                   the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only
-apps/mac-agent             the hosting half, plus the headless prc-agent CLI
-apps/mac-controller        the controlling half, plus prc-controller-cli
+apps/mac-agent             the hosting half, plus the headless owndesk-agent CLI
+apps/mac-controller        the controlling half, plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent from Node
 tools/web-harness          browser controller, development only
 scripts/                   build, install, uninstall, draw the app icon

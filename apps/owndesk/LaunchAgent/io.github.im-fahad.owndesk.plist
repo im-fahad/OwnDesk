@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.im-fahad.owndesk</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__APP_PATH__/Contents/MacOS/owndesk</string>
+    <string>--background</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <!-- Restart after a crash, but not after the owner chooses Quit. -->
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>__LOG_DIR__/owndesk.log</string>
+  <key>StandardErrorPath</key><string>__LOG_DIR__/owndesk.err.log</string>
+</dict>
+</plist>

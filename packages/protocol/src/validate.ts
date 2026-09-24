@@ -6,7 +6,7 @@ import type { ErrorObject } from 'ajv';
 import { ProtocolError } from './errors.ts';
 import { SIGNALING_TYPES, isSignalingType } from './envelope.ts';
 
-export const SCHEMA_BASE = 'https://prc.local/schemas';
+export const SCHEMA_BASE = 'https://owndesk.local/schemas';
 export const SCHEMA_DIR = join(import.meta.dirname, '..', 'schemas');
 
 export const DATACHANNEL_TYPES = [

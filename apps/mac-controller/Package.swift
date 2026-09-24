@@ -5,32 +5,32 @@ import PackageDescription
 let mode: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
-    name: "PRCMacController",
+    name: "OwnDeskMacController",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PRCControllerCore", targets: ["PRCControllerCore"]),
-        .executable(name: "prc-controller-cli", targets: ["prc-controller-cli"]),
+        .library(name: "OwnDeskControllerCore", targets: ["OwnDeskControllerCore"]),
+        .executable(name: "owndesk-controller-cli", targets: ["owndesk-controller-cli"]),
     ],
     dependencies: [
-        .package(name: "PRCSwift", path: "../../packages/swift"),
-        .package(name: "PRCMacAgent", path: "../mac-agent"),
+        .package(name: "OwnDeskSwift", path: "../../packages/swift"),
+        .package(name: "OwnDeskMacAgent", path: "../mac-agent"),
         .package(url: "https://github.com/stasel/WebRTC.git", from: "152.0.0"),
     ],
     targets: [
         .target(
-            name: "PRCControllerCore",
+            name: "OwnDeskControllerCore",
             dependencies: [
-                .product(name: "PRCIdentity", package: "PRCSwift"),
-                .product(name: "PRCProtocol", package: "PRCSwift"),
-                .product(name: "PRCPeers", package: "PRCSwift"),
+                .product(name: "OwnDeskIdentity", package: "OwnDeskSwift"),
+                .product(name: "OwnDeskProtocol", package: "OwnDeskSwift"),
+                .product(name: "OwnDeskPeers", package: "OwnDeskSwift"),
                 .product(name: "WebRTC", package: "WebRTC"),
             ],
             swiftSettings: mode
         ),
-        .executableTarget(name: "prc-controller-cli", dependencies: ["PRCControllerCore", .product(name: "PRCLocalControl", package: "PRCSwift"), .product(name: "WebRTC", package: "WebRTC")], swiftSettings: mode),
+        .executableTarget(name: "owndesk-controller-cli", dependencies: ["OwnDeskControllerCore", .product(name: "OwnDeskLocalControl", package: "OwnDeskSwift"), .product(name: "WebRTC", package: "WebRTC")], swiftSettings: mode),
         .testTarget(
-            name: "PRCControllerCoreTests",
-            dependencies: ["PRCControllerCore", .product(name: "PRCAgentCore", package: "PRCMacAgent"), .product(name: "WebRTC", package: "WebRTC")],
+            name: "OwnDeskControllerCoreTests",
+            dependencies: ["OwnDeskControllerCore", .product(name: "OwnDeskAgentCore", package: "OwnDeskMacAgent"), .product(name: "WebRTC", package: "WebRTC")],
             swiftSettings: mode
         ),
     ]

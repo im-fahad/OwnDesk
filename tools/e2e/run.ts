@@ -1,7 +1,7 @@
 /**
  * Headless end-to-end test of the Mac agent.
  *
- * Spawns the real prc-agent binary, then acts as a controller from Node: pairs with proof and
+ * Spawns the real owndesk-agent binary, then acts as a controller from Node: pairs with proof and
  * approval, authenticates, negotiates WebRTC with werift (an independent implementation, not
  * libwebrtc), opens the data channels, exchanges control messages, counts video RTP from the
  * agent's synthetic screen, and ends the session cleanly. No permissions, no browser, no display.
@@ -30,13 +30,13 @@ import {
   serializeEnvelope,
   type Envelope,
   type Identity,
-} from '@prc/protocol';
+} from '@owndesk/protocol';
 
 const args = process.argv.slice(2);
 const MEDIA = !args.includes('--no-media');
 const REAL_SCREEN = args.includes('--real-screen');
 const INPUT = args.includes('--input');
-const AGENT = process.env.PRC_AGENT ?? fileURLToPath(new URL('../../apps/mac-agent/.build/debug/prc-agent', import.meta.url));
+const AGENT = process.env.OWNDESK_AGENT ?? fileURLToPath(new URL('../../apps/mac-agent/.build/debug/owndesk-agent', import.meta.url));
 
 // ---------------------------------------------------------------- reporting
 
@@ -76,12 +76,12 @@ class AgentProcess {
     if (!INPUT) flags.push('--no-input');
     this.proc = spawn(AGENT, flags, { stdio: ['pipe', 'pipe', 'pipe'] });
     createInterface({ input: this.proc.stdout }).on('line', (line) => this.onLine(line));
-    createInterface({ input: this.proc.stderr }).on('line', (line) => { if (process.env.PRC_E2E_VERBOSE) console.log(`  [agent stderr] ${line}`); });
+    createInterface({ input: this.proc.stderr }).on('line', (line) => { if (process.env.OWNDESK_E2E_VERBOSE) console.log(`  [agent stderr] ${line}`); });
     this.proc.on('exit', (code) => this.onLine(`<<agent exited ${code}>>`));
   }
 
   private onLine(line: string) {
-    if (process.env.PRC_E2E_VERBOSE) console.log(`  [agent] ${line}`);
+    if (process.env.OWNDESK_E2E_VERBOSE) console.log(`  [agent] ${line}`);
     this.lines.push(line);
     for (const w of [...this.waiters]) {
       const m = line.match(w.re);
@@ -155,13 +155,13 @@ class Signaling {
 
 // ---------------------------------------------------------------- main
 
-const dataDir = mkdtempSync(join(tmpdir(), 'prc-e2e-'));
+const dataDir = mkdtempSync(join(tmpdir(), 'owndesk-e2e-'));
 const agent = new AgentProcess(dataDir);
 let signaling: Signaling | null = null;
 let pc: RTCPeerConnection | null = null;
 
 async function main() {
-  console.log(`PRC headless end-to-end  (media: ${MEDIA ? (REAL_SCREEN ? 'real screen' : 'synthetic screen') : 'off'}, input: ${INPUT ? 'on' : 'off'})`);
+  console.log(`OwnDesk headless end-to-end  (media: ${MEDIA ? (REAL_SCREEN ? 'real screen' : 'synthetic screen') : 'off'}, input: ${INPUT ? 'on' : 'off'})`);
 
   const hostId = await step('agent starts and listens', async () => {
     const id = (await agent.waitFor(/^\s+device id\s+([0-9a-f]{64})/))[1];
@@ -188,7 +188,7 @@ async function main() {
 
   const qr = await step('pairing window opens with a valid QR payload', async () => {
     agent.type('pair');
-    const line = (await agent.waitFor(/^\{.*"kind":"prc-pair".*\}$/))[0];
+    const line = (await agent.waitFor(/^\{.*"kind":"owndesk-pair".*\}$/))[0];
     const qr = JSON.parse(line);
     if (qr.host_device_id !== hostId || qr.host_key_hash !== hostId) throw new Error('QR host id mismatch');
     if (qr.expires_at < Date.now()) throw new Error('QR already expired');

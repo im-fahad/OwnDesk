@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/server/auth_ok.json",
+  "$id": "https://owndesk.local/schemas/server/auth_ok.json",
   "type": "object",
   "required": ["kind", "ice_servers"],
   "properties": {

@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/signaling/SESSION_REQUEST.json",
+  "$id": "https://owndesk.local/schemas/signaling/SESSION_REQUEST.json",
   "type": "object",
   "required": ["client_nonce", "versions", "path", "capabilities"],
   "properties": {
-    "client_nonce": { "$ref": "https://prc.local/schemas/common.json#/$defs/bytes16" },
+    "client_nonce": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/bytes16" },
     "versions": {
       "type": "array",
       "minItems": 1,
       "maxItems": 16,
-      "items": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" }
+      "items": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/protocolVersion" }
     },
     "path": { "type": "string", "enum": ["lan", "cloud"] },
     "capabilities": {

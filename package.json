@@ -1,8 +1,8 @@
 {
-  "name": "prc",
+  "name": "owndesk",
   "private": true,
   "license": "MIT",
-  "description": "Personal Remote Control System: private, self-hosted remote control for a Mac Mini.",
+  "description": "Private, self-hosted remote control for your own devices.",
   "workspaces": [
     "packages/protocol",
     "tools/web-harness",

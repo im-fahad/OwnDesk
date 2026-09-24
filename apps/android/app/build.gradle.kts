@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.prc.controller"
+    namespace = "io.github.im_fahad.owndesk"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.prc.controller"
+        applicationId = "io.github.im_fahad.owndesk"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -47,8 +47,8 @@ android {
 
 // The unit tests run the protocol's shared vectors, so they need to find them.
 tasks.withType<Test>().configureEach {
-    systemProperty("prc.vectors", rootProject.file("../../packages/protocol/vectors").absolutePath)
-    systemProperty("prc.frames.out", layout.buildDirectory.file("frames.json").get().asFile.absolutePath)
+    systemProperty("owndesk.vectors", rootProject.file("../../packages/protocol/vectors").absolutePath)
+    systemProperty("owndesk.frames.out", layout.buildDirectory.file("frames.json").get().asFile.absolutePath)
 }
 
 dependencies {

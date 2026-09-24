@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PRC Web Harness</title>
+<title>OwnDesk Web Harness</title>
 <style>
   :root { color-scheme: light dark; font: 14px/1.4 -apple-system, system-ui, sans-serif; }
   body { margin: 0; display: grid; grid-template-columns: 360px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
@@ -31,7 +31,7 @@
 </head>
 <body>
 <header>
-  <h1>PRC Web Harness</h1>
+  <h1>OwnDesk Web Harness</h1>
   <span id="status">idle</span>
   <span id="rtt"></span>
   <span style="margin-left:auto; opacity:.6">development tool, not a product</span>
@@ -46,7 +46,7 @@
   <section>
     <h2>Pair with a Mac</h2>
     <label>Device name shown on the Mac<input id="deviceName" value="Web Harness"></label>
-    <label>QR payload text (type <code>pair</code> in prc-agent, paste the JSON here)<textarea id="qr" placeholder='{"v":1,"kind":"prc-pair",...}'></textarea></label>
+    <label>QR payload text (type <code>pair</code> in owndesk-agent, paste the JSON here)<textarea id="qr" placeholder='{"v":1,"kind":"owndesk-pair",...}'></textarea></label>
     <label>Address override (optional)<input id="pairAddress" placeholder="192.168.1.20:47500"></label>
     <button id="pair">Pair</button>
     <div id="compare"></div>

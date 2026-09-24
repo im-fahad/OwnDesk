@@ -163,7 +163,7 @@ write('pairing.json', {
 
 // 5. server auth ---------------------------------------------------------------------------
 const nonce = b64urlEncode(new Uint8Array(32).map((_, i) => i));
-const origin = 'prc.example.com';
+const origin = 'owndesk.example.com';
 write('server-auth.json', {
   description: 'Signature a device presents to the rendezvous server. Verify with public_key; must fail for wrong_origin.',
   nonce,

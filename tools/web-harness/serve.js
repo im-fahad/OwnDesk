@@ -55,7 +55,7 @@ createServer(async (req, res) => {
   } else {
     urls.push(`http://${host}:${port}/`);
   }
-  console.log('PRC web harness is listening. Open one of these in Safari or Chrome:');
+  console.log('OwnDesk web harness is listening. Open one of these in Safari or Chrome:');
   for (const u of urls) console.log(`  ${u}`);
   if (host !== '0.0.0.0' && host !== '::') console.log('Other machines cannot reach it. Restart with --host 0.0.0.0 to allow that.');
   else console.log('From another machine use the LAN address above, never 0.0.0.0. If nothing loads, allow node in System Settings > Network > Firewall.');

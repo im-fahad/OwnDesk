@@ -1,4 +1,4 @@
-# Personal Remote Control System (PRC) --- Specification v2
+# OwnDesk --- Specification v2
 
 Revision date: 2026-09-07. Amended 2026-09-10 to match what was built.
 Supersedes: personal-remote-control-ai-agent-spec.md (v1)
@@ -42,7 +42,7 @@ decision by the owner removed a whole component.
 | Area | v2 as written | As built |
 |---|---|---|
 | Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phone controls only. |
-| Apps | `mac-agent` and `mac-controller` as separate apps | One `PRC.app` containing both halves as libraries. The old app targets are superseded. |
+| Apps | `mac-agent` and `mac-controller` as separate apps | One `OwnDesk.app` containing both halves as libraries. The old app targets are superseded. |
 | Trust store | One direction, "trusted controllers" | One peer record per device with two independent permissions: may control us, we may control it. Key lookup is gated on the relevant one, so revoking a direction fails closed. |
 | Internet path | Rendezvous server plus TURN on a VPS | Tailscale. Same signed protocol over a tailnet address, no server to run, no VPS to pay for. The rendezvous protocol in section 11 is still specified and still unbuilt. |
 | Signing | A persistent identity from day one, ideally Developer ID | Ad-hoc, by the owner's decision: these apps are personal and never distributed. The cost is re-granting Screen Recording and Accessibility after each rebuild, which the install script handles with `tccutil reset`. |
@@ -78,7 +78,7 @@ Personal use only. No public distribution.
 ```text
         ┌───────────────────────────┐      ┌───────────────────────────┐
         │         Mac mini          │      │          MacBook          │
-        │          PRC.app          │      │          PRC.app          │
+        │          OwnDesk.app          │      │          OwnDesk.app          │
         │  ┌─────────────────────┐  │      │  ┌─────────────────────┐  │
         │  │ hosting half        │  │◄────►│  │ controlling half    │  │
         │  │  WebSocket :47500   │  │      │  └─────────────────────┘  │
@@ -90,7 +90,7 @@ Personal use only. No public distribution.
         │  │ controlling half    │  │
         │  └─────────────────────┘  │      ┌───────────────────────────┐
         │  shared: identity key,    │      │      Android phone        │
-        │  peer list, window        │◄────►│   PRC, the phone app      │
+        │  peer list, window        │◄────►│   OwnDesk, the phone app      │
         └───────────────────────────┘      │  controlling half only    │
                                            └───────────────────────────┘
 
@@ -144,14 +144,14 @@ Two planes:
 
 ### 4.1 The hosting half
 
-Lives inside `PRC.app` and is constructed only when hosting is switched on. Runs in the user's
+Lives inside `OwnDesk.app` and is constructed only when hosting is switched on. Runs in the user's
 login session under a LaunchAgent, so it comes back after login and after a crash, but not after
 the owner chooses Quit.
 
 Responsibilities:
 
 - Own the device identity key in the Secure Enclave.
-- Serve the signalling endpoint on port 47500 and advertise `_prc._tcp` over Bonjour.
+- Serve the signalling endpoint on port 47500 and advertise `_owndesk._tcp` over Bonjour.
 - Run pairing with local approval and a fingerprint comparison.
 - Authenticate every session with challenge-response and verify every signed envelope.
 - Capture the screen with ScreenCaptureKit and feed libwebrtc, naming H.264 as the preferred codec.
@@ -256,9 +256,9 @@ signature   = base64url( r || s ), 64 bytes
 Every signed byte string begins with a fixed context label so a signature for one purpose can never be replayed as another.
 
 ```text
-prc-signaling-v1     signaling envelopes (section 6)
-prc-server-auth-v1   authentication to the rendezvous server (section 11)
-prc-pairing-v1       pairing proof (section 7)
+owndesk-signaling-v1     signaling envelopes (section 6)
+owndesk-server-auth-v1   authentication to the rendezvous server (section 11)
+owndesk-pairing-v1       pairing proof (section 7)
 ```
 
 ---
@@ -284,7 +284,7 @@ Every control-plane message between two devices, whether sent over the LAN endpo
 Signing input, joined with `\n`, all numbers as decimal strings:
 
 ```text
-prc-signaling-v1
+owndesk-signaling-v1
 v
 type
 from
@@ -353,12 +353,12 @@ push TRUST_SYNC to rendezvous server
 ```json
 {
   "v": 1,
-  "kind": "prc-pair",
+  "kind": "owndesk-pair",
   "host_device_id": "<device_id>",
   "host_key_hash": "<device_id, repeated for clarity>",
   "host_name": "Mac Mini M4",
   "addresses": ["192.168.1.20:47500", "[fe80::1%en0]:47500"],
-  "rendezvous_url": "wss://prc.example.com/ws",
+  "rendezvous_url": "wss://owndesk.example.com/ws",
   "pairing_session_id": "<base64url 16 bytes>",
   "pairing_code": "<base64url 16 bytes>",
   "expires_at": 1757203320000
@@ -381,7 +381,7 @@ Contains no private keys, no permanent secrets, no passwords. The pairing code i
 
 ```text
 proof = HMAC-SHA256( key = pairing_code bytes,
-                     msg = "prc-pairing-v1\n" + pairing_session_id + "\n" + controller_device_id )
+                     msg = "owndesk-pairing-v1\n" + pairing_session_id + "\n" + controller_device_id )
 ```
 
 The proof stops anyone on the LAN who has not seen the QR from triggering approval dialogs. The fingerprint comparison stops anyone who has seen the QR from substituting their own key. The host key hash in the QR stops a fake host on the LAN from collecting the controller's request.
@@ -394,7 +394,7 @@ The proof stops anyone on the LAN who has not seen the QR from triggering approv
   "reason": null,
   "host_public_key": "<base64url 65 bytes>",
   "host_name": "Mac Mini M4",
-  "rendezvous_url": "wss://prc.example.com/ws"
+  "rendezvous_url": "wss://owndesk.example.com/ws"
 }
 ```
 
@@ -634,12 +634,12 @@ Server-level frames are JSON with a `kind` field. They are distinct from the dev
 Client                         Server
 ------                         ------
 open WSS
-                               {"kind":"auth_challenge","nonce":"<base64url 32 bytes>","origin":"prc.example.com"}
+                               {"kind":"auth_challenge","nonce":"<base64url 32 bytes>","origin":"owndesk.example.com"}
 {"kind":"auth",
  "device_id":"...",
  "public_key":"...",
  "role":"host" | "controller",
- "sig": sign("prc-server-auth-v1\n" + nonce + "\n" + origin + "\n" + device_id)}
+ "sig": sign("owndesk-server-auth-v1\n" + nonce + "\n" + origin + "\n" + device_id)}
                                verify device_id == SHA-256(public_key)
                                verify signature
                                host: public_key must equal HOST_PUBLIC_KEY from config
@@ -679,9 +679,9 @@ This is coturn's `use-auth-secret` scheme. A stolen credential dies within 2 hou
 ```text
 HOST_PUBLIC_KEY   base64url 65-byte key of the Mac Mini
 TURN_SECRET       shared with coturn static-auth-secret
-TURN_URIS         turn:prc.example.com:3478?transport=udp, turns:prc.example.com:5349
-STUN_URI          stun:prc.example.com:3478
-ORIGIN            prc.example.com
+TURN_URIS         turn:owndesk.example.com:3478?transport=udp, turns:owndesk.example.com:5349
+STUN_URI          stun:owndesk.example.com:3478
+ORIGIN            owndesk.example.com
 ```
 
 If the server is compromised, the attacker learns which devices are online and when, can refuse to relay, and can add fake controllers to the server's allowlist. The fake controllers still fail the Mac Mini's own authentication. The attacker cannot see or inject video or input.
@@ -841,7 +841,7 @@ The bandwidth estimator starts near zero and ramps slowly, which measured as thi
 
 ## 17. LAN discovery
 
-Bonjour service type `_prc._tcp`, default port 47500, advertised only while Remote Access is on.
+Bonjour service type `_owndesk._tcp`, default port 47500, advertised only while Remote Access is on.
 
 TXT record:
 
@@ -862,8 +862,8 @@ These are the operational facts that decide whether the Mac Mini is reachable wh
 - **Display**: ScreenCaptureKit requires an attached display. A headless Mac Mini needs an HDMI dummy plug or a virtual display. Without one there is nothing to capture.
 - **Login session**: the agent runs as a LaunchAgent inside the logged-in user's session. It is not running at the login window. After a reboot you cannot log in remotely unless automatic login is enabled. Automatic login is incompatible with FileVault. Decide one way; see section 31.
 - **Sleep**: enable "Prevent automatic sleeping when the display is off" and "Wake for network access" in System Settings. The agent additionally holds `kIOPMAssertionTypePreventUserIdleSystemSleep` while a session is active. Enable "Start up automatically after a power failure".
-- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity, and an ad-hoc signature changes every build, so the grants vanish on each reinstall. The owner chose ad-hoc signing and no certificate: these apps are personal and are never distributed. `scripts/install-prc.sh` therefore clears the stale entry with `tccutil reset` on every install, and the app shows a warning with a link to the right System Settings pane until both are granted again. `scripts/make-signing-identity.sh` creates a free self-signed identity that would end the chore, and is not used. Notarization would only matter if the app were distributed.
-- **LaunchAgent**: `RunAtLoad` true and `KeepAlive` set to `SuccessfulExit: false`, so the app comes back after login and after a crash but stays gone when the owner chooses Quit. `scripts/install-prc.sh` installs it as `com.prc.app`.
+- **Signing**: macOS ties the Screen Recording and Accessibility grants to the app's code-signing identity, and an ad-hoc signature changes every build, so the grants vanish on each reinstall. The owner chose ad-hoc signing and no certificate: these apps are personal and are never distributed. `scripts/install-owndesk.sh` therefore clears the stale entry with `tccutil reset` on every install, and the app shows a warning with a link to the right System Settings pane until both are granted again. `scripts/make-signing-identity.sh` creates a free self-signed identity that would end the chore, and is not used. Notarization would only matter if the app were distributed.
+- **LaunchAgent**: `RunAtLoad` true and `KeepAlive` set to `SuccessfulExit: false`, so the app comes back after login and after a crash but stays gone when the owner chooses Quit. `scripts/install-owndesk.sh` installs it as `io.github.im-fahad.owndesk`.
 
 ---
 
@@ -883,14 +883,14 @@ Let other Macs control this one          [ ON ]
 Incoming
   My MacBook   Direct (LAN)            [Disconnect]
 
-[Open PRC…]                                        [Quit]
+[Open OwnDesk…]                                        [Quit]
 ```
 
 The window, when controlling:
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│ ●●●  PRC   Mac mini M4 · Direct (LAN)   [Quality] [Keys] [⏸] │  header, doubles as the title bar
+│ ●●●  OwnDesk   Mac mini M4 · Direct (LAN)   [Quality] [Keys] [⏸] │  header, doubles as the title bar
 ├──────────────┬───────────────────────────────────────────────┤
 │ THIS MAC     │                                               │
 │  Let others  │                                               │
@@ -1013,7 +1013,7 @@ Never log:
 What is actually deployed:
 
 ```text
-Mac mini   ~/Applications/PRC.app under the LaunchAgent com.prc.app, hosting on,
+Mac mini   ~/Applications/OwnDesk.app under the LaunchAgent io.github.im-fahad.owndesk, hosting on,
            Screen Recording and Accessibility granted
 MacBook    the same app, the same way
 Phone      the debug APK, installed with adb
@@ -1025,7 +1025,7 @@ Development:
 
 ```text
 Both halves in one process: swift test in apps/mac-controller runs a real agent
-in-process with a synthetic screen. npm run e2e drives the real prc-agent binary
+in-process with a synthetic screen. npm run e2e drives the real owndesk-agent binary
 from Node. Neither needs a display or a permission.
 ```
 
@@ -1048,15 +1048,15 @@ localhost. Do not trade security for cost.
 ## 26. Repository structure
 
 ```text
-prc/
+owndesk/
   docs/
     spec.md                 this document
     implementation.md       what exists, and what it cost to learn
   apps/
-    prc/                    the Mac app: menu bar plus a window, hosts and controls
+    owndesk/                    the Mac app: menu bar plus a window, hosts and controls
     android/                the phone app: controls only
-    mac-agent/              PRCAgentCore, the hosting half, plus the prc-agent CLI
-    mac-controller/         PRCControllerCore, the controlling half, plus prc-controller-cli
+    mac-agent/              OwnDeskAgentCore, the hosting half, plus the owndesk-agent CLI
+    mac-controller/         OwnDeskControllerCore, the controlling half, plus owndesk-controller-cli
   packages/
     protocol/               the single source of truth
       schemas/              JSON Schema for every envelope, payload, and data channel message
@@ -1064,7 +1064,7 @@ prc/
       vectors/              signing inputs, signatures, pairing proofs, receiver cases
       generated/            types produced by codegen, committed
       src/                  the TypeScript reference implementation
-    swift/                  PRCIdentity, PRCProtocol, PRCPeers, PRCLocalControl
+    swift/                  OwnDeskIdentity, OwnDeskProtocol, OwnDeskPeers, OwnDeskLocalControl
   tools/
     e2e/                    headless end-to-end test driving the real agent binary from Node
     web-harness/            browser test client, dev only
@@ -1075,7 +1075,7 @@ prc/
 ```
 
 Two differences from what v2 planned. There is no separate `identity` package: the per-platform key
-wrappers live in `packages/swift/PRCIdentity` and in the phone's `device/` folder, because a wrapper
+wrappers live in `packages/swift/OwnDeskIdentity` and in the phone's `device/` folder, because a wrapper
 that thin is not worth a package boundary. And codegen emits TypeScript types and the Swift key
 table only; the Kotlin protocol layer is written by hand against the same schemas and proved by the
 same vectors, which is what actually matters.

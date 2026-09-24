@@ -123,11 +123,11 @@ test('messages on the wrong channel are rejected', () => {
 });
 
 test('server frames validate', () => {
-  assert.equal(validateServerFrame({ kind: 'auth_challenge', nonce: SAMPLE.bytes32, origin: 'prc.example.com' }).valid, true);
+  assert.equal(validateServerFrame({ kind: 'auth_challenge', nonce: SAMPLE.bytes32, origin: 'owndesk.example.com' }).valid, true);
   assert.equal(validateServerFrame({ kind: 'auth', device_id: SAMPLE.deviceId, public_key: SAMPLE.publicKey, role: 'controller', sig: SAMPLE.signature }).valid, true);
   assert.equal(validateServerFrame({ kind: 'auth', device_id: SAMPLE.deviceId, public_key: SAMPLE.publicKey, role: 'admin', sig: SAMPLE.signature }).valid, false);
-  assert.equal(validateServerFrame({ kind: 'auth_ok', ice_servers: [{ urls: ['turn:prc.example.com:3478?transport=udp'], username: '1:x', credential: 'c' }] }).valid, true);
-  assert.equal(validateServerFrame({ kind: 'auth_ok', ice_servers: [{ urls: ['http://prc.example.com'] }] }).valid, false);
+  assert.equal(validateServerFrame({ kind: 'auth_ok', ice_servers: [{ urls: ['turn:owndesk.example.com:3478?transport=udp'], username: '1:x', credential: 'c' }] }).valid, true);
+  assert.equal(validateServerFrame({ kind: 'auth_ok', ice_servers: [{ urls: ['http://owndesk.example.com'] }] }).valid, false);
   assert.equal(validateServerFrame({ kind: 'trust_sync', controllers: [{ device_id: SAMPLE.deviceId, public_key: SAMPLE.publicKey, name: 'MacBook' }] }).valid, true);
   assert.equal(validateServerFrame({ kind: 'presence', device_id: SAMPLE.deviceId, online: true }).valid, true);
   const envelope = { v: 1, type: 'SDP_OFFER', from: SAMPLE.deviceId, to: SAMPLE.otherDeviceId, session: SAMPLE.bytes16, seq: 1, ts: 1, payload: 'e30', sig: SAMPLE.signature };

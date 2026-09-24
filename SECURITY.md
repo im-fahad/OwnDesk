@@ -1,6 +1,6 @@
 # Security policy
 
-PRC takes a Mac's screen and injects its keyboard and mouse. A flaw here can hand someone else
+OwnDesk takes a Mac's screen and injects its keyboard and mouse. A flaw here can hand someone else
 control of a machine, so security reports come first.
 
 ## Reporting a vulnerability

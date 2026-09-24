@@ -8,7 +8,7 @@ import { sign, verify, type Identity } from './identity.ts';
 
 export const PROTOCOL_VERSION = 1;
 export const SUPPORTED_VERSIONS: readonly number[] = [1];
-export const SIGNALING_CONTEXT = 'prc-signaling-v1';
+export const SIGNALING_CONTEXT = 'owndesk-signaling-v1';
 export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_CLOCK_SKEW_MS = 300_000;
 

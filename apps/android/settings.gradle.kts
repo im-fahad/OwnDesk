@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "prc-android"
+rootProject.name = "owndesk-android"
 include(":app")

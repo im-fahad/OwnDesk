@@ -26,7 +26,7 @@ test('signing input matches vector byte for byte', () => {
 
 test('signing input starts with the context label and has nine lines', () => {
   const lines = vec.signing_input.split('\n');
-  assert.equal(lines[0], 'prc-signaling-v1');
+  assert.equal(lines[0], 'owndesk-signaling-v1');
   assert.equal(lines.length, 9);
   assert.equal(lines[8], vec.unsigned.payload);
 });

@@ -3,14 +3,14 @@ import { b64urlEncode, constantTimeEqual, randomBytes, toArrayBuffer, utf8Encode
 
 const subtle = globalThis.crypto.subtle;
 
-export const PAIRING_CONTEXT = 'prc-pairing-v1';
+export const PAIRING_CONTEXT = 'owndesk-pairing-v1';
 export const PAIRING_TTL_MS = 120_000;
 export const PAIRING_MAX_FAILED_PROOFS = 3;
 export const PAIRING_SECRET_BYTES = 16;
 
 export interface QrPayload {
   v: number;
-  kind: 'prc-pair';
+  kind: 'owndesk-pair';
   host_device_id: string;
   host_key_hash: string;
   host_name: string;
@@ -62,7 +62,7 @@ export function buildQrPayload(args: {
 }): QrPayload {
   return {
     v: 1,
-    kind: 'prc-pair',
+    kind: 'owndesk-pair',
     host_device_id: args.hostDeviceId,
     host_key_hash: args.hostDeviceId,
     host_name: args.hostName,

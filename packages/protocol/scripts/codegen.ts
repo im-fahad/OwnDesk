@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const SCHEMA_DIR = join(ROOT, 'schemas');
-const BASE = 'https://prc.local/schemas/';
+const BASE = 'https://owndesk.local/schemas/';
 
 function pascal(s: string): string {
   return s
@@ -37,9 +37,9 @@ function readSchema(rel: string): Record<string, unknown> {
   return schema;
 }
 
-const prcResolver = {
+const owndeskResolver = {
   order: 1,
-  canRead: /^https:\/\/prc\.local\/schemas\//,
+  canRead: /^https:\/\/owndesk\.local\/schemas\//,
   read(file: { url: string }): string {
     const rel = file.url.slice(BASE.length).replace(/#.*$/, '');
     return JSON.stringify(readSchema(rel));
@@ -72,7 +72,7 @@ const ts = await compile(catalog as never, 'ProtocolCatalog', {
   additionalProperties: false,
   strictIndexSignatures: true,
   maxItems: -1,
-  $refOptions: { resolve: { prc: prcResolver } },
+  $refOptions: { resolve: { owndesk: owndeskResolver } },
 });
 
 mkdirSync(join(ROOT, 'generated'), { recursive: true });
@@ -95,6 +95,6 @@ const swift = [
   '}',
   '',
 ].join('\n');
-const swiftPath = join(ROOT, '..', 'swift', 'Sources', 'PRCProtocol', 'KeyCodeTable.generated.swift');
+const swiftPath = join(ROOT, '..', 'swift', 'Sources', 'OwnDeskProtocol', 'KeyCodeTable.generated.swift');
 writeFileSync(swiftPath, swift);
 console.log(`wrote ${swiftPath} (${entries.length} codes)`);

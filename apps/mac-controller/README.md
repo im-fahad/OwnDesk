@@ -1,46 +1,46 @@
-# PRC Mac controller: the controlling half
+# OwnDesk Mac controller: the controlling half
 
 The side that drives another Mac: discovery, pairing, authentication, receiving the screen over
 WebRTC, and forwarding mouse, scroll, keyboard, and text. Spec sections 4.2, 7, 8, 10, 13.
 
-**This is a library, not the app you install.** `PRCControllerCore` is one of the two halves inside
-[`apps/prc`](../prc), which is what runs on each Mac. See [../../README.md](../../README.md) for how
+**This is a library, not the app you install.** `OwnDeskControllerCore` is one of the two halves inside
+[`apps/owndesk`](../owndesk), which is what runs on each Mac. See [../../README.md](../../README.md) for how
 the two halves fit together.
 
 Two targets:
 
-- `PRCControllerCore`: discovery, pairing, the session state machine with reconnection, the
-  WebRTC offerer, and input mapping. Used by `apps/prc`.
-- `prc-controller-cli`: the same core without a window, for scripts and remote testing. It is also
-  how `PRC.app` is driven from a script, through `prc-controller-cli app …`.
+- `OwnDeskControllerCore`: discovery, pairing, the session state machine with reconnection, the
+  WebRTC offerer, and input mapping. Used by `apps/owndesk`.
+- `owndesk-controller-cli`: the same core without a window, for scripts and remote testing. It is also
+  how `OwnDesk.app` is driven from a script, through `owndesk-controller-cli app …`.
 
 ## Build and run
 
 ```sh
 cd apps/mac-controller
 swift build
-swift run prc-controller-cli discover
+swift run owndesk-controller-cli discover
 ```
 
 | Flag | Effect |
 |---|---|
 | `--name <text>` | Name shown to hosts when pairing. Default: this Mac's name. |
-| `--data-dir <path>` | Where paired hosts live. Default `~/Library/Application Support/PRC Controller` |
+| `--data-dir <path>` | Where paired hosts live. Default `~/Library/Application Support/OwnDesk Controller` |
 | `--keychain` | Keep the identity in the Keychain instead of `<data-dir>/identity.json`. |
 
-No macOS permissions are needed. Day to day, controlling another Mac is done in `PRC.app`; see
+No macOS permissions are needed. Day to day, controlling another Mac is done in `OwnDesk.app`; see
 [../../README.md](../../README.md) section 6.
 
 ## Headless CLI, for scripts and remote testing
 
 ```sh
-swift run prc-controller-cli discover                       # hosts advertised on this network
-swift run prc-controller-cli pair --qr-file qr.json          # then approve on the host
-swift run prc-controller-cli connect <host id prefix> --seconds 20 --probe-input
-swift run prc-controller-cli hosts
+swift run owndesk-controller-cli discover                       # hosts advertised on this network
+swift run owndesk-controller-cli pair --qr-file qr.json          # then approve on the host
+swift run owndesk-controller-cli connect <host id prefix> --seconds 20 --probe-input
+swift run owndesk-controller-cli hosts
 ```
 
-`prc-controller-cli` uses the same core as the app with no window, and a file identity by default
+`owndesk-controller-cli` uses the same core as the app with no window, and a file identity by default
 because an SSH session has no Keychain UI. `connect` prints a checklist: discovery, authentication,
 path, frames per second and resolution each second, ping round trip, display info, a one-pixel
 relative mouse move out and back when `--probe-input` is given, and a clean disconnect.
@@ -49,8 +49,8 @@ It is how the two-device test was run: the agent on the Mac Mini, the CLI on a M
 with the pairing fingerprint compared on both sides before approval. Keep `--data-dir` outside any
 folder you sync to the other machine.
 
-`prc-controller-cli app <command>` drives the running `PRC.app` instead; the commands are listed in
-[`apps/prc`](../prc/README.md#driving-it-from-a-script).
+`owndesk-controller-cli app <command>` drives the running `OwnDesk.app` instead; the commands are listed in
+[`apps/owndesk`](../owndesk/README.md#driving-it-from-a-script).
 
 ## Choosing an address
 
@@ -85,7 +85,7 @@ path itself; see below.
 
 ## When the picture is soft
 
-`prc-controller-cli app stats` reports what is actually arriving: resolution, frame rate, kilobits
+`owndesk-controller-cli app stats` reports what is actually arriving: resolution, frame rate, kilobits
 per second, and lost packets. That distinguishes the two causes.
 
 A desktop keeps its full resolution and gives up frame rate under pressure, because text stays
@@ -101,7 +101,7 @@ use, and `tailscale ping <host>` says whether a direct connection was establishe
 
 ## When everything lags
 
-`prc-controller-cli app stats` also reports `jitter_ms` and `jitter_buffer_ms`. The receiver sizes
+`owndesk-controller-cli app stats` also reports `jitter_ms` and `jitter_buffer_ms`. The receiver sizes
 its buffer from the jitter it sees, so an unsteady path costs delay directly: 130 ms of jitter
 measured on a relay produced a 580 ms buffer, on top of the round trip. Lowering the resolution does
 not help that, because the buffer is protecting against arrival timing rather than volume.
@@ -123,15 +123,15 @@ connection (spec section 10).
 
 | File | Role |
 |---|---|
-| `HostDiscovery.swift` | Bonjour browser for `_prc._tcp` with TXT records |
+| `HostDiscovery.swift` | Bonjour browser for `_owndesk._tcp` with TXT records |
 | `Endpoints.swift` | Address parsing and Bonjour service resolution to a `ws://` URL |
 | `SignalingClient.swift` | WebSocket client on Network.framework |
 | `PairingClient.swift` | PAIR_REQUEST with proof, PAIR_RESULT verified against the QR's key hash |
 | `SessionClient.swift` | Authentication, offer, ICE, keepalive, reconnection, teardown |
 | `WebRTCClient.swift` | Peer connection as offerer, data channels, remote track, path detection |
 | `InputMapper.swift` | Letterbox-aware coordinate mapping, key code inversion, modifier and scroll mapping |
-| `PRCPeers` (in `packages/swift`) | Paired Macs on disk, with a permission per direction |
-| `../prc-controller/VideoView.swift` | Metal video view plus the input overlay and keyboard capture |
+| `OwnDeskPeers` (in `packages/swift`) | Paired Macs on disk, with a permission per direction |
+| `apps/owndesk/Sources/owndesk/VideoView.swift` | Metal video view plus the input overlay and keyboard capture |
 
 ## Tests
 

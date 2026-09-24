@@ -1,10 +1,10 @@
-# PRC on Android
+# OwnDesk on Android
 
-The phone half of PRC. It pairs with a Mac, shows that Mac's screen, and drives its pointer and
+The phone half of OwnDesk. It pairs with a Mac, shows that Mac's screen, and drives its pointer and
 keyboard.
 
 The Macs can host or control. The phone only controls, which is why this app is much smaller than
-`apps/prc`.
+`apps/owndesk`.
 
 [../../README.md](../../README.md) is the guided tour: the technology on both platforms, the full
 flow, and the user guide. This file is the app's own reference.
@@ -119,19 +119,19 @@ A debug build accepts two intent extras. A release build ignores them, so no oth
 a pairing.
 
     # pair, passing the code from Show a code on the Mac as base64url
-    adb shell am start -n com.prc.controller/.ui.MainActivity \
+    adb shell am start -n io.github.im_fahad.owndesk/.ui.MainActivity \
       --es pairing_code_b64 "$(printf '%s' "$CODE" | base64 | tr '+/' '-_' | tr -d '=')"
 
-    # then approve in PRC on the Mac, after comparing fingerprints
+    # then approve in OwnDesk on the Mac, after comparing fingerprints
 
     # connect, naming the Mac by the start of its fingerprint
-    adb shell am start -n com.prc.controller/.ui.MainActivity --es connect 25AA
+    adb shell am start -n io.github.im_fahad.owndesk/.ui.MainActivity --es connect 25AA
 
-Everything the app prints on screen also goes to logcat under the tag `PRC`.
+Everything the app prints on screen also goes to logcat under the tag `OwnDesk`.
 
 ## Layout
 
-    app/src/main/kotlin/com/prc/controller/
+    app/src/main/kotlin/io/github/im_fahad/owndesk/
       protocol/   encodings, identity, envelopes, receiver rules, pairing proof, payload types
       device/     the Keystore identity and the list of paired Macs
       net/        the WebSocket and the address parsing that decides lan or cloud

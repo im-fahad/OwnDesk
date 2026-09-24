@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/datachannel/display_info.json",
+  "$id": "https://owndesk.local/schemas/datachannel/display_info.json",
   "type": "object",
   "required": ["v", "type", "ts", "display_id", "width_px", "height_px", "scale"],
   "properties": {
-    "v": { "$ref": "https://prc.local/schemas/common.json#/$defs/protocolVersion" },
+    "v": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/protocolVersion" },
     "type": { "const": "display_info" },
     "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
     "display_id": { "type": "string", "minLength": 1, "maxLength": 64 },

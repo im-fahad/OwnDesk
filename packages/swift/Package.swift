@@ -2,21 +2,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "PRCSwift",
+    name: "OwnDeskSwift",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PRCIdentity", targets: ["PRCIdentity"]),
-        .library(name: "PRCProtocol", targets: ["PRCProtocol"]),
-        .library(name: "PRCLocalControl", targets: ["PRCLocalControl"]),
-        .library(name: "PRCPeers", targets: ["PRCPeers"]),
+        .library(name: "OwnDeskIdentity", targets: ["OwnDeskIdentity"]),
+        .library(name: "OwnDeskProtocol", targets: ["OwnDeskProtocol"]),
+        .library(name: "OwnDeskLocalControl", targets: ["OwnDeskLocalControl"]),
+        .library(name: "OwnDeskPeers", targets: ["OwnDeskPeers"]),
     ],
     targets: [
-        .target(name: "PRCIdentity"),
-        .target(name: "PRCProtocol", dependencies: ["PRCIdentity"]),
-        .target(name: "PRCLocalControl"),
-        .target(name: "PRCPeers", dependencies: ["PRCIdentity", "PRCProtocol"]),
-        .testTarget(name: "PRCProtocolTests", dependencies: ["PRCProtocol", "PRCIdentity"]),
-        .testTarget(name: "PRCLocalControlTests", dependencies: ["PRCLocalControl", "PRCIdentity"]),
-        .testTarget(name: "PRCPeersTests", dependencies: ["PRCPeers", "PRCIdentity", "PRCProtocol"]),
+        .target(name: "OwnDeskIdentity"),
+        .target(name: "OwnDeskProtocol", dependencies: ["OwnDeskIdentity"]),
+        .target(name: "OwnDeskLocalControl"),
+        .target(name: "OwnDeskPeers", dependencies: ["OwnDeskIdentity", "OwnDeskProtocol"]),
+        .testTarget(name: "OwnDeskProtocolTests", dependencies: ["OwnDeskProtocol", "OwnDeskIdentity"]),
+        .testTarget(name: "OwnDeskLocalControlTests", dependencies: ["OwnDeskLocalControl", "OwnDeskIdentity"]),
+        .testTarget(name: "OwnDeskPeersTests", dependencies: ["OwnDeskPeers", "OwnDeskIdentity", "OwnDeskProtocol"]),
     ]
 )

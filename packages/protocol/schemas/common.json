@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/common.json",
-  "title": "PRC common definitions",
+  "$id": "https://owndesk.local/schemas/common.json",
+  "title": "OwnDesk common definitions",
   "$defs": {
     "deviceId": {
       "description": "Lowercase hex SHA-256 of the 65-byte X9.63 public key.",

@@ -2,7 +2,7 @@
 import { b64urlDecode, b64urlEncode, utf8Encode } from './encoding.ts';
 import { sign, verify, type Identity } from './identity.ts';
 
-export const SERVER_AUTH_CONTEXT = 'prc-server-auth-v1';
+export const SERVER_AUTH_CONTEXT = 'owndesk-server-auth-v1';
 export const SERVER_NONCE_BYTES = 32;
 export const SERVER_NONCE_TTL_MS = 60_000;
 

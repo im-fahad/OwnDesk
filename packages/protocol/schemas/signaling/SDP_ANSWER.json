@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/signaling/SDP_ANSWER.json",
+  "$id": "https://owndesk.local/schemas/signaling/SDP_ANSWER.json",
   "type": "object",
   "required": ["sdp"],
   "properties": {

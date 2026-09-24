@@ -1,8 +1,8 @@
 #!/bin/bash
-# Builds "PRC.app" into dist/.
+# Builds "OwnDesk.app" into dist/.
 #
 #   scripts/build-apps.sh                       release build, ad-hoc signature
-#   PRC_SIGN_IDENTITY="PRC Local Signing" scripts/build-apps.sh
+#   OWNDESK_SIGN_IDENTITY="OwnDesk Local Signing" scripts/build-apps.sh
 #   CONFIG=debug scripts/build-apps.sh
 #
 # Ad-hoc signing is the default and needs no certificate. Its one side effect: macOS ties Screen
@@ -13,8 +13,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
-IDENTITY="${PRC_SIGN_IDENTITY:--}"
-VERSION="${PRC_VERSION:-0.2.0-dev}"
+IDENTITY="${OWNDESK_SIGN_IDENTITY:--}"
+VERSION="${OWNDESK_VERSION:-0.2.0-dev}"
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
 
@@ -72,14 +72,14 @@ PLIST
   echo "built $app  [$signer]"
 }
 
-case "${1:-prc}" in
-  prc) ;;
-  *) echo "usage: $0 [prc]"; exit 2 ;;
+case "${1:-owndesk}" in
+  owndesk) ;;
+  *) echo "usage: $0 [owndesk]"; exit 2 ;;
 esac
 
-build apps/prc prc
+build apps/owndesk owndesk
 # LSUIElement: it lives in the menu bar and only claims a Dock icon while a window is open.
-bundle "PRC" prc apps/prc com.prc.app true
+bundle "OwnDesk" owndesk apps/owndesk io.github.im-fahad.owndesk true
 
 echo
-echo "Install: scripts/install-prc.sh"
+echo "Install: scripts/install-owndesk.sh"

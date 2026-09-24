@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://prc.local/schemas/signaling/SESSION_REJECT.json",
+  "$id": "https://owndesk.local/schemas/signaling/SESSION_REJECT.json",
   "type": "object",
   "required": ["reason"],
   "properties": {
-    "reason": { "$ref": "https://prc.local/schemas/common.json#/$defs/sessionRejectReason" }
+    "reason": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/sessionRejectReason" }
   }
 }

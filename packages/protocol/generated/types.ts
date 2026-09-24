@@ -71,7 +71,7 @@ export interface SignalingEnvelope {
 }
 export interface PairingQRPayload {
   v: number;
-  kind: "prc-pair";
+  kind: "owndesk-pair";
   /**
    * Lowercase hex SHA-256 of the 65-byte X9.63 public key.
    */

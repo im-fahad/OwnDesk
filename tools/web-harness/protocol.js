@@ -13,8 +13,8 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 export const PROTOCOL_VERSION = 1;
-export const SIGNALING_CONTEXT = 'prc-signaling-v1';
-export const PAIRING_CONTEXT = 'prc-pairing-v1';
+export const SIGNALING_CONTEXT = 'owndesk-signaling-v1';
+export const PAIRING_CONTEXT = 'owndesk-pairing-v1';
 export const MAX_SKEW_MS = 300_000;
 
 export function b64url(bytes) {
@@ -61,7 +61,7 @@ export async function importPublicKey(raw) {
   return raw;
 }
 
-export async function loadIdentity(storageKey = 'prc.identity') {
+export async function loadIdentity(storageKey = 'owndesk.identity') {
   let priv = null;
   try {
     const stored = localStorage.getItem(storageKey);
@@ -76,7 +76,7 @@ export async function loadIdentity(storageKey = 'prc.identity') {
   return { privateKey: priv, publicKey: publicKeyRaw, publicKeyRaw, publicKeyB64: b64url(publicKeyRaw), deviceId, fingerprint: fingerprint(deviceId) };
 }
 
-export function resetIdentity(storageKey = 'prc.identity') {
+export function resetIdentity(storageKey = 'owndesk.identity') {
   localStorage.removeItem(storageKey);
 }
 

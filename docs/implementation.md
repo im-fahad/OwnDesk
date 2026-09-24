@@ -1,4 +1,4 @@
-# PRC as built
+# OwnDesk as built
 
 What exists today, how it works, and the things that were learned the hard way. The design this
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
@@ -34,14 +34,14 @@ packages/protocol          the single source of truth for the wire format
   src/                     the TypeScript reference implementation
   scripts/                 codegen (types + the Swift key table) and vector generation
 packages/swift             Swift libraries used by both halves
-  PRCIdentity              P-256 keys, Secure Enclave, encodings, code-signing check
-  PRCProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
-  PRCPeers                 the peer list: who is trusted, in which direction
-  PRCLocalControl          a same-user control channel so scripts can drive PRC.app
-apps/prc                   the Mac app: menu bar plus a window, hosts and controls
+  OwnDeskIdentity              P-256 keys, Secure Enclave, encodings, code-signing check
+  OwnDeskProtocol              envelopes, receiver rules, payloads, data channel codec, pairing
+  OwnDeskPeers                 the peer list: who is trusted, in which direction
+  OwnDeskLocalControl          a same-user control channel so scripts can drive OwnDesk.app
+apps/owndesk                   the Mac app: menu bar plus a window, hosts and controls
 apps/android               the phone app: controls only, with video and touch input
-apps/mac-agent             hosting half (PRCAgentCore) plus the headless prc-agent CLI
-apps/mac-controller        controlling half (PRCControllerCore) plus prc-controller-cli
+apps/mac-agent             hosting half (OwnDeskAgentCore) plus the headless owndesk-agent CLI
+apps/mac-controller        controlling half (OwnDeskControllerCore) plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
 tools/web-harness          browser controller, development only
 scripts/                   build, install, uninstall, draw the app icon
@@ -53,11 +53,11 @@ and packs the result with `iconutil`. Run it only when the artwork changes, sinc
 the committed `assets/AppIcon.icns`.
 
 The v0.1 SwiftUI app targets in `apps/mac-agent` and `apps/mac-controller` were removed once
-`apps/prc` replaced them; their libraries and CLIs stay.
+`apps/owndesk` replaced them; their libraries and CLIs stay.
 
 ## 3. How a session happens
 
-1. **Discovery.** The host advertises `_prc._tcp` over Bonjour with its device id in the
+1. **Discovery.** The host advertises `_owndesk._tcp` over Bonjour with its device id in the
    TXT record. Away from the LAN the controller uses a stored address instead, and tries every
    address it knows in parallel, taking the first that answers.
 2. **Signalling.** The host serves a WebSocket on port 47500. There is no server in the middle;
@@ -90,7 +90,7 @@ failure is final: size, version, recipient, known sender, signature, clock skew,
 pairing exchange, or one session request and its answer. Both sides reset after the reply, so a
 retry starts again at 1.
 
-### PRCPeers
+### OwnDeskPeers
 
 One record per peer holding the key once and two independent permissions: **may control us** and
 **we may control it**. Key lookups are gated on the relevant permission, so revoking a direction
@@ -103,7 +103,7 @@ is its own hosting switch, which is off until turned on.
 
 ### The app
 
-`apps/prc` runs as a menu bar item with a window on demand. Hosting is off by default and turning
+`apps/owndesk` runs as a menu bar item with a window on demand. Hosting is off by default and turning
 it on is what constructs the hosting half, so a Mac used only as a controller never touches screen
 capture and is never asked for those permissions.
 
@@ -132,7 +132,7 @@ its control CLI, which is how the flow is tested without typing on the phone.
 
 - `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
   Recording permission and no display.
-- `PRCLocalControl` gives the app a loopback port and a token in its data folder, so a script can
+- `OwnDeskLocalControl` gives the app a loopback port and a token in its data folder, so a script can
   read state, connect, measure, and take access away. It cannot switch hosting on, pair, approve,
   or grant a permission: any program running as the user can read the token, and the app holds
   Screen Recording and Accessibility, so those stay clicks.
@@ -151,10 +151,10 @@ npm run android-frames                     # the phone's frames against the real
 (cd apps/mac-controller && swift test)
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
 
-scripts/build-apps.sh prc                  # dist/PRC.app, ad-hoc signed
-scripts/install-prc.sh                     # ~/Applications, menu bar, starts at login
-scripts/install-prc.sh --stage             # copy only, for a Mac you are away from
-scripts/install-prc.sh --replace-agent     # also remove the older split agent
+scripts/build-apps.sh owndesk                  # dist/OwnDesk.app, ad-hoc signed
+scripts/install-owndesk.sh                     # ~/Applications, menu bar, starts at login
+scripts/install-owndesk.sh --stage             # copy only, for a Mac you are away from
+scripts/install-owndesk.sh --replace-agent     # also remove the older split agent
 
 cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -339,7 +339,7 @@ discovery sink filters on its own device id.
 pairing time, and a router that moves a lease makes them wrong: the MacBook paired at .50 answered
 at .51, the mini paired at .55 answered at .52. With Tailscale off, nothing reachable was left in
 the list, so a Mac sitting on the same Wi-Fi showed a grey dot and could only be reached by typing
-an address by hand. The phone now browses `_prc._tcp` with `NsdManager` and matches the
+an address by hand. The phone now browses `_owndesk._tcp` with `NsdManager` and matches the
 `id` in the TXT record against its peer list, which is the Mac saying where it is now. The answer
 goes to the front of `addresses`, capped at six, so the dot, the connect path and the address
 dialog all get it at once — everything funnels through `Peer.candidates()`. Two details: NsdManager
@@ -366,7 +366,7 @@ screenshots settled several questions that eyes could not.
 
 ## 7. Where it runs today
 
-Both Macs run only `~/Applications/PRC.app` under the `com.prc.app` LaunchAgent, hosting on, with
+Both Macs run only `~/Applications/OwnDesk.app` under the `io.github.im-fahad.owndesk` LaunchAgent, hosting on, with
 Screen Recording and Accessibility granted. Identities survived the migration from the split apps,
 so nothing needed re-pairing: Mac mini `25AA-F3B7-4F82`, MacBook `FF28-84B1-1F62`, each holding the
 other in both directions.

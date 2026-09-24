@@ -39,7 +39,7 @@ test('generated QR payload validates against its schema and expires in 120 s', (
     hostDeviceId: vec.controller_device_id,
     hostName: 'Mac Mini M4',
     addresses: ['192.168.1.20:47500'],
-    rendezvousUrl: 'wss://prc.example.com/ws',
+    rendezvousUrl: 'wss://owndesk.example.com/ws',
     secrets,
     now: 1_000_000,
   });
