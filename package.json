@@ -1,6 +1,7 @@
 {
   "name": "prc",
   "private": true,
+  "license": "MIT",
   "description": "Personal Remote Control System: private, self-hosted remote control for a Mac Mini.",
   "workspaces": [
     "packages/protocol",

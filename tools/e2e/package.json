@@ -2,6 +2,7 @@
   "name": "@prc/e2e",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Headless end-to-end test: drives the real Mac agent from Node with an independent WebRTC stack.",
   "dependencies": {

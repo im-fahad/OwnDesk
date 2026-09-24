@@ -17,7 +17,7 @@ middle can impersonate a device, read a session, or inject a keystroke.
 [Full flow](#5-full-flow-from-a-cold-machine-to-a-moving-picture) ·
 [User guide](#6-user-guide) · [Repository](#7-repository-layout) ·
 [Building and testing](#8-building-and-testing) · [Security rules](#9-security-rules) ·
-[Not built](#10-not-built)
+[Not built](#10-not-built) · [License](#11-license)
 
 ---
 
@@ -506,3 +506,10 @@ The short version:
 - Clipboard, file transfer, multiple monitors, local cursor rendering.
 - Waking a sleeping host.
 - Retiring the two superseded app targets in `apps/mac-agent` and `apps/mac-controller`.
+
+---
+
+## 11. License
+
+[MIT](LICENSE). Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). Report security
+issues privately as described in [SECURITY.md](SECURITY.md).
