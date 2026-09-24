@@ -82,5 +82,11 @@ else
 fi
 
 echo
-echo "Hosting is off. Turn on \"Let other Macs control this one\" when you want this Mac reachable,"
-echo "then grant Screen Recording and Accessibility when it asks. Logs: $LOG_DIR"
+# A fresh install starts with hosting off; one that took over PRC keeps the setting it had.
+if [ "$(defaults read io.github.im-fahad.owndesk hostingEnabled 2>/dev/null || defaults read com.prc.app hostingEnabled 2>/dev/null)" = 1 ]; then
+  echo "Hosting is on, as it was before. Grant Screen Recording and Accessibility when it asks."
+else
+  echo "Hosting is off. Turn on \"Let other Macs control this one\" when you want this Mac reachable,"
+  echo "then grant Screen Recording and Accessibility when it asks."
+fi
+echo "Logs: $LOG_DIR"
