@@ -41,13 +41,13 @@ decision by the owner removed a whole component.
 
 | Area | v2 as written | As built |
 |---|---|---|
-| Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phone controls only. |
+| Roles | Mac mini hosts, MacBook controls | Either Mac does either, in one app. Hosting is a switch, off until turned on. The phones, Android and iPhone, control only. |
 | Apps | `mac-agent` and `mac-controller` as separate apps | One `OwnDesk.app` containing both halves as libraries. The old app targets were removed. |
 | Trust store | One direction, "trusted controllers" | One peer record per device with two flags: may control us (a per-device switch on the host) and we may control it (always set for a Mac). Key lookup is gated on the relevant one, so revoking a direction fails closed. |
 | Internet path | Rendezvous server plus TURN on a VPS | Tailscale. Same signed protocol over a tailnet address, no server to run, no VPS to pay for. The rendezvous protocol in section 11 is still specified and still unbuilt. |
 | Signing | A persistent identity from day one, ideally Developer ID | Ad-hoc, by the owner's decision: these apps are personal and never distributed. The cost is re-granting Screen Recording and Accessibility after each rebuild, which the install script handles with `tccutil reset`. |
-| Android input | Trackpad first, screen view second | Both, switchable, with touch as the default: on a phone the whole desktop is visible at once, so putting the pointer where the finger lands is quicker to aim than nudging it. Pinch magnifies on the phone alone. |
-| Android pairing | QR only | QR by camera, or the same code pasted as text. Decoded on the phone, offline. |
+| Phone input | Trackpad first, screen view second | Both, switchable, with touch as the default: on a phone the whole desktop is visible at once, so putting the pointer where the finger lands is quicker to aim than nudging it. Pinch magnifies on the phone alone. |
+| Phone pairing | QR only | QR by camera, or the same code pasted as text. Decoded on the phone, offline. |
 | Host UI | Menu bar only | Menu bar item plus a window: the window is needed anyway to show a screen this Mac is controlling. |
 | Codec negotiation | "H.264 via VideoToolbox" | Both sides must *state* it: name H.264 as the preferred codec and offer an H.264 level the picture actually fits in, or libwebrtc silently agrees on VP8. See implementation.md. |
 
@@ -63,7 +63,7 @@ A private, self-hosted remote-control system for personal use.
 
 - Each Mac runs one app that can host, control, or both. Hosting is off until switched on.
 - A Mac controls another Mac.
-- An Android phone controls either Mac.
+- An Android phone or an iPhone controls either Mac.
 - Controllers connect from the same LAN, or across the Internet over a Tailscale tailnet.
 - Low-latency screen viewing plus mouse and keyboard control.
 - Secure device pairing and mandatory authentication on every session.
@@ -89,14 +89,14 @@ Personal use only. No public distribution.
         │  ┌─────────────────────┐  │      └───────────────────────────┘
         │  │ controlling half    │  │
         │  └─────────────────────┘  │      ┌───────────────────────────┐
-        │  shared: identity key,    │      │      Android phone        │
-        │  peer list, window        │◄────►│   OwnDesk, the phone app      │
+        │  shared: identity key,    │      │  Android phone or iPhone  │
+        │  peer list, window        │◄────►│  OwnDesk, the phone app   │
         └───────────────────────────┘      │  controlling half only    │
                                            └───────────────────────────┘
 
         ◄────►  signalling: signed envelopes over a WebSocket the host serves
                 media: WebRTC, DTLS-SRTP, H.264 video plus three data channels
-                the phone reaches either Mac exactly the same way
+                a phone reaches either Mac exactly the same way
 
         LAN     the controller reaches that WebSocket directly, found by Bonjour.
                 No server of any kind is involved.
@@ -126,13 +126,13 @@ Two planes:
 | LAN signaling | WebSocket served by the agent, advertised via Bonjour | LAN works with no Internet and no server. |
 | Cloud signaling | WSS to the rendezvous server | Metadata privacy. Signed envelopes carry the real security. |
 | Offerer | Controller | Controller creates data channels and receives video. |
-| Codec | H.264 via VideoToolbox | Hardware encode on Mac, hardware decode on Android and Mac. |
+| Codec | H.264 via VideoToolbox | Hardware encode on Mac, hardware decode on Android, iPhone and Mac. |
 | Fallback | Single ICE negotiation with all candidate types | ICE already picks the best path. |
 | MacBook stack | Native Swift | Shares code with the agent. Web views swallow system shortcuts. |
 | Mac app shape | One app with both halves; hosting off by default | A Mac used only as a controller never constructs capture and is never asked for those permissions. |
 | Internet path | Tailscale, not a rendezvous server | Same signed protocol, no server to run or pay for. WireGuard underneath, and it is already trusted with far more than this. |
-| Android pointer | Absolute touch by default, relative trackpad on request | The whole desktop is visible on a phone, so landing the pointer under the finger aims faster; the trackpad is there for small targets. |
-| Android magnification | Local only, never asked of the host | Costs no bandwidth and keeps working on a poor link. |
+| Phone pointer | Absolute touch by default, relative trackpad on request | The whole desktop is visible on a phone, so landing the pointer under the finger aims faster; the trackpad is there for small targets. |
+| Phone magnification | Local only, never asked of the host | Costs no bandwidth and keeps working on a poor link. |
 | Code signing | Ad-hoc, no certificate | The owner's decision: personal use, never distributed. Grants are re-issued after a rebuild by the install script. |
 | Pairing | LAN only, physical approval on the host | Removes remote pairing attack surface. |
 | Concurrency | One active controller. Second request is rejected as busy. | Simplest safe MVP behavior. |
@@ -201,7 +201,26 @@ Responsibilities:
 - Soft keyboard sending text events, and key events for non-printing keys.
 - Show what the connection is doing, read from the WebRTC stats rather than estimated.
 
-### 4.4 Rendezvous server — specified, not built
+### 4.4 iPhone controller
+
+Swift, SwiftUI for the lists and sheets, UIKit for the session screen, the same WebRTC framework as
+the Macs. Controls only; it never hosts. iOS 17 or later, iPhone and iPad.
+
+It is not a second implementation. Pairing, authentication, negotiation, keepalive and
+reconnection are `OwnDeskControllerCore`, the Mac controller's own core, which reports itself as
+`ios` when pairing and `ios-controller` in `hello`. What is its own:
+
+- The identity: a Secure Enclave key whose opaque data representation is kept in the app's sandbox
+  and excluded from backups, since no other device could use it. The Simulator has no Secure
+  Enclave and uses a software key.
+- Pairing by the system's QR detector, or from the code pasted as text; nothing leaves the device.
+- The Android app's gestures and pointer arithmetic, carried over case for case with their tests
+  (`apps/ios/OwnDeskTouch`), so a finger means the same on either phone.
+- The soft keyboard sending text, with a key bar for what a phone keyboard lacks: Escape, Tab, the
+  arrows, and modifiers that apply to the next key. A hardware keyboard's keys go as key events,
+  named through the USB HID table in `packages/protocol/keycodes`.
+
+### 4.5 Rendezvous server — specified, not built
 
 Node.js, TypeScript, one WebSocket endpoint, one health endpoint, behind a TLS reverse proxy.
 Deferred: a tailnet does the same job with nothing to run. Section 11 defines the protocol should it
@@ -215,7 +234,7 @@ Would:
 Would not: store anything durable, inspect the inner envelopes, carry video or input, or offer any
 REST API for device management.
 
-### 4.5 TURN — specified, not built
+### 4.6 TURN — specified, not built
 
 coturn with time-limited credentials (`use-auth-secret`), treated as an untrusted packet relay.
 Tailscale's own DERP relay fills this role today.
@@ -239,6 +258,7 @@ Every device generates one P-256 key pair at first launch.
 |---|---|
 | macOS | CryptoKit `SecureEnclave.P256.Signing.PrivateKey`, falling back to a Keychain-stored key on Macs without Secure Enclave. |
 | Android | Android Keystore EC P-256, `setIsStrongBoxBacked(true)` when available, otherwise TEE. Signatures come back DER-encoded and must be converted to raw r\|\|s. |
+| iOS | CryptoKit `SecureEnclave.P256.Signing.PrivateKey`. Its data representation, useless on any other device, is stored in the app's sandbox and excluded from backups. |
 
 Private keys never leave the device. They are never sent to the server, never included in QR codes, never logged.
 
@@ -373,7 +393,7 @@ Contains no private keys, no permanent secrets, no passwords. The pairing code i
 {
   "public_key": "<base64url 65 bytes>",
   "device_name": "My MacBook",
-  "device_type": "mac" ,
+  "device_type": "mac",
   "pairing_session_id": "<from QR>",
   "proof": "<base64url HMAC-SHA256>"
 }
@@ -385,6 +405,9 @@ proof = HMAC-SHA256( key = pairing_code bytes,
 ```
 
 The proof stops anyone on the LAN who has not seen the QR from triggering approval dialogs. The fingerprint comparison stops anyone who has seen the QR from substituting their own key. The host key hash in the QR stops a fake host on the LAN from collecting the controller's request.
+
+`device_type` is `mac`, `android`, `ios` or `web`. It decides what the host records: only a `mac`
+can also be controlled back, because only a Mac runs the hosting half.
 
 ### 7.4 PAIR_RESULT payload
 
@@ -753,8 +776,8 @@ Every message:
 
 | type | Fields | Notes |
 |---|---|---|
-| `mouse_move` | `display_id` string, `x` 0..1, `y` 0..1 | Absolute, normalized to the streamed display. Used by the MacBook and Android screen mode. The host must ignore one whose `ts` is older than the newest already applied: this channel is unordered with no retransmits, so on a relayed link a reordered pair would otherwise snap the cursor back to a stale position, which reads as shaking. Relative moves need no such rule, being additive. |
-| `mouse_move_rel` | `dx`, `dy` in host points | Relative. Used by Android trackpad mode. Host applies its own acceleration curve. |
+| `mouse_move` | `display_id` string, `x` 0..1, `y` 0..1 | Absolute, normalized to the streamed display. Used by the MacBook and the phones' touch mode. The host must ignore one whose `ts` is older than the newest already applied: this channel is unordered with no retransmits, so on a relayed link a reordered pair would otherwise snap the cursor back to a stale position, which reads as shaking. Relative moves need no such rule, being additive. |
+| `mouse_move_rel` | `dx`, `dy` in host points | Relative. Used by the phones' trackpad mode. Host applies its own acceleration curve. |
 | `mouse_down` | `button`: `left`, `right`, `middle` | Host computes click count from timing and position and sets `mouseEventClickState`. |
 | `mouse_up` | `button` | |
 | `scroll` | `dx`, `dy` in points, `precise` bool, `phase`: `began`, `changed`, `ended`, `momentum`, or omitted | Precise true for trackpad and touch, false for wheel notches. Sign follows the browser WheelEvent: positive `dy` scrolls the content down. |
@@ -1085,13 +1108,15 @@ owndesk/
     implementation.md       what exists, and what it cost to learn
   apps/
     owndesk/                the Mac app: menu bar plus a window, hosts and controls
-    android/                the phone app: controls only
+    android/                the Android app: controls only
+    ios/                    the iPhone app: controls only, on OwnDeskControllerCore
+      OwnDeskTouch/         gestures, pointer mapping, key tables, tested without a simulator
     mac-agent/              OwnDeskAgentCore, the hosting half, plus the owndesk-agent CLI
     mac-controller/         OwnDeskControllerCore, the controlling half, plus owndesk-controller-cli
   packages/
     protocol/               the single source of truth
       schemas/              JSON Schema for every envelope, payload, and data channel message
-      keycodes/             W3C code -> macOS virtual key, W3C code -> Android KeyEvent
+      keycodes/             W3C code -> macOS virtual key, Android KeyEvent -> W3C, USB HID -> W3C
       vectors/              signing inputs, signatures, pairing proofs, receiver cases
       generated/            types produced by codegen, committed
       src/                  the TypeScript reference implementation
@@ -1111,7 +1136,8 @@ table only; the Kotlin protocol layer is written by hand against the same schema
 same vectors, which is what actually matters.
 
 The `protocol` package is the single source of truth. The vectors are run by all three
-implementations, so a signature computed on Android verifies on both Macs.
+implementations, so a signature computed on Android verifies on both Macs. The iPhone adds no
+fourth: it runs the Swift one.
 
 ---
 
@@ -1127,9 +1153,10 @@ Followed in this order, with the numbering kept so old notes still line up.
 | 4. Mac controller: discovery, authentication, video, mouse, keyboard, text | done |
 | 5. Pairing and host UI: QR, proof, approval, peers, kill switch, power assertion, LaunchAgent | done, except the persistent signing identity, which the owner declined |
 | 6. Rendezvous server and TURN | **not done.** Replaced by Tailscale, section 9.4 |
-| 7. Reconnection: ICE restart, resume, network change | done on the Macs; the phone does not yet reconnect by itself |
+| 7. Reconnection: ICE restart, resume, network change | done on the Macs, and the iPhone runs the same code; the Android phone does not yet reconnect by itself |
 | 8. Android controller: Keystore identity, authentication, video, touch and trackpad, keyboard | done |
 | 9. Phase 2 | not started |
+| 10. iPhone controller: Secure Enclave identity, the Mac controller's core, touch and trackpad, keyboard | done and tested in the Simulator against a real host; not yet run on an iPhone |
 
 The two halves were then merged into one app per Mac, which was not in this list: it came from
 using it, and finding that the machine you want to control is whichever one you are not sitting at.

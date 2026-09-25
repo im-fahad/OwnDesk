@@ -19,6 +19,7 @@ import Testing
             ("{\"v\":1,\"type\":\"key_up\",\"ts\":1,\"code\":\"MetaLeft\",\"modifiers\":[]}", .keyUp(code: "MetaLeft", modifiers: []), .inputReliable),
             ("{\"v\":1,\"type\":\"text\",\"ts\":1,\"text\":\"héllo 👋\"}", .text("héllo 👋"), .inputReliable),
             ("{\"v\":1,\"type\":\"hello\",\"ts\":0,\"versions\":[1],\"app\":\"mac-controller\",\"app_version\":\"0.1.0\"}", .hello(versions: [1], app: .macController, appVersion: "0.1.0"), .control),
+            ("{\"v\":1,\"type\":\"hello\",\"ts\":0,\"versions\":[1],\"app\":\"ios-controller\",\"app_version\":\"0.2.0\"}", .hello(versions: [1], app: .iosController, appVersion: "0.2.0"), .control),
             ("{\"v\":1,\"type\":\"display_info\",\"ts\":0,\"display_id\":\"main\",\"width_px\":1920,\"height_px\":1080,\"scale\":2}", .displayInfo(DisplayInfo(display_id: "main", width_px: 1920, height_px: 1080, scale: 2)), .control),
             ("{\"v\":1,\"type\":\"capture_state\",\"ts\":0,\"state\":\"paused_locked\"}", .captureState(.pausedLocked, detail: nil), .control),
             ("{\"v\":1,\"type\":\"capture_state\",\"ts\":0,\"detail\":\"no new frame\",\"state\":\"paused_error\"}", .captureState(.pausedError, detail: "no new frame"), .control),

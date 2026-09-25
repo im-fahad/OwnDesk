@@ -23,13 +23,18 @@ app is a controller only, and it is finished enough to use daily: it pairs by sc
 code, shows the screen in H.264, and drives the pointer and keyboard with the gestures the
 established remote desktop apps settled on.
 
+An iPhone app controls too. It is not a third implementation of the protocol: it links the Mac
+controller's own core, so pairing, the signed handshake, negotiation, keepalive and reconnection are
+the code a MacBook runs, and what is new is the screen, the fingers and the keyboard. It is built and
+tested in the Simulator against a real host, and needs a Mac running this version to pair with.
+
 ## 2. Repository map
 
 ```text
 docs/                      spec.md (the design), this file
 packages/protocol          the single source of truth for the wire format
   schemas/                 JSON Schema for every message, split by transport
-  keycodes/                W3C key code tables for macOS and Android
+  keycodes/                key code tables for macOS, Android and USB HID (the iPhone's keyboards)
   vectors/                 shared test vectors, run by TypeScript and Swift alike
   src/                     the TypeScript reference implementation
   scripts/                 codegen (types + the Swift key table) and vector generation
@@ -39,17 +44,20 @@ packages/swift             Swift libraries used by both halves
   OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive OwnDesk.app
 apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
-apps/android               the phone app: controls only, with video and touch input
+apps/android               the Android app: controls only, with video and touch input
+apps/ios                   the iPhone app: controls only, on OwnDeskControllerCore
+  OwnDeskTouch             its gestures, pointer mapping and key tables, tested with swift test
 apps/mac-agent             hosting half (OwnDeskAgentCore) plus the headless owndesk-agent CLI
 apps/mac-controller        controlling half (OwnDeskControllerCore) plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
 tools/web-harness          browser controller, development only
-scripts/                   build, install, uninstall, draw the app icon
+scripts/                   build, install, uninstall, draw the app icons, test the iPhone app
 assets/                    AppIcon.icns, which the build copies into every bundle
 ```
 
 The icon is drawn, not painted: `scripts/make-app-icon.swift` renders it as vectors at each size
-and packs the result with `iconutil`. Run it only when the artwork changes, since the build uses
+and packs the result with `iconutil`. The same drawing, full-bleed and opaque because iOS cuts its
+own corners, becomes the iPhone app's 1024-pixel icon. Run it only when the artwork changes, since the build uses
 the committed `assets/AppIcon.icns`.
 
 The v0.1 SwiftUI app targets in `apps/mac-agent` and `apps/mac-controller` were removed once
@@ -133,6 +141,25 @@ is actually doing, read from `getStats` rather than guessed, and that panel is w
 codec bugs below. A debug build can be driven by intent extras, the way the Mac app can be driven by
 its control CLI, which is how the flow is tested without typing on the phone.
 
+### The iPhone
+
+The iPhone app is small because most of it already existed. `packages/swift` and
+`OwnDeskControllerCore` build for iOS as they are: the only macOS-only pieces were the code-signing
+check and the `NSEvent` helpers, now behind `#if`. The controller core learned two settings, what to
+call itself in `hello` and what device type to pair as, and the Mac host needed only the new enum
+values: a phone was already a device that controls and is never controlled.
+
+What is new: a SwiftUI home screen and sheets in the Mac app's palette, a UIKit session screen with
+the picture in an `RTCMTLVideoView`, and `OwnDeskTouch`, a package with no UIKit in it holding the
+Android app's gesture rules and pointer arithmetic, ported case for case with their tests, plus the
+keyboard tables. Its identity is a Secure Enclave key; the file in its sandbox holds only the
+enclave's opaque handle, and is excluded from backups because no other device could use it. The
+Simulator has no enclave and gets a software key.
+
+Signing stays personal. The project carries no team: `apps/ios/Config/Base.xcconfig` optionally
+includes `Local.xcconfig`, which git ignores, and that is where a developer's team ID and bundle
+identifier go. The Simulator needs neither.
+
 ### Testing without hardware
 
 - `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
@@ -143,6 +170,12 @@ its control CLI, which is how the flow is tested without typing on the phone.
   Screen Recording and Accessibility, so those stay clicks.
 - `tools/e2e` spawns the real agent binary and drives it from Node using werift, a WebRTC
   implementation independent of libwebrtc, which is a genuine interoperability check.
+- `--print-input` makes the agent print each input message instead of injecting it, so a
+  controller's taps can be checked for where they land without the host's pointer moving and
+  without Accessibility. Typed text is printed as a count of characters, never as text.
+- `scripts/test-ios-simulator.sh` runs the iPhone app's UI tests in the Simulator against that
+  agent: it opens a pairing window, hands the code to the test, approves the request, and then
+  checks the host received each gesture as the right event.
 
 ## 5. Building, installing, testing
 
@@ -155,6 +188,8 @@ npm run android-frames                     # the phone's frames against the real
 (cd apps/mac-agent && swift test)
 (cd apps/mac-controller && swift test)
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
+(cd apps/ios/OwnDeskTouch && swift test)
+scripts/test-ios-simulator.sh                  # the iPhone app in the Simulator, against a real host
 
 scripts/build-apps.sh owndesk                  # dist/OwnDesk.app, ad-hoc signed
 scripts/install-owndesk.sh                     # ~/Applications, menu bar, starts at login
@@ -163,10 +198,17 @@ scripts/install-owndesk.sh --replace-agent     # also remove an old v0.1 "PRC Ag
 
 cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
-Suite sizes, all passing on 2026-09-25: protocol 27, packages/swift 34, agent 52, controller 17,
-android 61, end to end 17 steps, android frames 13.
+A real iPhone needs a team: README section 6.4 walks through it with a free Apple ID. Xcode 27 has
+no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
+
+Suite sizes, all passing on 2026-09-26: protocol 27, packages/swift 35, agent 52, controller 25,
+android 61, OwnDeskTouch 26, the iPhone's UI tests 4 with 8 checks on the host, end to end 17 steps,
+android frames 13.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -381,6 +423,26 @@ frame rate going to **0** for the length of the outage. Before the fix it stayed
 frozen picture, because the repeat timer kept feeding the encoder the same frame — which is exactly
 why nothing downstream noticed.
 
+**The Macs offered too low an H.264 level as well.** The Android app's level bug turned out to be
+the Mac controller's too: libwebrtc offers level 3.1 on macOS, which stops at 1280x720, so a
+1920x1080 or 1920x1200 desktop reached a Mac controller, and the iPhone app on the same core, as
+VP8 encoded in software. It stayed hidden because every headless test streamed the 1280x720
+synthetic screen, which fits 3.1. `--synthetic-size` now sets the pattern to a real display's size,
+and a controller test streams 1920x1080 and 1920x1200 and requires H.264. `SdpPreference` in the
+controller core raises the offered level to 5.2, as the Android app does, and puts H.264 first.
+
+**A pairing window outlives nothing.** The Simulator test first opened the host's pairing window and
+then ran every UI test, and the home screen tests alone took about as long as the window's 120
+seconds, so the code had expired before the session test used it. The app checks the expiry before
+it connects, so the host saw nothing at all, which looks exactly like an unreachable host. The
+script now builds and boots first, runs the other tests, and opens the window just before the one
+that needs it.
+
+**The Team ID is not in the certificate's name.** `security find-identity` shows
+`Apple Development: Name (XXXXXXXXXX)`, and the ten characters there look like a team ID but
+identify the person. The Team ID is the certificate's `OU`, which is what the README tells
+people to read.
+
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
@@ -393,6 +455,17 @@ phone running the debug build as a controller, reaching both Macs on the LAN and
 Both Macs kept their identities through the move from the split apps and through the rename from
 PRC, so neither needed pairing again. The phone pairs once more after the rename, because its new
 application id gives it a new Keystore key.
+
+The iPhone app has run in the Simulator on this MacBook, against the headless agent with a
+1920x1080 synthetic screen: it paired as an iPhone, connected directly on the LAN, received H.264,
+and each gesture the test drives arrived at the host as the right event: tap, two-finger tap,
+hold, pinch (which sends nothing), a trackpad drag, typing, and the key bar's Escape and ⌘C. A
+two-finger scroll and a tap-twice-and-hold drag cannot be synthesised there, so only the unit tests
+cover those. It has not yet run on an iPhone.
+Both Macs were reinstalled from this version on 2026-09-26, so they accept an iPhone's pairing and
+receive full-size desktops from each other as H.264; as after every reinstall, Screen Recording and
+Accessibility had to be granted again. An older `OwnDesk.app` ignores an iPhone's request to pair
+without a word.
 
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at
@@ -411,7 +484,11 @@ why a direct path is unavailable: on this network the home router offers no port
 - Cancelling an attempt while it is connecting, on either controller.
 - The Mac app does not browse for Macs the way the phone now does, so a Mac whose address moved is
   still found only because `firstReachable` probes every candidate in parallel.
-- The phone ignores `pong`, so it has no round trip time of its own from the control channel (the
+- The iPhone app has not run on an iPhone yet, only in the Simulator. A hardware keyboard key held
+  down reaches the Mac once, not repeated, since iOS sends no repeat events for it. While the app is
+  in the background iOS suspends it, so a session there survives only if the app comes back within
+  the reconnect window.
+- The Android phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,
   `capture_state` and `bye`.

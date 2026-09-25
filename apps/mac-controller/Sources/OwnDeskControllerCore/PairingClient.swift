@@ -25,10 +25,14 @@ public final class PairingClient: @unchecked Sendable {
 
     private let identity: any SigningIdentity
     private let deviceName: String
+    private let deviceType: DeviceType
 
-    public init(identity: any SigningIdentity, deviceName: String) {
+    /// `deviceType` is what the host is told this device is. It decides whether the host may also
+    /// control it back: only a Mac hosts, so a phone is paired as a controller alone.
+    public init(identity: any SigningIdentity, deviceName: String, deviceType: DeviceType = .mac) {
         self.identity = identity
         self.deviceName = deviceName
+        self.deviceType = deviceType
     }
 
     public static func parse(_ text: String) throws -> QRPayload {
@@ -92,7 +96,7 @@ public final class PairingClient: @unchecked Sendable {
 
         guard let code = qr.pairingCodeBytes else { throw PairingError.invalidPayload("pairing_code") }
         let proof = Pairing.proof(pairingCode: code, pairingSessionId: qr.pairing_session_id, controllerDeviceId: identity.deviceId)
-        let request = PairRequestPayload(public_key: identity.publicKeyB64, device_name: deviceName, device_type: .mac, pairing_session_id: qr.pairing_session_id, proof: proof)
+        let request = PairRequestPayload(public_key: identity.publicKeyB64, device_name: deviceName, device_type: deviceType, pairing_session_id: qr.pairing_session_id, proof: proof)
         let env = try sender.build(.pairRequest(request), to: hostId, session: "")
         client.send(String(decoding: try env.serialized(), as: UTF8.self))
 

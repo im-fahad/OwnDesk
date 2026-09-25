@@ -6,7 +6,7 @@ let mode: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
 let package = Package(
     name: "OwnDeskMacController",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "OwnDeskControllerCore", targets: ["OwnDeskControllerCore"]),
         .executable(name: "owndesk-controller-cli", targets: ["owndesk-controller-cli"]),

@@ -22,6 +22,8 @@ local.properties
 # Secrets and local config
 .env
 *.local.json
+# The iPhone app's signing: a personal team ID and bundle ID stay on their own Mac
+apps/ios/Config/Local.xcconfig
 dist/
 
 # Android build outputs

@@ -1,6 +1,7 @@
 import Foundation
 
-/// Identity persistence in a 0600 file inside the app's data directory, for ad-hoc signed builds.
+/// Identity persistence in a 0600 file inside the app's data directory, for ad-hoc signed Mac builds
+/// and for the iPhone app, whose sandbox already keeps the file to itself.
 /// With a Secure Enclave the file holds only the key's opaque data representation, which is useless
 /// on any other device; the private key itself never leaves the enclave. Without one, a software
 /// key is stored, which is the same protection as the Keychain offers a software key.
@@ -16,7 +17,7 @@ public enum FileBackedIdentityStore {
             do { stored = try JSONDecoder().decode(Stored.self, from: data) } catch { throw IdentityError.corruptStoredIdentity }
             switch stored.kind {
             case "secure-enclave":
-                #if os(macOS)
+                #if os(macOS) || os(iOS)
                 return try SecureEnclaveIdentity(dataRepresentation: stored.key)
                 #else
                 throw IdentityError.corruptStoredIdentity
@@ -27,7 +28,7 @@ public enum FileBackedIdentityStore {
         }
         let identity: any SigningIdentity
         let stored: Stored
-        #if os(macOS)
+        #if os(macOS) || os(iOS)
         if preferSecureEnclave, SecureEnclaveIdentity.isAvailable, let se = try? SecureEnclaveIdentity() {
             identity = se
             stored = Stored(kind: "secure-enclave", key: se.dataRepresentation)

@@ -18,6 +18,9 @@ public struct ControllerConfig: Sendable {
     public var authTimeoutSeconds: Int
     /// How long to wait for WebRTC to connect once the host has accepted.
     public var negotiateTimeoutSeconds: Int
+    /// What this controller calls itself in `hello`, which the host reads to know who is driving it.
+    public var app: AppName
+    public var appVersion: String
 
     public init(
         deviceName: String,
@@ -29,7 +32,9 @@ public struct ControllerConfig: Sendable {
         missedPongsBeforeReconnect: Int = Limits.missedPongsBeforeReconnect,
         reconnectWindowSeconds: Int = 60,
         authTimeoutSeconds: Int = 15,
-        negotiateTimeoutSeconds: Int = 30
+        negotiateTimeoutSeconds: Int = 30,
+        app: AppName = .macController,
+        appVersion: String = "0.2.0-dev"
     ) {
         self.deviceName = deviceName
         self.dataDirectory = dataDirectory
@@ -41,13 +46,17 @@ public struct ControllerConfig: Sendable {
         self.reconnectWindowSeconds = reconnectWindowSeconds
         self.authTimeoutSeconds = authTimeoutSeconds
         self.negotiateTimeoutSeconds = negotiateTimeoutSeconds
+        self.app = app
+        self.appVersion = appVersion
     }
 
+    #if os(macOS)
     public static func standard() -> ControllerConfig {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         return ControllerConfig(deviceName: Host.current().localizedName ?? "Mac", dataDirectory: support.appendingPathComponent("OwnDesk Controller", isDirectory: true))
     }
+    #endif
 }
 
 public func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }

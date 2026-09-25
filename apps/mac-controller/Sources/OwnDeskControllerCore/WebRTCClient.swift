@@ -63,11 +63,13 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
     public func offer(iceRestart: Bool) async throws -> String {
         let mandatory: [String: String]? = iceRestart ? [kRTCMediaConstraintsIceRestart: kRTCMediaConstraintsValueTrue] : nil
         let constraints = RTCMediaConstraints(mandatoryConstraints: mandatory, optionalConstraints: nil)
-        let offer: RTCSessionDescription = try await withCheckedThrowingContinuation { c in
+        let created: RTCSessionDescription = try await withCheckedThrowingContinuation { c in
             pc.offer(for: constraints) { sdp, error in
                 if let sdp { c.resume(returning: sdp) } else { c.resume(throwing: WebRTCClientError.sdp(error?.localizedDescription ?? "no offer")) }
             }
         }
+        // As offered, the H.264 level stops at 1280x720 and a full-size desktop comes back as VP8.
+        let offer = RTCSessionDescription(type: .offer, sdp: SdpPreference.preferH264(created.sdp))
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
             pc.setLocalDescription(offer) { error in
                 if let error { c.resume(throwing: WebRTCClientError.sdp(error.localizedDescription)) } else { c.resume() }
@@ -154,6 +156,9 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
         /// carry the frames being produced.
         public var jitterBufferMs: Double
         public var jitterMs: Double
+        /// What the host is actually encoding, such as "H264". A host that cannot meet the offered
+        /// H.264 level quietly sends VP8 instead, and this is the only place that shows up.
+        public var codec: String?
     }
 
     public func inboundVideoStats(sampleMs: Int = 1000, _ completion: @escaping @Sendable (InboundVideoStats?) -> Void) {
@@ -179,7 +184,8 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
                         packetsLost: second.packetsLost,
                         freezeCount: second.freezeCount,
                         jitterBufferMs: jitterBufferMs,
-                        jitterMs: second.jitter * 1000))
+                        jitterMs: second.jitter * 1000,
+                        codec: second.codec))
                 }
             }
         }
@@ -196,6 +202,7 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
         var jitterBufferDelay: Double
         var jitterBufferEmittedCount: Int
         var jitter: Double
+        var codec: String?
     }
 
     private func sampleInboundVideo(_ completion: @escaping @Sendable (InboundSample?) -> Void) {
@@ -203,6 +210,7 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
             guard let s = report.statistics.values.first(where: { $0.type == "inbound-rtp" && ($0.values["kind"] as? String) == "video" }) else {
                 completion(nil); return
             }
+            let codec = (s.values["codecId"] as? String).flatMap { report.statistics[$0]?.values["mimeType"] as? String }
             let int = { (key: String) -> Int in (s.values[key] as? NSNumber)?.intValue ?? 0 }
             let double = { (key: String) -> Double in (s.values[key] as? NSNumber)?.doubleValue ?? 0 }
             completion(InboundSample(
@@ -215,7 +223,8 @@ public final class WebRTCClient: NSObject, RTCPeerConnectionDelegate, RTCDataCha
                 freezeCount: int("freezeCount"),
                 jitterBufferDelay: double("jitterBufferDelay"),
                 jitterBufferEmittedCount: int("jitterBufferEmittedCount"),
-                jitter: double("jitter")))
+                jitter: double("jitter"),
+                codec: codec.map { $0.replacingOccurrences(of: "video/", with: "") }))
         }
     }
 

@@ -1,4 +1,5 @@
-// Draws the app icon and writes dist/AppIcon.iconset plus assets/AppIcon.icns.
+// Draws the app icon and writes dist/AppIcon.iconset plus assets/AppIcon.icns, and the iPhone app's
+// icon into its asset catalog.
 //
 //   swift scripts/make-app-icon.swift
 //
@@ -60,21 +61,26 @@ func pointer(tip: CGPoint, height: CGFloat) -> CGPath {
     return path
 }
 
-func draw(into ctx: CGContext, pixels: CGFloat) {
+/// `fullBleed` draws the iPhone variant: the blue fills the whole square, with no outline or shadow,
+/// because iOS cuts the corners itself, and the rest is enlarged to fill it as it fills the Mac body.
+func draw(into ctx: CGContext, pixels: CGFloat, fullBleed: Bool = false) {
     ctx.scaleBy(x: pixels / grid, y: pixels / grid)
     ctx.setLineJoin(.round)
     ctx.setLineCap(.round)
 
     // The body sits inside the grid the way macOS expects, leaving room for its shadow.
-    let body = squircle(center: CGPoint(x: 512, y: 522), radius: 412)
+    let body = fullBleed ? CGPath(rect: CGRect(x: 0, y: 0, width: grid, height: grid), transform: nil)
+                         : squircle(center: CGPoint(x: 512, y: 522), radius: 412)
 
     // Shadow first, cast by a flat fill that the gradient then covers.
-    ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -10), blur: 26, color: color(0x000000, 0.32))
-    ctx.addPath(body)
-    ctx.setFillColor(color(0x2F6BE0))
-    ctx.fillPath()
-    ctx.restoreGState()
+    if !fullBleed {
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -10), blur: 26, color: color(0x000000, 0.32))
+        ctx.addPath(body)
+        ctx.setFillColor(color(0x2F6BE0))
+        ctx.fillPath()
+        ctx.restoreGState()
+    }
 
     // Body gradient: the app's accent blue, lit from the top.
     ctx.saveGState()
@@ -84,10 +90,11 @@ func draw(into ctx: CGContext, pixels: CGFloat) {
     let gradient = CGGradient(colorsSpace: space,
                               colors: [color(0x74AEFF), color(0x4D8EF7), color(0x1F4FD8)] as CFArray,
                               locations: [0, 0.52, 1])!
+    // Full bleed reaches past the body's own top and bottom, so the ends of the gradient carry on.
     ctx.drawLinearGradient(gradient,
                            start: CGPoint(x: 512, y: 934),
                            end: CGPoint(x: 512, y: 110),
-                           options: [])
+                           options: fullBleed ? [.drawsBeforeStartLocation, .drawsAfterEndLocation] : [])
     // A soft light near the top, so the face is not flat.
     let glow = CGGradient(colorsSpace: space,
                           colors: [color(0xFFFFFF, 0.30), color(0xFFFFFF, 0)] as CFArray,
@@ -97,11 +104,20 @@ func draw(into ctx: CGContext, pixels: CGFloat) {
                            endCenter: CGPoint(x: 512, y: 900), endRadius: 620,
                            options: [])
     // The lit edge along the top rim.
-    ctx.addPath(body)
-    ctx.setStrokeColor(color(0xFFFFFF, 0.22))
-    ctx.setLineWidth(8)
-    ctx.strokePath()
+    if !fullBleed {
+        ctx.addPath(body)
+        ctx.setStrokeColor(color(0xFFFFFF, 0.22))
+        ctx.setLineWidth(8)
+        ctx.strokePath()
+    }
     ctx.restoreGState()
+
+    if fullBleed {
+        // The Mac body spans 824 of the 1024 grid; the iPhone's spans all of it.
+        ctx.translateBy(x: 512, y: 512)
+        ctx.scaleBy(x: grid / 824, y: grid / 824)
+        ctx.translateBy(x: -512, y: -522)
+    }
 
     // The display: white, filled, so it survives being drawn at sixteen points. Its own shadow
     // lifts it off the blue rather than letting it look like a hole.
@@ -139,13 +155,14 @@ func draw(into ctx: CGContext, pixels: CGFloat) {
     ctx.fillPath()
 }
 
-func render(pixels: Int) -> Data {
+func render(pixels: Int, fullBleed: Bool = false) -> Data {
+    // An iPhone icon must be opaque, so that one carries no alpha channel at all.
     let ctx = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
                         space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                        bitmapInfo: (fullBleed ? CGImageAlphaInfo.noneSkipLast : .premultipliedLast).rawValue)!
     ctx.setAllowsAntialiasing(true)
     ctx.interpolationQuality = .high
-    draw(into: ctx, pixels: CGFloat(pixels))
+    draw(into: ctx, pixels: CGFloat(pixels), fullBleed: fullBleed)
     let image = ctx.makeImage()!
     let rep = NSBitmapImageRep(cgImage: image)
     return rep.representation(using: .png, properties: [:])!
@@ -172,3 +189,9 @@ guard convert.terminationStatus == 0 else {
     exit(1)
 }
 print("wrote \(icns.path)")
+
+// The iPhone app takes one 1024-pixel image and lets Xcode make the rest.
+let iosIcon = root.appendingPathComponent("apps/ios/OwnDesk/Assets.xcassets/AppIcon.appiconset/AppIcon.png")
+try FileManager.default.createDirectory(at: iosIcon.deletingLastPathComponent(), withIntermediateDirectories: true)
+try render(pixels: 1024, fullBleed: true).write(to: iosIcon)
+print("wrote \(iosIcon.path)")

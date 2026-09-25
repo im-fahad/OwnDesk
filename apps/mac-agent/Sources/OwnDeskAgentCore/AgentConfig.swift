@@ -26,6 +26,11 @@ public struct AgentConfig: Sendable {
     public var legacyControllerDirectory: URL?
     /// TEST ONLY. Stream a generated pattern instead of the screen, so no Screen Recording permission is needed.
     public var syntheticScreen: Bool
+    /// TEST ONLY. The generated pattern's size. A controller's H.264 level decides whether a host can
+    /// send it at all, and 1280x720 is under every level a controller offers, so testing that needs
+    /// the sizes real displays have.
+    public var syntheticWidth = 1280
+    public var syntheticHeight = 720
 
     public static let defaultPort: UInt16 = 47500
     public static let serviceType = "_owndesk._tcp"

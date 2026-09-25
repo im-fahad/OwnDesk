@@ -8,7 +8,7 @@ public protocol WirePayload: Codable, Sendable, Equatable {
     func validate() throws
 }
 
-public enum DeviceType: String, Codable, Sendable { case mac, android, web }
+public enum DeviceType: String, Codable, Sendable { case mac, android, ios, web }
 public enum ConnectionPath: String, Codable, Sendable { case lan, cloud }
 public enum Codec: String, Codable, Sendable { case h264 = "H264" }
 

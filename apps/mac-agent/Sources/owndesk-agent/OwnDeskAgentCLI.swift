@@ -17,6 +17,9 @@ enum OwnDeskAgentCLI {
       --no-bonjour        Do not advertise on the LAN
       --file-identity     DEV ONLY: keep the identity in <data-dir>/identity.json instead of the Keychain
       --synthetic-screen  TEST ONLY: stream a generated pattern instead of the screen (no Screen Recording needed)
+      --synthetic-size <w>x<h>  TEST ONLY: the pattern's size (default 1280x720)
+      --print-input       TEST ONLY: print each input message instead of injecting it (no Accessibility needed).
+                          Typed text is printed as a character count, never as the text itself.
       --help
 
     Commands while running:
@@ -36,6 +39,7 @@ enum OwnDeskAgentCLI {
         setlinebuf(stdout)
         var config = AgentConfig.standard()
         var useFileIdentity = false
+        var printInput = false
         var args = Array(CommandLine.arguments.dropFirst())
         while !args.isEmpty {
             let arg = args.removeFirst()
@@ -48,6 +52,12 @@ enum OwnDeskAgentCLI {
             case "--no-bonjour": config.advertiseBonjour = false
             case "--file-identity": useFileIdentity = true
             case "--synthetic-screen": config.syntheticScreen = true
+            case "--synthetic-size":
+                let size = (args.isEmpty ? "" : args.removeFirst()).split(separator: "x").compactMap { Int($0) }
+                guard size.count == 2, (2...8192).contains(size[0]), (2...8192).contains(size[1]) else { print("--synthetic-size wants <width>x<height>"); exit(2) }
+                config.syntheticWidth = size[0]
+                config.syntheticHeight = size[1]
+            case "--print-input": printInput = true; config.inputEnabled = true
             case "--help", "-h": print(usage); return
             default: print("unknown option \(arg)\n\(usage)"); exit(2)
             }
@@ -56,13 +66,13 @@ enum OwnDeskAgentCLI {
         // Resolved after parsing so --data-dir applies regardless of flag order.
         if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
 
-        let agent = try Agent(config: config)
+        let agent = try Agent(config: config, input: printInput ? PrintedInput() : nil)
         print("OwnDesk agent")
         print("  host name    \(config.hostName)")
         print("  device id    \(agent.identity.deviceId)")
         print("  fingerprint  \(agent.identity.fingerprint)")
         print("  data dir     \(config.dataDirectory.path)")
-        print("  media        \(config.mediaEnabled ? "on" : "off")   input \(config.inputEnabled ? "on" : "off")   bonjour \(config.advertiseBonjour ? "on" : "off")")
+        print("  media        \(config.mediaEnabled ? "on" : "off")   input \(printInput ? "PRINTED, not injected" : config.inputEnabled ? "on" : "off")   bonjour \(config.advertiseBonjour ? "on" : "off")")
         print("  identity     \(config.identityFile == nil ? "Keychain / Secure Enclave" : "DEV FILE \(config.identityFile!.path)")")
         printPermissions(config)
         if config.syntheticScreen { print("  screen        SYNTHETIC PATTERN (test only)") }
@@ -70,7 +80,7 @@ enum OwnDeskAgentCLI {
             print("  requesting Screen Recording permission (grant it in System Settings > Privacy & Security, then restart)")
             Permissions.requestScreenRecording()
         }
-        if config.inputEnabled, !Permissions.accessibilityGranted {
+        if config.inputEnabled, !printInput, !Permissions.accessibilityGranted {
             print("  requesting Accessibility permission (grant it in System Settings > Privacy & Security)")
             Permissions.requestAccessibility()
         }
@@ -166,4 +176,34 @@ enum OwnDeskAgentCLI {
             print(text)
         }
     }
+}
+
+/// Stands in for the input injector when testing a controller: every message the host would have
+/// applied is printed instead, so a test can check where a tap landed without the host's pointer
+/// moving and without Accessibility. Typed text is reduced to its length, because input contents
+/// are never logged (spec section 24), not even by a test tool.
+final class PrintedInput: InputSink, @unchecked Sendable {
+    func configure(display: MediaDisplay) {
+        print("input display \(display.info.width_px)x\(display.info.height_px)")
+    }
+
+    @discardableResult
+    func inject(_ message: DataChannelMessage, sentAt: Int64, now: Int64) -> Bool {
+        let line: String
+        switch message {
+        case .mouseMove(_, let x, let y): line = String(format: "mouse_move %.4f %.4f", x, y)
+        case .mouseMoveRel(let dx, let dy): line = String(format: "mouse_move_rel %.1f %.1f", dx, dy)
+        case .mouseDown(let button): line = "mouse_down \(button.rawValue)"
+        case .mouseUp(let button): line = "mouse_up \(button.rawValue)"
+        case .scroll(let dx, let dy, _, _): line = String(format: "scroll %.1f %.1f", dx, dy)
+        case .keyDown(let code, let modifiers, _): line = "key_down \(code) \(modifiers.map(\.rawValue).joined(separator: "+"))"
+        case .keyUp(let code, let modifiers): line = "key_up \(code) \(modifiers.map(\.rawValue).joined(separator: "+"))"
+        case .text(let text): line = "text \(text.count) characters"
+        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye: return true
+        }
+        print("input \(line)")
+        return true
+    }
+
+    func releaseAll() {}
 }

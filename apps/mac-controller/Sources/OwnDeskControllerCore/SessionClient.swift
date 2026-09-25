@@ -366,7 +366,7 @@ public actor SessionClient {
 
     func mediaChannelOpened(_ label: ChannelLabel) {
         guard label == .control else { return }
-        webrtc?.send(.hello(versions: Envelope.supportedVersions, app: .macController, appVersion: "0.2.0-dev"), ts: elapsed())
+        webrtc?.send(.hello(versions: Envelope.supportedVersions, app: deps.config.app, appVersion: deps.config.appVersion), ts: elapsed())
     }
 
     func mediaFrame(_ frame: DataChannelFrame) {

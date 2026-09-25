@@ -49,7 +49,7 @@
     },
     "deviceType": {
       "type": "string",
-      "enum": ["mac", "android", "web"]
+      "enum": ["mac", "android", "ios", "web"]
     },
     "displayInfo": {
       "type": "object",

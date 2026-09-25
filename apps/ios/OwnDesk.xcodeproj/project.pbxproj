@@ -1,0 +1,487 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0D0E5C000000000000000050 /* OwnDeskIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000040 /* OwnDeskIdentity */; };
+		0D0E5C000000000000000051 /* OwnDeskProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000041 /* OwnDeskProtocol */; };
+		0D0E5C000000000000000052 /* OwnDeskPeers in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000042 /* OwnDeskPeers */; };
+		0D0E5C000000000000000053 /* OwnDeskControllerCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000043 /* OwnDeskControllerCore */; };
+		0D0E5C000000000000000054 /* OwnDeskTouch in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000044 /* OwnDeskTouch */; };
+		0D0E5C000000000000000055 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000045 /* WebRTC */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0D0E5C000000000000000019 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0D0E5C000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D0E5C000000000000000010;
+			remoteInfo = OwnDesk;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0D0E5C000000000000000007 /* OwnDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OwnDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D0E5C000000000000000008 /* OwnDeskUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OwnDeskUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D0E5C000000000000000009 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		0D0E5C00000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0D0E5C00000000000000000B /* Local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Local.xcconfig.example; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		0D0E5C000000000000000005 /* OwnDesk */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = OwnDesk;
+			sourceTree = "<group>";
+		};
+		0D0E5C000000000000000006 /* OwnDeskUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = OwnDeskUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0D0E5C000000000000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D0E5C000000000000000050 /* OwnDeskIdentity in Frameworks */,
+				0D0E5C000000000000000051 /* OwnDeskProtocol in Frameworks */,
+				0D0E5C000000000000000052 /* OwnDeskPeers in Frameworks */,
+				0D0E5C000000000000000053 /* OwnDeskControllerCore in Frameworks */,
+				0D0E5C000000000000000054 /* OwnDeskTouch in Frameworks */,
+				0D0E5C000000000000000055 /* WebRTC in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0D0E5C000000000000000016 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0D0E5C000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				0D0E5C000000000000000005 /* OwnDesk */,
+				0D0E5C000000000000000006 /* OwnDeskUITests */,
+				0D0E5C000000000000000004 /* Config */,
+				0D0E5C000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0D0E5C000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0D0E5C000000000000000007 /* OwnDesk.app */,
+				0D0E5C000000000000000008 /* OwnDeskUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0D0E5C000000000000000004 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				0D0E5C000000000000000009 /* Base.xcconfig */,
+				0D0E5C00000000000000000B /* Local.xcconfig.example */,
+				0D0E5C00000000000000000A /* Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0D0E5C000000000000000010 /* OwnDesk */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D0E5C000000000000000023 /* Build configuration list for PBXNativeTarget "OwnDesk" */;
+			buildPhases = (
+				0D0E5C000000000000000012 /* Sources */,
+				0D0E5C000000000000000013 /* Frameworks */,
+				0D0E5C000000000000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0D0E5C000000000000000005 /* OwnDesk */,
+			);
+			name = OwnDesk;
+			packageProductDependencies = (
+				0D0E5C000000000000000040 /* OwnDeskIdentity */,
+				0D0E5C000000000000000041 /* OwnDeskProtocol */,
+				0D0E5C000000000000000042 /* OwnDeskPeers */,
+				0D0E5C000000000000000043 /* OwnDeskControllerCore */,
+				0D0E5C000000000000000044 /* OwnDeskTouch */,
+				0D0E5C000000000000000045 /* WebRTC */,
+			);
+			productName = OwnDesk;
+			productReference = 0D0E5C000000000000000007 /* OwnDesk.app */;
+			productType = "com.apple.product-type.application";
+		};
+		0D0E5C000000000000000011 /* OwnDeskUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D0E5C000000000000000026 /* Build configuration list for PBXNativeTarget "OwnDeskUITests" */;
+			buildPhases = (
+				0D0E5C000000000000000015 /* Sources */,
+				0D0E5C000000000000000016 /* Frameworks */,
+				0D0E5C000000000000000017 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0D0E5C000000000000000018 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				0D0E5C000000000000000006 /* OwnDeskUITests */,
+			);
+			name = OwnDeskUITests;
+			packageProductDependencies = (
+			);
+			productName = OwnDeskUITests;
+			productReference = 0D0E5C000000000000000008 /* OwnDeskUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0D0E5C000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					0D0E5C000000000000000010 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					0D0E5C000000000000000011 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 0D0E5C000000000000000010;
+					};
+				};
+			};
+			buildConfigurationList = 0D0E5C000000000000000020 /* Build configuration list for PBXProject "OwnDesk" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 0D0E5C000000000000000002;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0D0E5C000000000000000030 /* XCLocalSwiftPackageReference "../../packages/swift" */,
+				0D0E5C000000000000000031 /* XCLocalSwiftPackageReference "../mac-controller" */,
+				0D0E5C000000000000000032 /* XCLocalSwiftPackageReference "OwnDeskTouch" */,
+				0D0E5C000000000000000033 /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0D0E5C000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0D0E5C000000000000000010 /* OwnDesk */,
+				0D0E5C000000000000000011 /* OwnDeskUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0D0E5C000000000000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0D0E5C000000000000000017 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0D0E5C000000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0D0E5C000000000000000015 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0D0E5C000000000000000018 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0D0E5C000000000000000010 /* OwnDesk */;
+			targetProxy = 0D0E5C000000000000000019 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0D0E5C000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0D0E5C000000000000000009 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		0D0E5C000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0D0E5C000000000000000009 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		0D0E5C000000000000000024 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = OwnDesk;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OWNDESK_BUNDLE_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0D0E5C000000000000000025 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = OwnDesk;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OWNDESK_BUNDLE_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0D0E5C000000000000000027 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OWNDESK_BUNDLE_ID).uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = OwnDesk;
+			};
+			name = Debug;
+		};
+		0D0E5C000000000000000028 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(OWNDESK_BUNDLE_ID).uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = OwnDesk;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0D0E5C000000000000000020 /* Build configuration list for PBXProject "OwnDesk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D0E5C000000000000000021 /* Debug */,
+				0D0E5C000000000000000022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0D0E5C000000000000000023 /* Build configuration list for PBXNativeTarget "OwnDesk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D0E5C000000000000000024 /* Debug */,
+				0D0E5C000000000000000025 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0D0E5C000000000000000026 /* Build configuration list for PBXNativeTarget "OwnDeskUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D0E5C000000000000000027 /* Debug */,
+				0D0E5C000000000000000028 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0D0E5C000000000000000030 /* XCLocalSwiftPackageReference "../../packages/swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../packages/swift;
+		};
+		0D0E5C000000000000000031 /* XCLocalSwiftPackageReference "../mac-controller" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../mac-controller";
+		};
+		0D0E5C000000000000000032 /* XCLocalSwiftPackageReference "OwnDeskTouch" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = OwnDeskTouch;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0D0E5C000000000000000033 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 152.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0D0E5C000000000000000040 /* OwnDeskIdentity */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000030 /* XCLocalSwiftPackageReference "../../packages/swift" */;
+			productName = OwnDeskIdentity;
+		};
+		0D0E5C000000000000000041 /* OwnDeskProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000030 /* XCLocalSwiftPackageReference "../../packages/swift" */;
+			productName = OwnDeskProtocol;
+		};
+		0D0E5C000000000000000042 /* OwnDeskPeers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000030 /* XCLocalSwiftPackageReference "../../packages/swift" */;
+			productName = OwnDeskPeers;
+		};
+		0D0E5C000000000000000043 /* OwnDeskControllerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000031 /* XCLocalSwiftPackageReference "../mac-controller" */;
+			productName = OwnDeskControllerCore;
+		};
+		0D0E5C000000000000000044 /* OwnDeskTouch */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000032 /* XCLocalSwiftPackageReference "OwnDeskTouch" */;
+			productName = OwnDeskTouch;
+		};
+		0D0E5C000000000000000045 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000033 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 0D0E5C000000000000000001 /* Project object */;
+}

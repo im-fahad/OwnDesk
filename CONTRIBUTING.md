@@ -19,13 +19,18 @@ must pass. If you change a schema or a key table, regenerate the vectors and cod
 cd packages/protocol && npm run vectors && npm run codegen
 ```
 
-and make sure the Swift and Kotlin vector tests still agree with them.
+and make sure the Swift and Kotlin vector tests still agree with them. The iPhone app runs the
+Swift implementation, so it needs no vectors of its own, but a change to its gestures or keys should
+keep `swift test` in `apps/ios/OwnDeskTouch` and `scripts/test-ios-simulator.sh` passing.
 
 ## Pull requests
 
 - Keep each pull request to one change, with tests for it.
 - Match the style of the code around it.
 - Never commit real keys, pairing codes, addresses of your own machines, or logs from a session.
+- Never commit your Apple team ID or a bundle identifier of your own. They go in
+  `apps/ios/Config/Local.xcconfig`, which git ignores; README section 6.4 shows how. Do not choose a
+  team in Xcode's Signing & Capabilities tab, which writes it into the shared project file.
 
 ## Security issues
 

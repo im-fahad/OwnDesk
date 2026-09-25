@@ -12,7 +12,7 @@ public protocol FrameSource: AnyObject, Sendable {
 
 extension ScreenCapturer: FrameSource {}
 
-/// TEST ONLY. A 720p moving pattern at up to 30 fps, so the encoder and WebRTC path can be
+/// TEST ONLY. A moving pattern, 720p unless asked otherwise, at up to 30 fps, so the encoder and WebRTC path can be
 /// exercised end to end without Screen Recording permission. Never enabled by default.
 public final class SyntheticFrameSource: FrameSource, @unchecked Sendable {
     public enum SyntheticError: Error { case pool }
@@ -22,17 +22,21 @@ public final class SyntheticFrameSource: FrameSource, @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var pool: CVPixelBufferPool?
     private var tick = 0
+    private let baseWidth: Int
+    private let baseHeight: Int
     private var width = 1280
     private var height = 720
 
-    public init(frameHandler: @escaping ScreenCapturer.FrameHandler) {
+    public init(frameHandler: @escaping ScreenCapturer.FrameHandler, width: Int = 1280, height: Int = 720) {
         self.frameHandler = frameHandler
+        baseWidth = width
+        baseHeight = height
     }
 
     public func start(maxLongEdge: Int, fps: Int) async throws -> MediaDisplay {
-        let scale = min(1, Double(maxLongEdge) / 1280)
-        width = Int((1280 * scale) / 2) * 2
-        height = Int((720 * scale) / 2) * 2
+        let scale = min(1, Double(maxLongEdge) / Double(max(baseWidth, baseHeight)))
+        width = Int((Double(baseWidth) * scale) / 2) * 2
+        height = Int((Double(baseHeight) * scale) / 2) * 2
         let attrs: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
             kCVPixelBufferWidthKey as String: width,

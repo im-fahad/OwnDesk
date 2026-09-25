@@ -2,13 +2,13 @@
 
 Private remote control for your own devices.
 
-Control a Mac from another Mac or an Android phone (screen, mouse, trackpad, touch and keyboard)
+Control a Mac from another Mac, an Android phone or an iPhone (screen, mouse, trackpad, touch and keyboard)
 with no account, no cloud service, and no port open to the Internet. Devices pair once by scanning
 a code. Every session is end-to-end encrypted over WebRTC, and every message that sets one up is
 signed by a key that never leaves its device, so neither the network, nor a relay, nor anything in
 the middle can impersonate a device, read a session, or inject a keystroke.
 
-**Runs on:** macOS 14+ (host and controller) · Android 8+ (controller)<br>
+**Runs on:** macOS 14+ (host and controller) · Android 8+ (controller) · iOS 17+ (controller)<br>
 **Away from home:** through [Tailscale](https://tailscale.com), with no port forwarding<br>
 **Status:** early, used daily on the author's own devices
 
@@ -31,10 +31,11 @@ the middle can impersonate a device, read a session, or inject a keystroke.
 | Mac mini | `OwnDesk.app` | yes | yes |
 | MacBook | `OwnDesk.app` | yes | yes |
 | Android phone | `OwnDesk` (`io.github.im_fahad.owndesk`) | no | yes |
+| iPhone or iPad | `OwnDesk` (`apps/ios`), built with your own Apple ID | no | yes |
 
 One Mac app fills both roles. A Mac can be controlled, control another, or do both at once.
 Hosting is a switch that is **off** until you turn it on, so installing the app never makes a Mac
-remotely controllable on its own. The phone only controls, which is why its app is much smaller.
+remotely controllable on its own. The phones only control, which is why their apps are much smaller.
 
 ---
 
@@ -51,7 +52,7 @@ remotely controllable on its own. The phone only controls, which is why its app 
 | Wire format | JSON envelope, payload as base64url of the exact bytes | Avoids needing canonical JSON in three languages |
 | Source of truth | JSON Schema in `packages/protocol` | Codegen produces TypeScript types and the Swift key table, so they cannot drift |
 | Cross-platform proof | Shared test vectors | The same vectors are run by TypeScript, Swift and Kotlin |
-| Media | WebRTC, H.264, DTLS-SRTP | Hardware encode on the Mac, hardware decode on the Mac and the phone |
+| Media | WebRTC, H.264, DTLS-SRTP | Hardware encode on the Mac, hardware decode on the Mac and the phones |
 | Pairing proof | HMAC-SHA256 over the pairing code | Proves possession of the code without sending it |
 
 ### On the Mac
@@ -65,6 +66,7 @@ remotely controllable on its own. The phone only controls, which is why its app 
 | Discovery | Bonjour, `_owndesk._tcp`, device id in the TXT record |
 | Screen capture | ScreenCaptureKit → NV12 pixel buffers |
 | Encode / decode | libwebrtc ([stasel/WebRTC](https://github.com/stasel/WebRTC) 152) with VideoToolbox H.264 |
+| Codec choice | The controller's offer puts H.264 first and states level 5.2, so a full-size desktop is not sent as VP8 |
 | Input injection | CGEvent (Quartz), with rate limits and click-count tracking |
 | Video display | `RTCMTLNSVideoView`, Metal |
 | Runs at login | LaunchAgent `io.github.im-fahad.owndesk`, restarts after a crash, not after Quit |
@@ -84,6 +86,20 @@ remotely controllable on its own. The phone only controls, which is why its app 
 | Codec choice | Asks `MediaCodecList` what its decoder supports and offers that H.264 level, capped at 5.2 |
 | QR scanning | CameraX 1.3.4 + zxing core, decoded on the phone, offline |
 | Coroutines | kotlinx-coroutines 1.8.1 |
+
+### On the iPhone
+
+| Layer | Technology |
+|---|---|
+| Language | Swift 6 toolchain, Swift 5 language mode, iOS 17+, iPhone and iPad |
+| UI | SwiftUI for the lists and sheets, UIKit for the session screen, themed to match the Mac app |
+| Session | `OwnDeskControllerCore`, the Mac controller's own core, shared rather than rewritten |
+| Key storage | Secure Enclave, kept in the app's sandbox and out of backups; a software key in the Simulator |
+| Media | [stasel/WebRTC](https://github.com/stasel/WebRTC) 152, `RTCMTLVideoView`, hardware H.264 decode |
+| Discovery | Bonjour through Network.framework, with the Local Network permission |
+| QR scanning | AVFoundation's own QR detector, on the phone, offline |
+| Gestures and keys | `OwnDeskTouch`, a small package with the Android app's gesture rules, tested on the Mac |
+| Signing | Your own Apple ID, kept in a git-ignored file. The Simulator needs none |
 
 ### Development tooling
 
@@ -116,8 +132,9 @@ speaks WebRTC without libwebrtc, and a browser harness for poking at a host by h
                    └─────────────┐            ┌───────────────┘
                                  │            │
                           ┌──────┴────────────┴──────┐
-                          │ Android phone · OwnDesk  │
-                          │  Keystore identity       │
+                          │ Phone · OwnDesk          │
+                          │  Android or iPhone       │
+                          │  hardware-held key       │
                           │  controlling half only   │
                           │  touch → pointer, keys   │
                           └──────────────────────────┘
@@ -172,7 +189,7 @@ and Accessibility. A Mac you only control *from* never sees those prompts.
 | [WebRTCClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/WebRTCClient.swift) | Offerer, data channels, the remote track, path detection |
 | [InputMapper.swift](apps/mac-controller/Sources/OwnDeskControllerCore/InputMapper.swift) | Letterbox-aware coordinates, key code inversion, modifiers, scroll |
 
-### The phone — `apps/android`
+### The Android phone — `apps/android`
 
 The same protocol, translated to Kotlin and checked against the same vectors.
 
@@ -185,6 +202,21 @@ The same protocol, translated to Kotlin and checked against the same vectors.
 | `media/` | The WebRTC client, H.264 level query, SDP preference rewriting |
 | `ui/` | The home screen, the scanner, the session screen, gestures and pointer mapping |
 
+### The iPhone — `apps/ios`
+
+No protocol of its own: it links `OwnDeskControllerCore` and the Swift packages, so pairing, the
+signed handshake, negotiation, keepalive and reconnection are the code the Mac controller runs.
+
+| Path | Role |
+|---|---|
+| [OwnDesk/AppModel.swift](apps/ios/OwnDesk/AppModel.swift) | Identity, the paired Macs, Bonjour, pairing and unpairing, address pins |
+| [OwnDesk/HomeView.swift](apps/ios/OwnDesk/HomeView.swift) | The list of Macs and what this iPhone is, as on the phone and the Mac |
+| [OwnDesk/SessionViewController.swift](apps/ios/OwnDesk/SessionViewController.swift) | The picture, the touch surface, pinch, the sidebar and info panel |
+| [OwnDesk/KeyboardCatcher.swift](apps/ios/OwnDesk/KeyboardCatcher.swift) | Soft keyboard as text, the key bar, hardware keyboards |
+| [OwnDesk/QRScanner.swift](apps/ios/OwnDesk/QRScanner.swift) | The camera, reading a pairing code |
+| [OwnDeskTouch/](apps/ios/OwnDeskTouch) | Gestures, pointer mapping and key tables, with no UIKit, tested by `swift test` |
+| [Config/](apps/ios/Config) | `Base.xcconfig` for everyone, and your own `Local.xcconfig` for signing |
+
 **Who offers.** The controller always creates the data channels and the offer; the host answers.
 That holds whether the controller is a Mac or a phone, so the host has exactly one shape of session
 to implement.
@@ -196,7 +228,7 @@ to implement.
 ### 5.1 Identity, once per device
 
 On first launch each device generates an ECDSA P-256 key it can never export — Secure Enclave on
-the Mac, Keystore on the phone. Its device id is the SHA-256 of its public key, and the first
+the Mac and the iPhone, Keystore on the Android phone. Its device id is the SHA-256 of its public key, and the first
 twelve hex characters of that are the fingerprint shown in the UI. Nothing is registered anywhere:
 the id *is* the key.
 
@@ -324,7 +356,7 @@ those grants to the signature. The install script clears the stale entry for you
 `scripts/install-owndesk.sh --stage` copies the app into place without starting anything, which is what
 to use for a Mac you are not sitting at.
 
-### 6.3 Install on the phone
+### 6.3 Install on an Android phone
 
 You need a JDK 17 or newer and the Android SDK; Android Studio brings both. Without a separate JDK,
 point `JAVA_HOME` at the one inside Android Studio:
@@ -336,11 +368,97 @@ ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 6.4 Pair
+### 6.4 Install on an iPhone
+
+You need a Mac with Xcode 26 or newer. The Macs you want to control need an `OwnDesk.app` built
+from this version or later: an older one does not know what an iPhone is, and ignores its request
+to pair without a word.
+
+**In the Simulator.** No Apple ID and no certificate: Xcode signs Simulator builds for your own Mac.
+
+1. If Xcode has no iOS Simulator yet, add one under **Xcode → Settings → Components**, or run
+   `xcodebuild -downloadPlatform iOS` (about 8 GB).
+2. Open `apps/ios/OwnDesk.xcodeproj`, choose an iPhone simulator as the destination, press ⌘R.
+   Xcode 27 has no separate Simulator app: the simulated iPhone appears in **DeviceHub**, which is
+   in `Xcode.app/Contents/Applications`. Earlier versions of Xcode open the Simulator app.
+3. The Simulator has no camera, so pair by pasting. On the Mac, **Pair a Mac… → Show a code** and
+   **Copy code**. Hand it to the simulated iPhone with `pbpaste | xcrun simctl pbcopy booted`, then
+   on it **Pair a Mac…**, paste, **Pair**, and approve on the Mac. To pair with another Mac, copy the
+   code there and fetch it over SSH instead:
+   `ssh <that Mac> pbpaste | xcrun simctl pbcopy booted`.
+
+From Terminal instead:
+
+```sh
+xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+```
+
+**On your own iPhone, with your Apple ID.** A free Apple ID is enough. Your team ID and bundle
+identifier go in one local file that git ignores, so nothing about you reaches the repository.
+
+1. **Sign in to Xcode.** Xcode → **Settings → Accounts → +** → Apple ID. A free account shows up as
+   a team named *Your Name (Personal Team)*. Select it, choose **Manage Certificates… → + → Apple
+   Development**: that makes your signing certificate, in your login keychain.
+2. **Find your Team ID**, ten letters and digits:
+
+   ```sh
+   security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+   ```
+
+   It is the value after `OU=`. The ten characters in brackets after your name are not it: they
+   identify you, not the team.
+3. **Write it where git will not see it.**
+
+   ```sh
+   cp apps/ios/Config/Local.xcconfig.example apps/ios/Config/Local.xcconfig
+   ```
+
+   In `Local.xcconfig`, set `DEVELOPMENT_TEAM` to your Team ID and `OWNDESK_BUNDLE_ID` to an
+   identifier of your own, such as `io.github.<your-github-name>.owndesk`. Apple lets only one team
+   claim an identifier, so the project's default is not available to you.
+4. **Get the iPhone ready.** Connect it by cable, unlock it, and tap **Trust**. Then **Settings →
+   Privacy & Security → Developer Mode → On**; it restarts. The switch appears only once the iPhone
+   has been connected to Xcode.
+5. **Build and install.** In Xcode, choose your iPhone as the destination and press ⌘R. Xcode
+   registers the identifier and your iPhone with your team and makes the provisioning profile.
+   From Terminal instead:
+
+   ```sh
+   xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
+     -destination 'platform=iOS,name=<your iPhone>' -allowProvisioningUpdates \
+     -derivedDataPath "$TMPDIR/owndesk-ios" build
+   xcrun devicectl device install app --device '<your iPhone>' \
+     "$TMPDIR/owndesk-ios/Build/Products/Debug-iphoneos/OwnDesk.app"
+   ```
+6. **Trust yourself on the iPhone.** The first launch is refused as an untrusted developer:
+   **Settings → General → VPN & Device Management →** your Apple ID **→ Trust**.
+7. **Allow what it asks for.** *Local Network*, or it can neither find nor reach your Macs, and
+   *Camera* when you scan a pairing code.
+
+After the first time, Xcode can install over Wi-Fi: **Window → Devices and Simulators**, select the
+iPhone, **Connect via network**.
+
+What a free Apple ID costs you: an app it signs stops opening after **seven days**. Connect and
+press ⌘R again; the pairings survive, because installing over the app keeps its data. It also
+allows three such apps on a device at a time. A paid Apple Developer Program membership makes a
+build last a year and adds TestFlight; the steps are the same.
+
+Keep your Apple ID out of git:
+
+- Your team lives only in `Local.xcconfig`. Never pick a team in Xcode's **Signing &
+  Capabilities** tab: that writes `DEVELOPMENT_TEAM` into `project.pbxproj`, which is committed.
+  After a device build, `git status` should show nothing changed under `apps/ios`.
+- Never publish a built `.app` or `.ipa`. Its signature carries your certificate, which names you
+  and often your Apple ID email, and its profile lists your iPhone's hardware ID.
+
+An iPad works the same way.
+
+### 6.5 Pair
 
 | On the host Mac | On the controller |
 |---|---|
-| Open OwnDesk, **Pair a Mac…** → **Show a code** | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On the phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
+| Open OwnDesk, **Pair a Mac…** → **Show a code** | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On a phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
 | It shows the other device's fingerprint | It shows its own fingerprint |
 | Compare the two. If they match, **Approve** | The Mac appears in the list |
 
@@ -352,13 +470,13 @@ and the phone can read it from further back, where its camera focuses. Click or 
 it also goes away by itself when the phone's request arrives, so the approval is never hidden.
 
 To unpair, hover over a device in the sidebar and click ⓧ, or right-click it and choose
-**Unpair…**. On the phone, long-press the Mac and choose **Unpair this Mac**. Unpairing on either
+**Unpair…**. On a phone, touch and hold the Mac and choose **Unpair this Mac**. Unpairing on either
 side ends the pairing on both, and they must pair again. Another Mac is told at once when it can be
 reached. A phone never listens, so it finds out the next time it tries to connect: the Mac turns it
 away and the phone removes the Mac itself. If the other side cannot be reached, OwnDesk says so, and
 you unpair there too.
 
-### 6.5 Control from a Mac
+### 6.6 Control from a Mac
 
 | Control | What it does |
 |---|---|
@@ -373,7 +491,7 @@ While the pointer is over the video, every key goes to the host, including ⌘Q 
 pointer off the video to get your own keyboard back. Double-clicking the header zooms the window
 like any other Mac app; closing it puts it back in the menu bar, and **Quit** really quits.
 
-### 6.6 Control from the phone
+### 6.7 Control from a phone
 
 Tap a paired Mac to open its screen.
 
@@ -405,17 +523,23 @@ The sidebar sits on the black bar beside the picture, so it costs no part of the
 
 The icons carry no labels. Hold one and its name appears.
 
-### 6.7 Away from home
+The iPhone has the same gestures and the same sidebar, which sits beside the picture in landscape
+and under it in portrait or while the keyboard is open. Its keyboard icon also brings up a bar
+above the keyboard with what a phone keyboard lacks: **esc**, **tab**, the arrows, and **⇧ ⌃ ⌥ ⌘**.
+A modifier there applies to the next key only, so ⌘ then C is Command-C. A hardware keyboard, on an
+iPad or an iPhone, sends every key as it is, shortcuts included.
+
+### 6.8 Away from home
 
 Pairing is LAN-only by design. Once paired, a Mac can be reached from anywhere over
 [Tailscale](https://tailscale.com): install it on the Mac and the phone or MacBook, sign both into
 the same tailnet, and connect as usual. Every address a Mac advertised at pairing time is probed at
 once and the first to answer wins, so the same button works at home and in a cafe.
 
-On the phone, long-press a Mac in the list to pin one address (**Choose an address**) when only
+On a phone, touch and hold a Mac in the list to pin one address (**Choose an address**) when only
 Tailscale will reach it, or go back to **Use any address**.
 
-### 6.8 When something is wrong
+### 6.9 When something is wrong
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
@@ -425,6 +549,9 @@ Tailscale will reach it, or go back to **Use any address**.
 | Screen Recording looks granted but hosting fails | The grant belongs to a previous build's signature | Reinstall with the script, which clears it with `tccutil` |
 | The phone shows a black screen | The host has no display attached | ScreenCaptureKit needs one: use an HDMI dummy plug on a headless Mac |
 | Nothing at all, no error | A message failed validation and was dropped without a reply | Check it against the schema first, then the network |
+| The iPhone waits for approval and the Mac never asks | The Mac's OwnDesk predates iPhone support and drops the request | Build and install OwnDesk.app on that Mac from this version |
+| The iPhone finds no Mac, and none answers | Local Network access was refused | **Settings → Privacy & Security → Local Network → OwnDesk** |
+| OwnDesk on the iPhone will not open after a week | A free Apple ID's signature lasts seven days | Connect it and press ⌘R in Xcode again |
 
 ---
 
@@ -436,7 +563,7 @@ docs/
   implementation.md        what exists, and the traps found while building it
 packages/protocol          the single source of truth for the wire format
   schemas/                 JSON Schema for every message, split by transport
-  keycodes/                W3C key code tables for macOS and Android
+  keycodes/                key code tables for macOS, Android and USB HID (iPhone keyboards)
   vectors/                 shared test vectors, run by all three languages
   src/                     the TypeScript reference implementation
 packages/swift             Swift libraries used by both halves
@@ -445,33 +572,38 @@ packages/swift             Swift libraries used by both halves
   OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive the apps
 apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
-apps/android               the phone app: controls only
+apps/android               the Android app: controls only
+apps/ios                   the iPhone app: controls only, on the Mac controller's core
+  OwnDeskTouch             gestures, pointer mapping and key tables, tested without a simulator
 apps/mac-agent             the hosting half, plus the headless owndesk-agent CLI
 apps/mac-controller        the controlling half, plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent from Node
 tools/web-harness          browser controller, development only
-scripts/                   build, install, uninstall, draw the app icon
-assets/                    AppIcon.icns, copied into every bundle by the build
+scripts/                   build, install, uninstall, draw the app icons, test the iPhone app
+assets/                    AppIcon.icns, copied into every Mac bundle by the build
 ```
 
 ---
 
 ## 8. Building and testing
 
-Requirements: Node 24 or newer, Xcode 26 or newer, and for the phone a JDK 17 and the Android SDK.
+Requirements: Node 24 or newer, Xcode 26 or newer, for the Android app a JDK 17 and the Android SDK,
+and for the iPhone app an iOS Simulator runtime.
 
 ```sh
 npm install
 npm test                                   # protocol package
 npm run typecheck
 npm run e2e                                # end to end against the real agent binary
-npm run android-frames                     # the phone's frames against the real schemas
+npm run android-frames                     # the Android app's frames against the real schemas
 npm run harness                            # browser client at http://127.0.0.1:8080/
 
 (cd packages/swift && swift test)
 (cd apps/mac-agent && swift test)
 (cd apps/mac-controller && swift test)
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
+(cd apps/ios/OwnDeskTouch && swift test)
+scripts/test-ios-simulator.sh              # the iPhone app in the Simulator, against a real host
 ```
 
 Last run, all passing:
@@ -479,23 +611,27 @@ Last run, all passing:
 | Suite | Size | What it proves |
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
-| `packages/swift` | 34 tests | The same vectors on Swift, plus peers and the control channel |
+| `packages/swift` | 35 tests | The same vectors on Swift, plus peers and the control channel |
 | `apps/mac-agent` | 52 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
-| `apps/mac-controller` | 17 tests | Geometry, key maps, and an in-process agent round trip with real video |
+| `apps/mac-controller` | 25 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264 |
 | `apps/android` | 61 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
+| `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
+| `scripts/test-ios-simulator.sh` | 4 UI tests, 8 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
 | `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
 
-The vectors are the ones that matter: if the phone disagrees with a vector it disagrees with both
+The vectors are the ones that matter: if the Android app disagrees with a vector it disagrees with both
 Macs. After changing a schema or a key table, regenerate:
 
 ```sh
 cd packages/protocol && npm run vectors && npm run codegen
 ```
 
-Two flags exist so that none of this needs a real screen or real permissions: `--synthetic-screen`
-streams a generated pattern, and `--file-identity` keeps the key in the data folder instead of the
-Keychain.
+A few agent flags exist so that none of this needs a real screen or real permissions:
+`--synthetic-screen` streams a generated pattern, at 1280x720 unless `--synthetic-size` asks for a
+real display's size; `--file-identity` keeps the key in the data folder instead of the Keychain; and
+`--print-input` prints each input message instead of injecting it, typed text as a character count
+only.
 
 ---
 

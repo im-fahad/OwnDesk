@@ -1,4 +1,7 @@
+#if canImport(AppKit)
 import AppKit
+#endif
+import CoreGraphics
 import Foundation
 import OwnDeskProtocol
 
@@ -49,6 +52,7 @@ public enum KeyMap {
 
     public static func w3cCode(for keyCode: UInt16) -> String? { macOSToW3C[keyCode] }
 
+    #if canImport(AppKit)
     public static func modifiers(from flags: NSEvent.ModifierFlags) -> [Modifier] {
         var out: [Modifier] = []
         if flags.contains(.shift) { out.append(.shift) }
@@ -71,8 +75,10 @@ public enum KeyMap {
         default: return nil
         }
     }
+    #endif
 }
 
+#if canImport(AppKit)
 public enum MouseMap {
     public static func button(for event: NSEvent) -> MouseButton {
         switch event.type {
@@ -97,3 +103,4 @@ public enum MouseMap {
         return .scroll(dx: clamp(dx), dy: clamp(dy), precise: precise, phase: phase)
     }
 }
+#endif

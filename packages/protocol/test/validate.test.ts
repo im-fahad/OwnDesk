@@ -55,6 +55,8 @@ test('every signaling payload has a passing sample and fails when a required fie
   assert.equal(validateSignalingPayload('SESSION_REJECT', { reason: 'whatever' }).valid, false);
   assert.equal(validateSignalingPayload('SESSION_REQUEST', { ...validSignaling.SESSION_REQUEST, capabilities: { codecs: ['VP8'], max_height: 1080, max_fps: 60 } }).valid, false);
   assert.equal(validateSignalingPayload('SDP_OFFER', { sdp: 'x'.repeat(40000), ice_restart: false }).valid, false);
+  assert.equal(validateSignalingPayload('PAIR_REQUEST', { ...validSignaling.PAIR_REQUEST, device_type: 'ios' }).valid, true);
+  assert.equal(validateSignalingPayload('PAIR_REQUEST', { ...validSignaling.PAIR_REQUEST, device_type: 'windows' }).valid, false);
 });
 
 test('data channel messages: valid samples parse and land on the right channel', () => {
@@ -73,6 +75,7 @@ test('data channel messages: valid samples parse and land on the right channel',
   ok({ v: 1, type: 'key_up', ts: 1, code: 'MetaLeft', modifiers: [] }, 'input-reliable');
   ok({ v: 1, type: 'text', ts: 1, text: 'héllo 👋' }, 'input-reliable');
   ok({ v: 1, type: 'hello', ts: 0, versions: [1], app: 'mac-controller', app_version: '0.1.0' }, 'control');
+  ok({ v: 1, type: 'hello', ts: 0, versions: [1], app: 'ios-controller', app_version: '0.2.0' }, 'control');
   ok({ v: 1, type: 'display_info', ts: 0, ...SAMPLE.display }, 'control');
   ok({ v: 1, type: 'capture_state', ts: 0, state: 'paused_locked' }, 'control');
   ok({ v: 1, type: 'capture_state', ts: 0, state: 'active', detail: 'resumed' }, 'control');

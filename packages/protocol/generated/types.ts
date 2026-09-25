@@ -109,7 +109,7 @@ export interface PairRequestPayload {
    */
   public_key: string;
   device_name: string;
-  device_type: "mac" | "android" | "web";
+  device_type: "mac" | "android" | "ios" | "web";
   /**
    * 16 random bytes, base64url without padding (22 chars).
    */
@@ -255,7 +255,7 @@ export interface HelloMessage {
    * @maxItems 16
    */
   versions: [number, ...number[]];
-  app: "mac-agent" | "mac-controller" | "android-controller" | "web-harness";
+  app: "mac-agent" | "mac-controller" | "android-controller" | "ios-controller" | "web-harness";
   app_version: string;
 }
 export interface KeyDownMessage {

@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Security
 
@@ -18,3 +19,4 @@ public enum CodeSigning {
         return certificates.isEmpty
     }
 }
+#endif

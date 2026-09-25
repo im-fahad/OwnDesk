@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "OwnDeskSwift",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "OwnDeskIdentity", targets: ["OwnDeskIdentity"]),
         .library(name: "OwnDeskProtocol", targets: ["OwnDeskProtocol"]),

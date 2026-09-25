@@ -1,0 +1,18 @@
+// Signing and identity for the iPhone app, shared by every build.
+//
+// Nothing personal belongs in this file or in the project: it is public. A development team, and a
+// bundle identifier of your own, go in Local.xcconfig next to it, which git ignores. Copy
+// Local.xcconfig.example to start one. The README's "Install on an iPhone" section walks through it.
+//
+// Simulator builds need neither: Xcode signs them for the local machine on its own.
+
+// The bundle identifier. Apple lets one team claim an identifier, so anyone building for a real
+// device sets their own in Local.xcconfig.
+OWNDESK_BUNDLE_ID = io.github.im-fahad.owndesk
+
+// Empty on purpose. Set yours in Local.xcconfig, never here or in Xcode's Signing screen, which
+// writes it into the shared project file.
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+
+#include? "Local.xcconfig"

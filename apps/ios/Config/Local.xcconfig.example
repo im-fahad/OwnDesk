@@ -1,0 +1,18 @@
+// Copy this file to Local.xcconfig (same folder) to build OwnDesk for a real iPhone or iPad.
+// Local.xcconfig is in .gitignore, so what you put there stays on your Mac.
+//
+//   cp apps/ios/Config/Local.xcconfig.example apps/ios/Config/Local.xcconfig
+//
+// Your Team ID is ten letters and digits. Once Xcode has made your "Apple Development" certificate
+// (Xcode → Settings → Accounts → your Apple ID → Manage Certificates… → + → Apple Development), print
+// it with:
+//
+//   security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+//
+// and take the value after OU=. (The ten characters in brackets after your name are not it: they
+// identify you, not the team.) A free Apple ID works; its team is "Your Name (Personal Team)".
+DEVELOPMENT_TEAM = ABCDE12345
+
+// A bundle identifier nobody else has claimed, since Apple lets only one team register each one.
+// Reverse DNS of something you control, or of your GitHub name, works: io.github.<name>.owndesk
+OWNDESK_BUNDLE_ID = com.example.owndesk

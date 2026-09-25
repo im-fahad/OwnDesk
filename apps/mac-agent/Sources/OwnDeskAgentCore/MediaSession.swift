@@ -77,7 +77,7 @@ public final class LiveMediaSession: MediaSession, WebRTCSessionDelegate, @unche
         }
         let source: FrameSource
         if config.syntheticScreen {
-            source = SyntheticFrameSource(frameHandler: handler)
+            source = SyntheticFrameSource(frameHandler: handler, width: config.syntheticWidth, height: config.syntheticHeight)
         } else {
             guard Permissions.screenRecordingGranted else {
                 Permissions.requestScreenRecording()

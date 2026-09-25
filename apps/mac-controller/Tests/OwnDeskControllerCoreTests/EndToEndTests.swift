@@ -43,9 +43,11 @@ enum E2E {
 
     /// A real in-process agent with the synthetic screen and input disabled, plus a recorder of its events
     /// that auto-approves pairing requests.
-    static func startAgent(media: Bool) async throws -> (Agent, Box<[AgentEvent]>) {
+    static func startAgent(media: Bool, screen: (width: Int, height: Int) = (1280, 720)) async throws -> (Agent, Box<[AgentEvent]>) {
         var config = AgentConfig(hostName: "Test Mini", port: 0, advertiseBonjour: false, dataDirectory: tempDir(), mediaEnabled: media, inputEnabled: false)
         config.syntheticScreen = true
+        config.syntheticWidth = screen.width
+        config.syntheticHeight = screen.height
         let agent = try Agent(config: config, identity: SoftwareIdentity())
         let events = Box<[AgentEvent]>([])
         let coordinator = agent.coordinator
@@ -149,6 +151,63 @@ enum E2E {
             agentEvents.get().contains { if case .sessionEnded(.user) = $0 { return true } else { return false } }
         }
         if case .ended = await session.state {} else { Issue.record("session should be ended") }
+        await agent.stop()
+    }
+
+    /// The iPhone app runs this same core as a phone: it pairs as `ios`, so the Mac records it as a
+    /// device that controls and is never controlled, and it names itself `ios-controller` in hello.
+    @Test func anIPhonePairsAsAPhoneAndStreams() async throws {
+        let (agent, agentEvents) = try await E2E.startAgent(media: true)
+        let address = "127.0.0.1:\(agent.port)"
+        let identity = SoftwareIdentity()
+        let qr = await agent.coordinator.openPairing()
+        let outcome = try await PairingClient(identity: identity, deviceName: "iPhone", deviceType: .ios)
+            .pair(qr: qr, preferredAddress: address)
+        let record = try #require(agent.peers.peer(identity.deviceId))
+        #expect(record.type == .ios)
+        #expect(record.mayControlUs)
+        #expect(!record.isHostForUs, "the Mac never offers to control a phone")
+        #expect(agentEvents.get().contains { if case .pairingRequest(_, _, .ios, _) = $0 { return true } else { return false } })
+
+        let config = ControllerConfig(deviceName: "iPhone", dataDirectory: E2E.tempDir(), app: .iosController, appVersion: "0.2.0")
+        let session = SessionClient(.init(identity: identity, host: outcome.host, config: config))
+        let states = Box<[SessionClient.State]>([])
+        let stream = session.events
+        Task { for await e in stream { if case .state(let s) = e { states.update { $0.append(s) } } } }
+        let renderer = CountingRenderer()
+        await session.attach(renderer: renderer)
+        await session.connect(url: Endpoints.url(for: address)!)
+        try await E2E.waitUntil(timeoutMs: 20000, "connected") {
+            states.get().contains { if case .connected = $0 { return true } else { return false } }
+        }
+        try await E2E.waitUntil(timeoutMs: 15000, "video frames") { renderer.frames.get() >= 5 }
+        let stats = await session.videoStats()
+        #expect(stats?.codec == "H264", "the host should encode H.264, got \(String(describing: stats?.codec))")
+
+        await session.disconnect()
+        try await E2E.waitUntil("host saw the end") {
+            agentEvents.get().contains { if case .sessionEnded(.user) = $0 { return true } else { return false } }
+        }
+        await agent.stop()
+    }
+
+    /// A host that cannot meet the H.264 level a controller offers does not refuse: it quietly sends
+    /// VP8, in software, at a fraction of the frame rate. 1280x720 fits every level anyone offers, so
+    /// only the sizes of real displays show it.
+    @Test(arguments: [(1920, 1080), (1920, 1200)])
+    func fullSizeDesktopsArriveAsH264(width: Int, height: Int) async throws {
+        let (agent, _) = try await E2E.startAgent(media: true, screen: (width, height))
+        let identity = SoftwareIdentity()
+        let qr = await agent.coordinator.openPairing()
+        let outcome = try await PairingClient(identity: identity, deviceName: "T").pair(qr: qr, preferredAddress: "127.0.0.1:\(agent.port)")
+        let session = SessionClient(.init(identity: identity, host: outcome.host, config: ControllerConfig(deviceName: "T", dataDirectory: E2E.tempDir())))
+        let renderer = CountingRenderer()
+        await session.attach(renderer: renderer)
+        await session.connect(url: Endpoints.url(for: "127.0.0.1:\(agent.port)")!)
+        try await E2E.waitUntil(timeoutMs: 20000, "video frames") { renderer.frames.get() >= 10 }
+        let stats = await session.videoStats()
+        #expect(stats?.codec == "H264", "\(width)x\(height) arrived as \(String(describing: stats?.codec)) at \(stats?.width ?? 0)x\(stats?.height ?? 0)")
+        await session.disconnect()
         await agent.stop()
     }
 

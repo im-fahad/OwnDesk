@@ -94,6 +94,19 @@ private let mini = SoftwareIdentity()
         #expect(store.controllerKey(mini.deviceId) == mini.publicKeyRaw, "and on again needs no new pairing")
     }
 
+    /// An iPhone is paired the way the Android phone is: it controls, and never hosts.
+    @Test func anIPhoneIsAPhoneToo() throws {
+        let store = try PeerStore(directory: tempDir())
+        let iPhone = SoftwareIdentity()
+        try store.pair(deviceId: iPhone.deviceId, publicKey: iPhone.publicKeyB64, name: "iPhone", type: .ios,
+                       mayControlUs: true, weMayControl: true, addresses: [], now: 1)
+        let record = try #require(store.peer(iPhone.deviceId))
+        #expect(record.canHost == false)
+        #expect(store.hosts.isEmpty)
+        #expect(store.hostKey(iPhone.deviceId) == nil)
+        #expect(store.controllerKey(iPhone.deviceId) == iPhone.publicKeyRaw)
+    }
+
     @Test func aPhoneOnlyEverControls() throws {
         let store = try PeerStore(directory: tempDir())
         try store.pair(deviceId: mini.deviceId, publicKey: mini.publicKeyB64, name: "Phone", type: .android,

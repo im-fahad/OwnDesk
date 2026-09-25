@@ -56,6 +56,7 @@ public enum AppName: String, Sendable, CaseIterable {
     case macAgent = "mac-agent"
     case macController = "mac-controller"
     case androidController = "android-controller"
+    case iosController = "ios-controller"
     case webHarness = "web-harness"
 }
 
