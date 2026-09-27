@@ -4,7 +4,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
+import android.text.InputType
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.util.TypedValue
@@ -30,6 +33,9 @@ import io.github.im_fahad.owndesk.protocol.Identity
 import io.github.im_fahad.owndesk.protocol.Peer
 import io.github.im_fahad.owndesk.session.PairingClient
 import io.github.im_fahad.owndesk.session.UnpairClient
+import io.github.im_fahad.owndesk.terminal.DeviceSshKey
+import io.github.im_fahad.owndesk.terminal.TerminalSettings
+import io.github.im_fahad.owndesk.terminal.TerminalStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,6 +126,30 @@ class MainActivity : AppCompatActivity() {
                     log("pinned $it for ${match.name}")
                 }
                 connect(match)
+            }
+        }
+        intent.getStringExtra("terminal")?.let { prefix ->
+            val match = peers.all().firstOrNull {
+                it.fingerprint.startsWith(prefix, ignoreCase = true) || it.deviceId.startsWith(prefix)
+            }
+            if (match == null) {
+                log("no paired Mac matches $prefix")
+            } else {
+                intent.getStringExtra("address")?.let {
+                    peers.setPreferred(match.deviceId, it)
+                    log("pinned $it for ${match.name}")
+                }
+                intent.getStringExtra("ssh_user")?.let { user ->
+                    TerminalStore(this).saveSettings(match.deviceId, TerminalSettings(user, intent.getIntExtra("ssh_port", 22)))
+                }
+                openTerminal(match)
+            }
+        }
+        // The phone's terminal key, so a test can put it on a Mac without reading the screen.
+        if (intent.hasExtra("ssh_key")) {
+            lifecycleScope.launch {
+                val key = withContext(Dispatchers.IO) { DeviceSshKey.load() }
+                log("ssh key ${key.authorizedKeysLine("OwnDesk on ${KeystoreIdentity.deviceName(this@MainActivity)}")} (${key.storage})")
             }
         }
     }
@@ -277,6 +307,26 @@ class MainActivity : AppCompatActivity() {
             }
         )
         row.addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+
+        // The other way in: a shell through the Mac's own SSH server, on its own button so the
+        // row itself still opens the screen as it always has.
+        row.addView(
+            View(this).apply { setBackgroundColor(Theme.BORDER) },
+            LinearLayout.LayoutParams(1, dp(34)).apply { leftMargin = dp(8); rightMargin = dp(2) },
+        )
+        row.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                contentDescription = "Open a terminal on ${peer.name}"
+                setPadding(dp(6), dp(2), dp(6), dp(2))
+                setOnClickListener { openTerminal(peer) }
+                addView(label(">_", Theme.UI, Theme.TEXT_DIM, mono = true).apply { setTypeface(typeface, Typeface.BOLD) })
+                addView(label("Terminal", Theme.SECTION, Theme.TEXT_DIM))
+            },
+            LinearLayout.LayoutParams(dp(62), WRAP_CONTENT),
+        )
         return row
     }
 
@@ -290,15 +340,17 @@ class MainActivity : AppCompatActivity() {
     private fun showPeerOptions(peer: Peer) {
         AlertDialog.Builder(this)
             .setTitle(peer.name)
-            .setItems(arrayOf("Choose an address", "Use any address", "Unpair this Mac")) { _, which ->
+            .setItems(arrayOf("Open a terminal", "Terminal settings", "Choose an address", "Use any address", "Unpair this Mac")) { _, which ->
                 when (which) {
-                    0 -> askForAddress(peer)
-                    1 -> {
+                    0 -> openTerminal(peer)
+                    1 -> terminalSetup(peer)
+                    2 -> askForAddress(peer)
+                    3 -> {
                         peers.setPreferred(peer.deviceId, null)
                         log("${peer.name} will use whichever address answers")
                         refreshPeers()
                     }
-                    2 -> confirmUnpair(peer)
+                    4 -> confirmUnpair(peer)
                 }
             }
             .show()
@@ -316,6 +368,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Unpair") { _, _ ->
                 val addresses = (listOfNotNull(onThisNetwork[peer.deviceId]) + peer.candidates()).distinct()
                 peers.forget(peer.deviceId)
+                TerminalStore(this).forget(peer.deviceId)
                 refreshPeers()
                 lifecycleScope.launch {
                     val told = UnpairClient(identity).unpair(peer.deviceId, addresses)
@@ -359,6 +412,130 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    // Terminal ----------------------------------------------------------------------------------
+
+    /** Opens a Mac's terminal, asking how to log in first if that is not known yet. */
+    private fun openTerminal(peer: Peer) {
+        val saved = TerminalStore(this).settings(peer.deviceId)
+        if (saved == null || saved.username.isBlank()) {
+            terminalSetup(peer)
+            return
+        }
+        log("opening a terminal on ${peer.name} as ${saved.username}")
+        startActivity(TerminalActivity.intent(this, peer.deviceId))
+    }
+
+    /**
+     * How to log in to a Mac's terminal, asked the first time and editable after. The terminal is
+     * the Mac's own SSH server, so two things have to be true on the Mac: Remote Login is on, and
+     * it knows this phone. The second is either this phone's key in `authorized_keys`, which the
+     * dialog makes a single paste, or the account's password, asked for each time.
+     */
+    private fun terminalSetup(peer: Peer) {
+        lifecycleScope.launch {
+            val key = withContext(Dispatchers.IO) { DeviceSshKey.load() }
+            val store = TerminalStore(this@MainActivity)
+            val saved = store.settings(peer.deviceId)
+            val userField = monoField(saved?.username ?: "", "user name on ${peer.name}")
+            val portField = monoField((saved?.port ?: 22).toString(), "22").apply {
+                inputType = InputType.TYPE_CLASS_NUMBER
+            }
+            val line = key.authorizedKeysLine("OwnDesk on ${KeystoreIdentity.deviceName(this@MainActivity)}")
+            val command = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$line' >> ~/.ssh/authorized_keys"
+
+            val column = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+            column.addView(
+                label(
+                    "The terminal is ${peer.name}'s own SSH server. Turn on Remote Login there first: System Settings → General → Sharing → Remote Login. Behind its ⓘ, Allow full disk access for remote users lets the shell read Documents, Desktop and Downloads.",
+                    Theme.UI_SECONDARY, Theme.TEXT_DIM,
+                )
+            )
+            column.addView(sectionHeading("LOG IN AS"))
+            column.addView(userField, rowParams(top = 0))
+            column.addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(label("Port", Theme.UI_SECONDARY, Theme.TEXT_DIM).apply { setPadding(0, 0, dp(8), 0) })
+                    addView(portField, LinearLayout.LayoutParams(dp(90), WRAP_CONTENT))
+                },
+                rowParams(top = 8),
+            )
+            column.addView(label("The short name of the account, as whoami prints it in Terminal on the Mac.", Theme.UI_SMALL, Theme.TEXT_FAINT), rowParams(top = 6))
+
+            column.addView(sectionHeading("THIS PHONE'S KEY"))
+            column.addView(
+                label(
+                    "With this key on ${peer.name}, the terminal opens without a password. Without it, you are asked for the account's password each time.",
+                    Theme.UI_SMALL, Theme.TEXT_DIM,
+                )
+            )
+            column.addView(
+                label(line, Theme.SECTION, Theme.TEXT, mono = true).apply {
+                    setBackgroundColor(Theme.PANEL)
+                    setPadding(dp(10), dp(10), dp(10), dp(10))
+                    setTextIsSelectable(true)
+                },
+                rowParams(top = 8),
+            )
+            val note = label("The command adds the key to ~/.ssh/authorized_keys on ${peer.name}.", Theme.UI_SMALL, Theme.TEXT_FAINT)
+            fun copy(text: String, said: String) {
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("OwnDesk key", text))
+                note.text = "$said Paste it into Terminal on ${peer.name}."
+                note.setTextColor(Theme.ONLINE)
+            }
+            column.addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(accentButton("Copy the key") { copy(line, "Key copied.") }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    addView(
+                        accentButton("Copy a command") { copy(command, "Command copied.") },
+                        LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { leftMargin = dp(8) },
+                    )
+                },
+                rowParams(top = 10),
+            )
+            column.addView(note, rowParams(top = 6))
+            column.addView(
+                label(
+                    "Key ${key.fingerprint}, kept in this phone's ${if (key.storage == "hardware") "secure hardware" else "Keystore"}.",
+                    Theme.SECTION, Theme.TEXT_FAINT, mono = true,
+                ),
+                rowParams(top = 6),
+            )
+
+            store.pinned(peer.deviceId)?.let { pinned ->
+                column.addView(sectionHeading("${peer.name.uppercase()}'S SSH KEY"))
+                column.addView(label("${pinned.type}  ${pinned.fingerprint}", Theme.SECTION, Theme.TEXT_DIM, mono = true).apply { setTextIsSelectable(true) })
+                column.addView(
+                    accentButton("Forget it") {
+                        store.forgetHostKey(peer.deviceId)
+                        log("forgot the SSH key of ${peer.name}")
+                    },
+                    rowParams(top = 8),
+                )
+                column.addView(label("Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.", Theme.UI_SMALL, Theme.TEXT_FAINT), rowParams(top = 6))
+            }
+
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Terminal on ${peer.name}")
+                .setView(ScrollView(this@MainActivity).apply { addView(pad(column)) })
+                .setPositiveButton("Open") { _, _ ->
+                    val username = userField.text.toString().trim()
+                    val port = portField.text.toString().trim().toIntOrNull() ?: 22
+                    if (username.isEmpty()) {
+                        log("a user name is needed for the terminal on ${peer.name}")
+                        return@setPositiveButton
+                    }
+                    store.saveSettings(peer.deviceId, TerminalSettings(username, port))
+                    openTerminal(peer)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private val scan = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

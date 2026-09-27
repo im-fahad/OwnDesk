@@ -25,12 +25,19 @@ struct OwnDeskApp: App {
                 Button("Toggle Peers") { state.showSidebar.toggle() }.keyboardShortcut("b", modifiers: .command)
                 Button("Toggle Log") { state.showLog.toggle() }.keyboardShortcut("j", modifiers: .command)
                 Divider()
-                Button("Close Window") { AppDelegate.hideWindow() }.keyboardShortcut("w", modifiers: .command)
+                Button("Close Window") { AppDelegate.closeKeyWindow() }.keyboardShortcut("w", modifiers: .command)
                 Divider()
                 Button(state.isConnected ? "Disconnect" : "Connect") {
+                    // Not from a terminal window, where ⌘K means clear.
+                    guard !(NSApp.keyWindow is TerminalWindow) else { return }
                     state.isConnected ? state.disconnect() : state.connect()
                 }
                 .keyboardShortcut("k", modifiers: .command)
+                Button("Open Terminal") {
+                    if let id = state.selectedPeerId, let peer = state.peers.peer(id) { state.openTerminal(peer) }
+                }
+                .keyboardShortcut("t", modifiers: .command)
+                .disabled(state.selectedPeerId == nil)
             }
         }
 
@@ -70,9 +77,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // SwiftUI builds for a replacement window renders black. Ordering it out keeps the one made
         // at launch, which works, and showing it again is just ordering it back in.
         DispatchQueue.main.async {
-            for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
-                window.orderOut(nil)
-            }
+            for window in AppDelegate.mainWindows { window.orderOut(nil) }
+        }
+    }
+
+    /// The app's own windows: the main one SwiftUI builds, never the menu bar item's and never a
+    /// terminal, which has a life of its own and closes for good.
+    static var mainWindows: [NSWindow] {
+        NSApp.windows.filter { !$0.className.contains("MenuBarExtra") && !($0 is TerminalWindow) }
+    }
+
+    /// ⌘W: a terminal closes, the main window is put away.
+    static func closeKeyWindow() {
+        if let key = NSApp.keyWindow, key is TerminalWindow {
+            key.performClose(nil)
+        } else {
+            hideWindow()
         }
     }
 
@@ -98,16 +118,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Put away, not closed. Closing destroys the scene's views and SwiftUI's replacement window
     /// comes back with a video view that renders black.
     static func hideWindow() {
-        for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
-            window.orderOut(nil)
-        }
-        showDockIcon(false)
+        for window in mainWindows { window.orderOut(nil) }
+        // A terminal still open keeps the app in the Dock: it is a window someone is using.
+        if TerminalWindowController.open.isEmpty { showDockIcon(false) }
     }
 
     /// The red button should put the window away rather than destroy it. Taking the button's action
     /// leaves SwiftUI's own window delegate alone, which nothing else here can safely replace.
     static func interceptCloseButton() {
-        for window in NSApp.windows where !window.className.contains("MenuBarExtra") {
+        for window in mainWindows {
             guard let button = window.standardWindowButton(.closeButton) else { continue }
             button.target = closer
             button.action = #selector(WindowCloser.hide)
@@ -149,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static func showExistingWindow() -> Bool {
         showDockIcon(true)
         NSApp.activate(ignoringOtherApps: true)
-        guard let window = NSApp.windows.first(where: { !$0.className.contains("MenuBarExtra") && $0.contentView != nil }) else {
+        guard let window = mainWindows.first(where: { $0.contentView != nil }) else {
             return false
         }
         window.makeKeyAndOrderFront(nil)

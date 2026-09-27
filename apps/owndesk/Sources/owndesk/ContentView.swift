@@ -43,6 +43,7 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.15), value: model.showSidebar)
         .animation(.easeOut(duration: 0.15), value: model.showLog)
         .sheet(isPresented: $showPairing) { PairingSheet(isPresented: $showPairing) }
+        .sheet(item: $model.terminalSetup) { mac in TerminalSettingsSheet(mac: mac).environmentObject(model) }
     }
 
 }
@@ -158,9 +159,20 @@ struct HeaderBar: View {
                        help: model.sendInput ? "Input is being sent" : "Input is paused",
                        isOn: model.sendInput) { model.sendInput.toggle() }
 
+            terminalButton
             Button("Disconnect") { model.disconnect() }
                 .buttonStyle(HeaderButtonStyle(tint: Theme.danger))
         }
+    }
+
+    /// The other way in to the selected Mac: a shell through its own SSH server.
+    private var terminalButton: some View {
+        Button("Terminal") {
+            if let id = model.selectedPeerId, let peer = model.peers.peer(id) { model.openTerminal(peer) }
+        }
+        .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
+        .disabled(model.selectedPeerId == nil)
+        .help("Open a terminal on the selected Mac (⌘T)")
     }
 
     private var idleControls: some View {
@@ -177,6 +189,7 @@ struct HeaderBar: View {
             Button(model.isBusy ? "Connecting…" : "Connect") { model.connect() }
                 .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
                 .disabled(model.selectedPeerId == nil || model.isBusy)
+            terminalButton
         }
     }
 }
@@ -212,7 +225,8 @@ struct SidebarPanel: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(model.hostablePeers) { peer in
-                        HostRow(host: peer, isSelected: model.selectedPeerId == peer.deviceId, onUnpair: { unpairing = peer })
+                        HostRow(host: peer, isSelected: model.selectedPeerId == peer.deviceId,
+                                onTerminal: { model.openTerminal(peer) }, onUnpair: { unpairing = peer })
                             .onTapGesture { model.selectedPeerId = peer.deviceId }
                             .contextMenu { peerMenu(peer) }
                     }
@@ -266,6 +280,8 @@ struct SidebarPanel: View {
         // this Mac: the other side has none to make, and is told when this one is off.
         if peer.isHostForUs {
             Button("Connect") { model.selectedPeerId = peer.deviceId; model.connect() }
+            Button("Open Terminal") { model.openTerminal(peer) }
+            Button("Terminal settings…") { model.terminalSetup = peer }
             Divider()
         }
         Toggle("Allow it to control this Mac", isOn: Binding(
@@ -312,6 +328,7 @@ struct HostRow: View {
     let isSelected: Bool
     /// False for a device we never connect to, where a dot could only ever say "offline".
     var showsReachability: Bool = true
+    var onTerminal: (() -> Void)? = nil
     var onUnpair: (() -> Void)? = nil
     @State private var hovering = false
 
@@ -333,6 +350,13 @@ struct HostRow: View {
             }
             Spacer(minLength: 0)
             // Shown on hover so the list stays quiet, and also in the row's menu.
+            if hovering, let onTerminal {
+                Button(action: onTerminal) {
+                    Image(systemName: "terminal").foregroundStyle(Theme.textDim)
+                }
+                .buttonStyle(.plain)
+                .help("Open a terminal on \(host.name)")
+            }
             if hovering, let onUnpair {
                 Button(action: onUnpair) {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.textDim)

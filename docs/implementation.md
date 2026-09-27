@@ -4,7 +4,7 @@ What exists today, how it works, and the things that were learned the hard way. 
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
 been amended to match.
 
-Written 2026-09-09 and brought up to date 2026-09-25. Tag `v0.1.0` is the last state where the
+Written 2026-09-09 and brought up to date 2026-09-28. Tag `v0.1.0` is the last state where the
 agent and the controller were separate apps. The project was called PRC until 2026-09-25.
 [../README.md](../README.md) is the guided tour: the technology, the flow, and how to use it. This
 file is the record of decisions and traps.
@@ -28,6 +28,12 @@ controller's own core, so pairing, the signed handshake, negotiation, keepalive 
 the code a MacBook runs, and what is new is the screen, the fingers and the keyboard. It is built and
 tested in the Simulator against a real host, and needs a Mac running this version to pair with.
 
+Since 2026-09-28 every controller also opens a terminal on a paired Mac. That is the Mac's own SSH
+server with OwnDesk as the client: nothing in OwnDesk's protocol carries a command, each device has
+an SSH key of its own for it, and the Mac's host key is pinned after the first connection. The Mac
+and the iPhone draw it with SwiftTerm over `packages/terminal`; the Android app has an emulator of
+its own over JSch.
+
 ## 2. Repository map
 
 ```text
@@ -43,8 +49,9 @@ packages/swift             Swift libraries used by both halves
   OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
   OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive OwnDesk.app
-apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
-apps/android               the Android app: controls only, with video and touch input
+packages/terminal          OwnDeskTerminal: the SSH client under the terminal, its device key and pinned host keys
+apps/owndesk               the Mac app: menu bar plus a window, hosts and controls, a terminal window
+apps/android               the Android app: controls only, with video, touch input and its own terminal
 apps/ios                   the iPhone app: controls only, on OwnDeskControllerCore
   OwnDeskTouch             its gestures, pointer mapping and key tables, tested with swift test
 apps/mac-agent             hosting half (OwnDeskAgentCore) plus the headless owndesk-agent CLI
@@ -160,6 +167,42 @@ Signing stays personal. The project carries no team: `apps/ios/Config/Base.xccon
 includes `Local.xcconfig`, which git ignores, and that is where a developer's team ID and bundle
 identifier go. The Simulator needs neither.
 
+### The terminal
+
+The owner wanted a terminal "like Termius" beside the screen, and the shape was decided before a
+line was written: OwnDesk is an SSH **client** to the Mac's own Remote Login, never a command
+channel of its own. Section 13.3 of the spec forbids that, and for a good reason: OpenSSH's
+authentication, pseudo-terminal and shell are audited by more people than will ever read this repo.
+
+`packages/terminal` is that client for the Apple platforms, on SwiftNIO SSH: one connection, a PTY
+request, a shell request, bytes both ways, a window-change on resize, the exit status. The device
+key is a second P-256 key, in the Secure Enclave where there is one, kept apart from the OwnDesk
+identity so that nothing signed for one protocol can be replayed as the other. Login offers it
+first and asks for the password only if the Mac says no. The host key is shown by fingerprint and
+trusted once, then pinned by the Mac's device id, and a different key is refused rather than asked
+about. Its tests start the Mac's own `sshd` as the user on a spare port with a throwaway host key,
+so they prove the real thing without touching Remote Login.
+
+The Mac app opens the terminal in a window of its own (`TerminalWindow.swift`), several at once if
+wanted, with SwiftTerm drawing it and NSAlert sheets asking about the host key or a password. The
+iPhone does the same full screen. Both are pinned to SwiftTerm 1.11: later releases want a trusted
+build plugin and a separately downloaded Metal toolchain.
+
+Android has neither SwiftNIO nor SwiftTerm, and the choices were: Termux's terminal view, which is
+GPL and not on Maven Central; xterm.js in a WebView, which fights the soft keyboard; or an emulator
+of the app's own. It is the last, in `terminal/TerminalEmulator.kt`: the xterm subset a Mac's
+shells and editors use with `TERM=xterm-256color`, from cursor movement and scrolling regions to
+the alternate screen, 256 and true colour, wide characters and combining marks, with the queries
+answered that `zsh` themes and `vim` send. It has no Android in it, so it is tested on the JVM
+with a set of sequence cases, and was replayed against a captured shell session while it was
+written. `TerminalView` draws it on a Canvas and asks the keyboard for raw keys the way Termux
+does, with a `TYPE_NULL` input connection, so autocorrect stays out of the shell. `SshShell` is
+JSch (the maintained mwiede fork), chosen because it is pure Java and takes an `Identity` of its
+own, which is how the phone's Keystore key signs the login without ever being exported:
+`DeviceSshKey` encodes the public key and the signature the way RFC 5656 wants them.
+`TerminalStore` keeps the settings and the pinned host keys as small JSON files and adapts them to
+JSch's `HostKeyRepository`.
+
 ### Testing without hardware
 
 - `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
@@ -185,6 +228,7 @@ npm test                                   # protocol package
 npm run e2e                                # end to end against the real agent binary
 npm run android-frames                     # the phone's frames against the real schemas
 (cd packages/swift && swift test)
+(cd packages/terminal && swift test)           # against the Mac's own sshd, on a spare port
 (cd apps/mac-agent && swift test)
 (cd apps/mac-controller && swift test)
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
@@ -206,9 +250,10 @@ xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
 A real iPhone needs a team: README section 6.4 walks through it with a free Apple ID. Xcode 27 has
 no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
 
-Suite sizes, all passing on 2026-09-26: protocol 27, packages/swift 35, agent 52, controller 25,
-android 61, OwnDeskTouch 26, the iPhone's UI tests 4 with 8 checks on the host, end to end 17 steps,
-android frames 13.
+Suite sizes, all passing on 2026-09-28: protocol 27, packages/swift 35, packages/terminal 9,
+agent 52, controller 25, android 101, OwnDeskTouch 26, end to end 17 steps, android frames 13. The
+iPhone's UI tests (4, with 8 checks on the host) last passed on 2026-09-26; the terminal stage added
+to that script has not been run through yet.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -446,6 +491,48 @@ people to read.
 **Measure, do not squint.** Stream statistics (`app stats`) and a pixel-brightness check on
 screenshots settled several questions that eyes could not.
 
+**NIOSSH takes "no offer" as "wait".** Answering its authentication callback with nil does not fail
+the login, it parks the connection until the server's login grace runs out, which reads as a hang.
+When every method has been tried, fail the promise. Two smaller ones from the same package: a
+promise left unfulfilled traps a debug build the moment it is released, so a handler that may
+never be added still has to be settled; and OpenSSH 10's `PerSourcePenalties` starts resetting a
+client that probes it repeatedly in quick succession, which a test suite does, so the private
+`sshd` the tests start turns that off.
+
+**A child `sshd` that inherits the test runner's pipes hangs `swift test`.** The tests start the
+Mac's own `sshd` as the user on a spare port; started with the test process's stdout and stderr, it
+kept them open after the tests had finished and the runner waited on them for ever. It gets pipes
+of its own.
+
+**Android forbids the network on the main thread, and JSch's channel flush is the network.** A key
+press arrives on the main thread; writing it straight to the SSH channel threw
+`NetworkOnMainThreadException` inside JSch, the wrapper caught it as any write failure and closed
+the session, and the phone said the connection had closed on the first key typed. Every write,
+resize and close now goes through one writer thread, in order.
+
+**The host key question must read the key this connection saw.** The first build made a fresh
+repository object when the SSH library asked "trust it?", found no verdict there, and refused in
+silence. The activity keeps the repository it handed to the connection and reads the verdict from
+that one.
+
+**Remote Login cannot read Documents until told.** A shell over SSH on a Mac gets
+`Operation not permitted` for Documents, Desktop and Downloads, and so does `git status` in a
+project there. It is macOS's privacy protection, not the terminal: "Allow full disk access for
+remote users", behind the ⓘ next to Remote Login, is the switch, and it is per Mac.
+
+**A terminal window is not the main window.** The app puts its main window away rather than
+closing it, redirects the close button to do that, and reopens whichever window it finds first.
+Every one of those loops used to run over all windows, which would have hidden a terminal with its
+shell still running and no way back. They now run over the main windows only, ⌘W closes a terminal
+for good, and ⌘K, which connects and disconnects the screen, is ignored while a terminal is in
+front.
+
+**Drive the phone from the computer, and read the phone's own log.** The terminal was tested on
+the real phone from a Mac: a debug intent opens a terminal on a named Mac, `uiautomator dump` finds
+the Trust button's position for `input tap`, `input text` types (`%s` for a space, one argument),
+`exec-out screencap` shows the result, and `logcat -s 'OwnDesk:*'` says why something ended. The
+main-thread bug above was invisible from the screen and obvious in the log.
+
 ## 7. Where it runs today
 
 The author's own setup: a Mac mini and a MacBook, each running only `~/Applications/OwnDesk.app`
@@ -466,6 +553,12 @@ Both Macs were reinstalled from this version on 2026-09-26, so they accept an iP
 receive full-size desktops from each other as H.264; as after every reinstall, Screen Recording and
 Accessibility had to be granted again. An older `OwnDesk.app` ignores an iPhone's request to pair
 without a word.
+
+On 2026-09-28 both Macs were reinstalled again, this time with the terminal, and the phone got the
+same build. Each Mac has opened a shell on the other through the app, with their Secure Enclave
+keys in each other's `authorized_keys` and each other's host keys pinned; the phone has opened one
+on the Mac mini, run `top`, and sent Ctrl-C from its key bar. Screen Recording and Accessibility had
+to be granted again, as after every reinstall.
 
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at
@@ -488,6 +581,10 @@ why a direct path is unavailable: on this network the home router offers no port
   down reaches the Mac once, not repeated, since iOS sends no repeat events for it. While the app is
   in the background iOS suspends it, so a session there survives only if the app comes back within
   the reconnect window.
+- Installing a device's terminal key on a Mac with a click there, and the Mac sending its host key
+  the same way; today the key is a paste and the host key a question. The Android terminal has no
+  text selection beyond copying what is on screen, and no mouse reporting. The iPhone's terminal
+  has run in the Simulator against a Mac but its scripted Simulator stage has not passed yet.
 - The Android phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,

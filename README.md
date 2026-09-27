@@ -8,6 +8,10 @@ a code. Every session is end-to-end encrypted over WebRTC, and every message tha
 signed by a key that never leaves its device, so neither the network, nor a relay, nor anything in
 the middle can impersonate a device, read a session, or inject a keystroke.
 
+Each controller can also open a terminal on a Mac. That is the Mac's own SSH server (Remote Login)
+with OwnDesk as the client: the protocol above still carries no command, and each device logs in
+with an SSH key of its own, hardware-backed like its identity.
+
 **Runs on:** macOS 14+ (host and controller) · Android 8+ (controller) · iOS 17+ (controller)<br>
 **Away from home:** through [Tailscale](https://tailscale.com), with no port forwarding<br>
 **Status:** early, used daily on the author's own devices
@@ -37,6 +41,10 @@ One Mac app fills both roles. A Mac can be controlled, control another, or do bo
 Hosting is a switch that is **off** until you turn it on, so installing the app never makes a Mac
 remotely controllable on its own. The phones only control, which is why their apps are much smaller.
 
+Every controller has two ways in to a paired Mac: its screen, and a terminal. The terminal is a
+shell through the Mac's own Remote Login, so it needs that switched on there, and it works whether
+or not the Mac has let this device control its screen.
+
 ---
 
 ## 2. Technology
@@ -54,6 +62,7 @@ remotely controllable on its own. The phones only control, which is why their ap
 | Cross-platform proof | Shared test vectors | The same vectors are run by TypeScript, Swift and Kotlin |
 | Media | WebRTC, H.264, DTLS-SRTP | Hardware encode on the Mac, hardware decode on the Mac and the phones |
 | Pairing proof | HMAC-SHA256 over the pairing code | Proves possession of the code without sending it |
+| Terminal | SSH to the Mac's own Remote Login | No command type in the protocol. OpenSSH authenticates, allocates the terminal and runs the shell; each device has a second P-256 key for it, hardware-backed like the identity |
 
 ### On the Mac
 
@@ -69,6 +78,7 @@ remotely controllable on its own. The phones only control, which is why their ap
 | Codec choice | The controller's offer puts H.264 first and states level 5.2, so a full-size desktop is not sent as VP8 |
 | Input injection | CGEvent (Quartz), with rate limits and click-count tracking |
 | Video display | `RTCMTLNSVideoView`, Metal |
+| Terminal | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) 1.11 draws it; `OwnDeskTerminal` (SwiftNIO SSH) carries it; the login key is a second Secure Enclave key |
 | Runs at login | LaunchAgent `io.github.im-fahad.owndesk`, restarts after a crash, not after Quit |
 | Signing | Ad-hoc. No certificate, by choice: these apps never leave your machines |
 
@@ -86,6 +96,7 @@ remotely controllable on its own. The phones only control, which is why their ap
 | Codec choice | Asks `MediaCodecList` what its decoder supports and offers that H.264 level, capped at 5.2 |
 | QR scanning | CameraX 1.3.4 + zxing core, decoded on the phone, offline |
 | Coroutines | kotlinx-coroutines 1.8.1 |
+| Terminal | A VT emulator of the app's own, drawn on a Canvas; [JSch](https://github.com/mwiede/jsch) 2.28 for SSH; the login key is a second Keystore key |
 
 ### On the iPhone
 
@@ -99,6 +110,7 @@ remotely controllable on its own. The phones only control, which is why their ap
 | Discovery | Bonjour through Network.framework, with the Local Network permission |
 | QR scanning | AVFoundation's own QR detector, on the phone, offline |
 | Gestures and keys | `OwnDeskTouch`, a small package with the Android app's gesture rules, tested on the Mac |
+| Terminal | SwiftTerm 1.11 and `OwnDeskTerminal`, as on the Mac |
 | Signing | Your own Apple ID, kept in a git-ignored file. The Simulator needs none |
 
 ### Development tooling
@@ -200,7 +212,8 @@ The same protocol, translated to Kotlin and checked against the same vectors.
 | `net/` | The WebSocket, and the address parsing that decides `lan` or `cloud` |
 | `session/` | Pairing, and the session handshake that becomes a media session on the same socket |
 | `media/` | The WebRTC client, H.264 level query, SDP preference rewriting |
-| `ui/` | The home screen, the scanner, the session screen, gestures and pointer mapping |
+| `terminal/` | The VT emulator, the view that draws it, the SSH shell, the phone's terminal key, the pinned host keys |
+| `ui/` | The home screen, the scanner, the session screen, the terminal screen, gestures and pointer mapping |
 
 ### The iPhone — `apps/ios`
 
@@ -214,12 +227,32 @@ signed handshake, negotiation, keepalive and reconnection are the code the Mac c
 | [OwnDesk/SessionViewController.swift](apps/ios/OwnDesk/SessionViewController.swift) | The picture, the touch surface, pinch, the sidebar and info panel |
 | [OwnDesk/KeyboardCatcher.swift](apps/ios/OwnDesk/KeyboardCatcher.swift) | Soft keyboard as text, the key bar, hardware keyboards |
 | [OwnDesk/QRScanner.swift](apps/ios/OwnDesk/QRScanner.swift) | The camera, reading a pairing code |
+| [OwnDesk/TerminalViewController.swift](apps/ios/OwnDesk/TerminalViewController.swift) | A shell on a Mac, drawn by SwiftTerm; `TerminalSheet.swift` asks how to log in |
 | [OwnDeskTouch/](apps/ios/OwnDeskTouch) | Gestures, pointer mapping and key tables, with no UIKit, tested by `swift test` |
 | [Config/](apps/ios/Config) | `Base.xcconfig` for everyone, and your own `Local.xcconfig` for signing |
 
 **Who offers.** The controller always creates the data channels and the offer; the host answers.
 That holds whether the controller is a Mac or a phone, so the host has exactly one shape of session
 to implement.
+
+### The terminal — `OwnDeskTerminal` (`packages/terminal`)
+
+A shell on a Mac is the Mac's own SSH server at work, and OwnDesk is only its client. Nothing here
+goes through the signed protocol above, and no message in that protocol can run a command.
+
+| File | Role |
+|---|---|
+| [SSHTerminal.swift](packages/terminal/Sources/OwnDeskTerminal/SSHTerminal.swift) | One connection, a pseudo-terminal, a login shell: bytes in, bytes out, resize, exit status |
+| [SSHDeviceKey.swift](packages/terminal/Sources/OwnDeskTerminal/SSHDeviceKey.swift) | The device's SSH key, P-256 in the Secure Enclave, and its `authorized_keys` line |
+| [HostKeys.swift](packages/terminal/Sources/OwnDeskTerminal/HostKeys.swift) | The Mac's host key, pinned by device id the first time, refused if it ever changes |
+
+The Mac app draws it in a window of its own
+([TerminalWindow.swift](apps/owndesk/Sources/owndesk/TerminalWindow.swift)) and the iPhone full
+screen, both on SwiftTerm. Android has neither SwiftTerm nor SwiftNIO, so it carries its own: a VT
+emulator in [TerminalEmulator.kt](apps/android/app/src/main/kotlin/io/github/im_fahad/owndesk/terminal/TerminalEmulator.kt),
+a view that draws it and asks the keyboard for raw keys the way a terminal must, and JSch for the
+connection, with the same key and host key rules written in Kotlin and checked by the same kind of
+tests.
 
 ---
 
@@ -539,7 +572,46 @@ once and the first to answer wins, so the same button works at home and in a caf
 On a phone, touch and hold a Mac in the list to pin one address (**Choose an address**) when only
 Tailscale will reach it, or go back to **Use any address**.
 
-### 6.9 When something is wrong
+### 6.9 Open a terminal
+
+Every controller can open a shell on a paired Mac, the way Termius would, without leaving OwnDesk.
+It is the Mac's own SSH server, so the Mac needs two things:
+
+1. **Remote Login** on: System Settings → General → Sharing → Remote Login. Behind its ⓘ, also
+   turn on **Allow full disk access for remote users**, or the shell cannot read Documents, Desktop
+   or Downloads and says `Operation not permitted`.
+2. To know this device: either this device's key in `~/.ssh/authorized_keys` on the Mac, which the
+   terminal settings make a single paste, or the account's password, typed each time.
+
+| Where | How to open it | Settings |
+|---|---|---|
+| Mac | **Terminal** in the header, ⌘T, the icon that appears on a sidebar row, or the row's right-click menu | **Terminal settings…** in the row's menu |
+| Android | The **Terminal** button on the Mac's row | Touch and hold the Mac, **Terminal settings** |
+| iPhone | The **Terminal** button on the Mac's row | Touch and hold the Mac, **Terminal settings…** |
+
+The first time, the settings ask for the user name on that Mac, as `whoami` prints it there, and
+the port. They show this device's key with **Copy the key** and **Copy a command** that adds it to
+`authorized_keys`; paste that into Terminal on the Mac once, and from then on the terminal opens
+without a password.
+
+The first connection shows the Mac's SSH host key fingerprint and asks whether to trust it; on the
+Mac, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the same if it is that Mac. After
+that the key is pinned, and a different one is refused with an explanation rather than asked about,
+because a changed host key is what someone in the middle looks like. If the Mac's key really did
+change, as after reinstalling macOS, **Forget it** in the terminal settings and the next terminal
+asks again.
+
+On the phones a key bar under the terminal gives what a phone keyboard lacks: Esc, Tab, Ctrl and Alt
+for the next key, the arrows, Home, End, Page Up and Down, and paste. Pinch changes the text size, a
+drag scrolls back, and a long press offers paste and a copy of what is on screen. On the Mac the
+terminal is an ordinary window: ⌘C and ⌘V work, ⌘W closes it and ends the shell, and the shell sees
+the window's real size as it is resized.
+
+The terminal key is separate from the device's OwnDesk identity, so nothing signed for one can ever
+pass as the other, and unpairing a Mac forgets its terminal settings and pinned key along with
+everything else.
+
+### 6.10 When something is wrong
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
@@ -552,6 +624,10 @@ Tailscale will reach it, or go back to **Use any address**.
 | The iPhone waits for approval and the Mac never asks | The Mac's OwnDesk predates iPhone support and drops the request | Build and install OwnDesk.app on that Mac from this version |
 | The iPhone finds no Mac, and none answers | Local Network access was refused | **Settings → Privacy & Security → Local Network → OwnDesk** |
 | OwnDesk on the iPhone will not open after a week | A free Apple ID's signature lasts seven days | Connect it and press ⌘R in Xcode again |
+| The terminal says nothing answered on port 22 | Remote Login is off on that Mac | System Settings → General → Sharing → Remote Login |
+| The terminal asks for a password, or refuses the login | The Mac does not have this device's key, or the user name is wrong | Check the name with `whoami` on the Mac; copy the command from Terminal settings and paste it there once |
+| `ls: Operation not permitted` in Documents, Desktop or Downloads, in the terminal only | macOS keeps those folders from remote logins until told otherwise | Behind Remote Login's ⓘ, turn on **Allow full disk access for remote users** |
+| The terminal refuses because the Mac's SSH key has changed | The pinned host key no longer matches: macOS was reinstalled, or someone is in the middle | If the Mac really changed, **Forget it** in Terminal settings; otherwise stop and look |
 
 ---
 
@@ -571,6 +647,7 @@ packages/swift             Swift libraries used by both halves
   OwnDeskProtocol          envelopes, receiver rules, payloads, data channel codec, pairing
   OwnDeskPeers             the peer list: who is paired, and whether it can host
   OwnDeskLocalControl      a same-user control channel so scripts can drive the apps
+packages/terminal          the SSH client under the terminal: a device key, pinned host keys, a shell in a PTY
 apps/owndesk               the Mac app: menu bar plus a window, hosts and controls
 apps/android               the Android app: controls only
 apps/ios                   the iPhone app: controls only, on the Mac controller's core
@@ -599,6 +676,7 @@ npm run android-frames                     # the Android app's frames against th
 npm run harness                            # browser client at http://127.0.0.1:8080/
 
 (cd packages/swift && swift test)
+(cd packages/terminal && swift test)       # against the Mac's own sshd, started on a spare port
 (cd apps/mac-agent && swift test)
 (cd apps/mac-controller && swift test)
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
@@ -612,9 +690,10 @@ Last run, all passing:
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
 | `packages/swift` | 35 tests | The same vectors on Swift, plus peers and the control channel |
+| `packages/terminal` | 9 tests | Key login, the shell, resize, exit status, refusals, the password fallback and OpenSSH-identical fingerprints, against a private sshd |
 | `apps/mac-agent` | 52 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
 | `apps/mac-controller` | 25 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264 |
-| `apps/android` | 61 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding |
+| `apps/android` | 101 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings and pinned host keys |
 | `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
 | `scripts/test-ios-simulator.sh` | 4 UI tests, 8 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
@@ -651,6 +730,10 @@ The short version:
 - Fail closed: when in doubt, close the connection.
 - Never log private keys, pairing codes, input contents, clipboard, or screen data.
 - The signalling transport is never trusted for integrity. Only the envelope signatures are.
+- The terminal is the Mac's own SSH server and OwnDesk is its client, with a key of its own per
+  device and the host key pinned after the first connection. It never routes a command through
+  OwnDesk's channels, never relaxes host key checking, and never installs a key on a Mac without a
+  click there.
 
 ---
 
@@ -660,6 +743,8 @@ The short version:
 - Audio, in either direction.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.
 - Waking a sleeping host.
+- Installing a device's terminal key on a Mac with a click; today it is a paste. Text selection and
+  mouse reporting in the Android terminal.
 
 ---
 

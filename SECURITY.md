@@ -21,7 +21,10 @@ published together with the advisory once released, crediting you unless you pre
 
 In scope: anything that lets an unpaired or revoked device pair, connect, resume, read the screen,
 or inject input; bypasses of host approval; signature or envelope validation flaws; leaks of
-private keys or pairing codes; any path to run a command or touch files on the host.
+private keys or pairing codes; any path to run a command or touch files on the host through
+OwnDesk's own protocol; and, in the terminal, any way to reach a Mac's SSH server with a key the
+device does not hold, to accept a changed host key without the owner's say, or to read the
+terminal key out of the device.
 
 Out of scope: attacks that need an already-compromised host or controller, or physical access to
 an unlocked one; weaknesses in Tailscale, WebRTC or the operating system themselves (report those

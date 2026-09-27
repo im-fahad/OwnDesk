@@ -19,7 +19,7 @@ struct TerminalSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("The terminal is \(mac.name)'s own SSH server. Turn on **Remote Login** there first: System Settings → General → Sharing → Remote Login.")
+                    Text("The terminal is \(mac.name)'s own SSH server. Turn on **Remote Login** there first: System Settings → General → Sharing → Remote Login. Behind its ⓘ, **Allow full disk access for remote users** lets the shell read Documents, Desktop and Downloads.")
                         .font(.system(size: Theme.uiSecondary))
                         .foregroundStyle(Theme.textDim)
 

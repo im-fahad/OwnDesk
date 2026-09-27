@@ -21,7 +21,9 @@ cd packages/protocol && npm run vectors && npm run codegen
 
 and make sure the Swift and Kotlin vector tests still agree with them. The iPhone app runs the
 Swift implementation, so it needs no vectors of its own, but a change to its gestures or keys should
-keep `swift test` in `apps/ios/OwnDeskTouch` and `scripts/test-ios-simulator.sh` passing.
+keep `swift test` in `apps/ios/OwnDeskTouch` and `scripts/test-ios-simulator.sh` passing. A change
+to the terminal should keep `swift test` in `packages/terminal` passing, which starts the Mac's own
+`sshd` on a spare port, and the emulator tests in the Android suite.
 
 ## Pull requests
 

@@ -8,6 +8,7 @@ import OwnDeskIdentity
 import OwnDeskLocalControl
 import OwnDeskPeers
 import OwnDeskProtocol
+import OwnDeskTerminal
 import UserNotifications
 import WebRTC
 
@@ -122,6 +123,15 @@ final class AppState: ObservableObject {
     let config: AppConfiguration
     let identity: any SigningIdentity
     let peers: PeerStore
+    /// This Mac's SSH key for the terminal. Separate from its OwnDesk identity: the two sign for
+    /// different protocols, and nothing signed for one can be replayed as the other.
+    let sshKey: SSHDeviceKey
+    /// Each Mac's SSH host key, pinned the first time a terminal is opened on it.
+    let knownHosts: KnownHosts
+    /// How to log in to each Mac's terminal, by device id.
+    @Published var terminalSettings: [String: TerminalSettings] = [:]
+    /// The Mac whose terminal settings are being asked for or edited.
+    @Published var terminalSetup: Peer?
     private var agent: Agent?
     private var agentEvents: Task<Void, Never>?
     private var session: SessionClient?
@@ -159,6 +169,10 @@ final class AppState: ObservableObject {
             alert.runModal()
             exit(1)
         }
+        var startupNotes: [String] = []
+        sshKey = Self.loadSSHKey(at: config.dataDirectory.appendingPathComponent("ssh-key.json"), notes: &startupNotes)
+        knownHosts = KnownHosts(url: config.dataDirectory.appendingPathComponent("known-hosts.json"))
+        terminalSettings = Self.loadTerminalSettings()
         // Whichever of the two old apps ran on this Mac, its pairings come forward.
         PeerMigration.importLegacy(into: peers, agentDirectory: config.legacyAgentDirectory,
                                    controllerDirectory: config.legacyControllerDirectory, now: currentMs())
@@ -174,6 +188,7 @@ final class AppState: ObservableObject {
         }
         discovery.start()
         append("identity \(identity.fingerprint) ready")
+        for note in startupNotes { append(note) }
 
         if notificationsAvailable {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -391,6 +406,7 @@ final class AppState: ObservableObject {
 
     func forget(_ deviceId: String) {
         try? peers.forget(deviceId)
+        forgetTerminal(deviceId)
         refreshPeers()
         if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
     }
@@ -434,6 +450,7 @@ final class AppState: ObservableObject {
     /// pair again, instead of offering a connection it can only refuse.
     private func turnedAway(by peer: Peer) {
         _ = try? peers.forget(peer.deviceId)
+        forgetTerminal(peer.deviceId)
         refreshPeers()
         if selectedPeerId == peer.deviceId { selectedPeerId = peers.hosts.first?.deviceId }
         let text = "\(peer.name) no longer has this Mac paired, so it was removed here too. Pair again to use it."

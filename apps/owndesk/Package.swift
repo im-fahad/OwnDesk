@@ -16,6 +16,9 @@ let package = Package(
         .package(name: "OwnDeskMacAgent", path: "../mac-agent"),
         .package(name: "OwnDeskMacController", path: "../mac-controller"),
         .package(url: "https://github.com/stasel/WebRTC.git", from: "152.0.0"),
+        .package(name: "OwnDeskTerminal", path: "../../packages/terminal"),
+        // Pinned below 1.12: later releases need a trusted build plugin and a Metal toolchain download.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", "1.11.2"..<"1.12.0"),
     ],
     targets: [
         .executableTarget(
@@ -28,6 +31,8 @@ let package = Package(
                 .product(name: "OwnDeskAgentCore", package: "OwnDeskMacAgent"),
                 .product(name: "OwnDeskControllerCore", package: "OwnDeskMacController"),
                 .product(name: "WebRTC", package: "WebRTC"),
+                .product(name: "OwnDeskTerminal", package: "OwnDeskTerminal"),
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             swiftSettings: mode
         ),

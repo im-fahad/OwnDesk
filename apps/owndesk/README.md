@@ -68,11 +68,34 @@ at login adds nothing to the Dock, and an open window can still take keyboard fo
 | Drag the header | Moves the window |
 | **Quit** | Really quits: the launch agent brings the app back after a crash, never after Quit |
 
+## The terminal
+
+**Terminal** in the header, ⌘T, the icon that appears on a paired Mac's row, or **Open Terminal** in
+its right-click menu opens a shell on that Mac in a window of its own. It is the Mac's own SSH
+server: turn on **Remote Login** there (System Settings → General → Sharing), and behind its ⓘ
+**Allow full disk access for remote users**, or the shell cannot read Documents, Desktop or Downloads.
+
+The first time, a sheet asks for the user name on that Mac, as `whoami` prints it there, and the
+port. It shows this Mac's terminal key and copies either the key or a command that adds it to
+`~/.ssh/authorized_keys` on the other Mac; paste that into Terminal there once and the terminal opens
+without a password from then on. Without it, the account's password is asked for each time.
+**Terminal settings…** in the row's menu brings the sheet back.
+
+The first connection shows the other Mac's host key fingerprint and asks whether to trust it; after
+that the key is pinned, and a different one is refused with an explanation. **Forget it** in the
+settings clears the pin, for a Mac whose key really changed.
+
+The window is an ordinary one: ⌘C and ⌘V work, ⌘W closes it and ends the shell, the shell sees the
+window's real size, and several can be open at once. The terminal does not depend on the "Allow it
+to control this Mac" switch, which is about the screen. Nothing typed goes through OwnDesk's own
+protocol, and the script channel below has no terminal command, by design.
+
 ## Where its data lives
 
-`~/Library/Application Support/OwnDesk`: the identity, the peer list, settings, and `control.json` for
-the script channel. Logs are in `~/Library/Logs/OwnDesk`. Nothing there is a secret except the identity,
-which is an opaque Secure Enclave reference on a Mac that has one, and the token in `control.json`.
+`~/Library/Application Support/OwnDesk`: the identity, the peer list, settings, `control.json` for
+the script channel, `ssh-key.json` (the terminal key, an opaque Secure Enclave reference on a Mac
+that has one) and `known-hosts.json` (the other Macs' pinned SSH host keys). Logs are in
+`~/Library/Logs/OwnDesk`. Nothing there is a secret except the two keys and the token in `control.json`.
 
 ## Upgrading from PRC
 

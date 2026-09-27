@@ -66,6 +66,9 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // A maintained build of libwebrtc for Android; the Macs use the equivalent for Apple platforms.
     implementation("io.github.webrtc-sdk:android:125.6422.07")
+    // The SSH client under the terminal: a maintained fork of JSch, pure Java, so the phone's own
+    // Keystore key can sign for it. The terminal emulator itself is this app's own code.
+    implementation("com.github.mwiede:jsch:2.28.7")
     testImplementation("junit:junit:4.13.2")
     // android.jar's org.json is a stub that returns null; the real one lets the frame test run.
     testImplementation("org.json:json:20240303")

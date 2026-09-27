@@ -49,6 +49,7 @@ decision by the owner removed a whole component.
 | Phone input | Trackpad first, screen view second | Both, switchable, with touch as the default: on a phone the whole desktop is visible at once, so putting the pointer where the finger lands is quicker to aim than nudging it. Pinch magnifies on the phone alone. |
 | Phone pairing | QR only | QR by camera, or the same code pasted as text. Decoded on the phone, offline. |
 | Host UI | Menu bar only | Menu bar item plus a window: the window is needed anyway to show a screen this Mac is controlling. |
+| Terminal | Not in v2. Section 13.3 forbids a command type, and still does. | A second way in to a paired Mac: an SSH client to the Mac's own Remote Login, on all three controllers, with a device SSH key of its own and the Mac's host key pinned. Section 4.7. |
 | Codec negotiation | "H.264 via VideoToolbox" | Both sides must *state* it: name H.264 as the preferred codec and offer an H.264 level the picture actually fits in, or libwebrtc silently agrees on VP8. See implementation.md. |
 
 Sections 5 to 25 were written when only the Mac mini could host. Where they say "the Mac Mini",
@@ -66,6 +67,7 @@ A private, self-hosted remote-control system for personal use.
 - An Android phone or an iPhone controls either Mac.
 - Controllers connect from the same LAN, or across the Internet over a Tailscale tailnet.
 - Low-latency screen viewing plus mouse and keyboard control.
+- A terminal on either Mac, through the Mac's own SSH server rather than through this protocol.
 - Secure device pairing and mandatory authentication on every session.
 - Automatic connection fallback. No remote-control port is ever exposed directly to the Internet.
 
@@ -135,6 +137,7 @@ Two planes:
 | Phone magnification | Local only, never asked of the host | Costs no bandwidth and keeps working on a poor link. |
 | Code signing | Ad-hoc, no certificate | The owner's decision: personal use, never distributed. Grants are re-issued after a rebuild by the install script. |
 | Pairing | LAN only, physical approval on the host | Removes remote pairing attack surface. |
+| Terminal | An SSH client to the Mac's own sshd, never a message type | 13.3 stays true. OpenSSH's authentication, pseudo-terminal and shell are already audited; the device gets a second hardware-backed P-256 key for it, and the Mac's host key is pinned. |
 | Concurrency | One active controller. Second request is rejected as busy. | Simplest safe MVP behavior. |
 | Host runtime | LaunchAgent in the login session, KeepAlive | Restarts after crash and after login. |
 
@@ -240,6 +243,46 @@ coturn with time-limited credentials (`use-auth-secret`), treated as an untruste
 Tailscale's own DERP relay fills this role today.
 
 ---
+
+### 4.7 Terminal
+
+Every controller can open a shell on a paired Mac. It is not a message type and never will be: the
+terminal is the Mac's own SSH server (Remote Login) and OwnDesk is an SSH client to it, so
+section 13.3 holds exactly as written. OpenSSH does the authentication, allocates the
+pseudo-terminal and runs the user's login shell; OwnDesk draws what comes back and sends what is
+typed. `packages/terminal` (`OwnDeskTerminal`, on SwiftNIO SSH) is that client for the Mac and the
+iPhone; the Android app carries the same rules in Kotlin over JSch.
+
+**The device key.** Each device makes a second P-256 key for the terminal, separate from its
+OwnDesk identity, in the Secure Enclave or the Android Keystore where there is one. The two sign
+for different protocols, and keeping them apart means nothing signed for one can be replayed as
+the other. OpenSSH knows the key as `ecdsa-sha2-nistp256`. The apps show its `authorized_keys`
+line and a one-line command that appends it on the Mac; installing it is a paste by the owner,
+never something OwnDesk does on its own (the click-to-install exchange is a later phase, section
+30). Login offers the key first, and asks for the account's password only if the Mac refuses it.
+
+**The host key.** SSH's defence against someone in the middle is that the client knows the
+server's key. The first time it cannot, so the person is shown the fingerprint, in the form
+`ssh-keygen -l` prints, and decides. After that the key is pinned by the Mac's OwnDesk device id,
+and a different key is refused outright with an explanation rather than asked about, because a
+changed host key is what an interception looks like. "Forget it" in the terminal settings is the
+one way to clear a pin, for a Mac that was reinstalled.
+
+**Addresses and settings.** The terminal reaches the Mac at the addresses OwnDesk already knows
+for it, every one probed at once, on port 22 by default. The user name on that Mac and the port are
+kept per Mac; unpairing a Mac forgets them and its pinned key. The terminal does not depend on the
+"Allow it to control this Mac" switch, which is about the screen: Remote Login and the Mac's
+`authorized_keys` decide who may log in, as they do for any SSH client.
+
+**What the Mac must allow.** Remote Login on, and, for a shell that can read Documents, Desktop and
+Downloads, "Allow full disk access for remote users" behind it: macOS keeps those folders from
+remote logins otherwise, and `ls` there says `Operation not permitted`.
+
+**The screen.** The Mac app draws the terminal in a window of its own with SwiftTerm; the iPhone
+does the same full screen. Android has its own VT emulator (the xterm subset a Mac's shells and
+editors use with `TERM=xterm-256color`), drawn on a Canvas, with a key bar for Escape, Tab,
+Control, Alt, the arrows and paging. The pseudo-terminal follows the view's size, and the shell's
+exit ends the connection.
 
 ## 5. Identity and cryptography
 
@@ -806,6 +849,10 @@ execute_shell   execute_command   run_script   open_terminal   eval   file_read 
 
 Keyboard control already lets the owner do anything a logged-in user can. That is the intended trust level for a paired device. This rule is about attack surface and input validation, not about restricting the owner. A protocol with six well-defined event types is auditable. One with a command string is not.
 
+The terminal (section 4.7) does not bend this. It is a separate SSH connection to the Mac's own
+server, authenticated by OpenSSH with the device's own SSH key, and nothing in this protocol
+carries a command or opens a terminal.
+
 ---
 
 ## 14. Host input injection
@@ -1059,6 +1106,7 @@ Never log:
 12. Fail closed. When in doubt, close the connection.
 13. Signaling transport is never trusted for integrity. Only envelope signatures are.
 14. Do not add features that need the server to hold durable state without updating this document.
+15. The terminal is an SSH client to the Mac's own server. Never route a command through OwnDesk's channels, never relax host key checking, never accept a changed host key without the owner's explicit "forget", and never install a device's key on a Mac without a click on that Mac.
 
 ---
 
@@ -1121,6 +1169,7 @@ owndesk/
       generated/            types produced by codegen, committed
       src/                  the TypeScript reference implementation
     swift/                  OwnDeskIdentity, OwnDeskProtocol, OwnDeskPeers, OwnDeskLocalControl
+    terminal/               OwnDeskTerminal: the SSH client under the terminal, for the Mac and the iPhone
   tools/
     e2e/                    headless end-to-end test driving the real agent binary from Node
     web-harness/            browser test client, dev only
@@ -1246,6 +1295,9 @@ Phase 2:
   which took most of the need out of this.
 - TLS on the LAN signaling endpoint.
 - Explicit quality policy on top of the stats API.
+- Installing a device's terminal key on a Mac with a click there, through signed messages, in
+  place of pasting its `authorized_keys` line; and the Mac sending its host key the same way, so
+  the first terminal need not ask.
 
 Phase 3:
 
@@ -1271,3 +1323,7 @@ Phase 3:
 5. **Idle timeout default.** 120 minutes, as written.
 6. **Code signing.** Decided against: ad-hoc signing, no certificate, and the permission prompts
    after a rebuild are accepted as the price. This overrides the advice in section 18.
+7. **Terminal.** Wanted on 2026-09-26, "like Termius", and built as an SSH client to the Mac's own
+   Remote Login rather than as anything in this protocol, so that section 13.3 stays true. The
+   screen and the terminal are two ways in to the same paired Mac, and each device has an SSH key of
+   its own for it.
