@@ -5,12 +5,27 @@ import OwnDeskControllerCore
 import OwnDeskIdentity
 import OwnDeskPeers
 import OwnDeskProtocol
+import OwnDeskTerminal
 import UIKit
 
 /// A Mac to open, and the addresses to try for it.
 struct SessionTarget: Identifiable, Equatable {
     let peer: Peer
     let addresses: [String]
+    var id: String { peer.deviceId }
+}
+
+/// How to log in to a Mac's terminal: its user name there, and the port its SSH server listens on.
+struct TerminalSettings: Codable, Equatable {
+    var username: String
+    var port: Int = 22
+}
+
+/// A terminal to open: the Mac, the hosts it might be reached at, and how to log in.
+struct TerminalTarget: Identifiable, Equatable {
+    let peer: Peer
+    let hosts: [String]
+    let settings: TerminalSettings
     var id: String { peer.deviceId }
 }
 
@@ -31,6 +46,10 @@ final class AppModel {
 
     @ObservationIgnored let identity: any SigningIdentity
     @ObservationIgnored let config: ControllerConfig
+    /// This device's SSH key, for the terminal. Separate from the OwnDesk identity above.
+    @ObservationIgnored let sshKey: SSHDeviceKey
+    /// Each Mac's SSH host key, pinned the first time a terminal is opened on it.
+    @ObservationIgnored let knownHosts: KnownHosts
     @ObservationIgnored private let peers: PeerStore
     @ObservationIgnored private let discovery: HostDiscovery
     @ObservationIgnored private var browsing = false
@@ -51,9 +70,15 @@ final class AppModel {
     /// The Mac a pairing attempt is waiting on, while one is.
     private(set) var pairingWith: String?
     var activeSession: SessionTarget?
+    /// How to log in to each Mac's terminal, by device id.
+    private(set) var terminalSettings: [String: TerminalSettings] = [:]
+    /// The Mac whose terminal settings are being asked for or edited.
+    var terminalSetup: Peer?
+    var activeTerminal: TerminalTarget?
     var notice: Notice?
 
     private static let pinsKey = "addressPins"
+    private static let terminalKey = "terminalSettings"
 
     init() {
         let directory = Self.dataDirectory()
@@ -62,6 +87,7 @@ final class AppModel {
         if UserDefaults.standard.bool(forKey: "OwnDeskReset") {
             try? FileManager.default.removeItem(at: directory)
             UserDefaults.standard.removeObject(forKey: Self.pinsKey)
+            UserDefaults.standard.removeObject(forKey: Self.terminalKey)
         }
         #endif
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -70,10 +96,14 @@ final class AppModel {
         var startup: [String] = []
         identity = Self.loadIdentity(at: directory.appendingPathComponent("identity.json"), notes: &startup)
         peers = Self.loadPeers(in: directory, notes: &startup)
+        sshKey = Self.loadSSHKey(at: directory.appendingPathComponent("ssh-key.json"), notes: &startup)
+        knownHosts = KnownHosts(url: directory.appendingPathComponent("known-hosts.json"))
         config = ControllerConfig(deviceName: UIDevice.current.name, dataDirectory: directory,
                                   app: .iosController, appVersion: Self.appVersion)
         discovery = HostDiscovery(serviceType: config.serviceType)
         pins = UserDefaults.standard.dictionary(forKey: Self.pinsKey) as? [String: String] ?? [:]
+        terminalSettings = UserDefaults.standard.data(forKey: Self.terminalKey)
+            .flatMap { try? JSONDecoder().decode([String: TerminalSettings].self, from: $0) } ?? [:]
         macs = peers.hosts
 
         discovery.onUpdate = { [weak self] hosts in
@@ -247,6 +277,55 @@ final class AppModel {
         refresh()
     }
 
+    // MARK: Terminal
+
+    /// The line to add to `~/.ssh/authorized_keys` on a Mac, so the terminal opens without a password.
+    var sshKeyLine: String { sshKey.authorizedKeysLine(comment: "OwnDesk on \(config.deviceName)") }
+
+    /// A command that adds it, for pasting into Terminal on the Mac.
+    var sshKeyCommand: String {
+        "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '\(sshKeyLine)' >> ~/.ssh/authorized_keys"
+    }
+
+    /// Opens a Mac's terminal, asking how to log in first if that is not known yet.
+    func openTerminal(_ peer: Peer) {
+        guard activeSession == nil, activeTerminal == nil else { return }
+        guard let settings = terminalSettings[peer.deviceId], !settings.username.isEmpty else {
+            terminalSetup = peer
+            return
+        }
+        // The Mac's own addresses, with its SSH port in place of OwnDesk's.
+        var seen = Set<String>()
+        let hosts = candidates(for: peer).compactMap { Endpoints.url(for: $0)?.host }.filter { seen.insert($0).inserted }
+        guard !hosts.isEmpty else {
+            notice = Notice(title: "No address for \(peer.name)", message: "Touch and hold it, choose an address, and try again.")
+            return
+        }
+        note("opening a terminal on \(peer.name) as \(settings.username)")
+        activeTerminal = TerminalTarget(peer: peer, hosts: hosts, settings: settings)
+    }
+
+    func saveTerminalSettings(_ settings: TerminalSettings, for peer: Peer) {
+        terminalSettings[peer.deviceId] = settings
+        persistTerminalSettings()
+    }
+
+    /// Forgets the pinned SSH key of a Mac, so the next terminal asks about it again. For a Mac whose
+    /// key really did change, such as after reinstalling macOS.
+    func forgetHostKey(of peer: Peer) {
+        knownHosts.forget(peer.deviceId)
+        note("forgot the SSH key of \(peer.name)")
+    }
+
+    func terminalEnded(_ target: TerminalTarget) {
+        if activeTerminal?.id == target.id { activeTerminal = nil }
+        note("closed the terminal on \(target.peer.name)")
+    }
+
+    private func persistTerminalSettings() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(terminalSettings), forKey: Self.terminalKey)
+    }
+
     // MARK: Unpairing
 
     /// Removes the pairing on both sides. The Mac is told with a signed UNPAIR when it can be
@@ -273,6 +352,8 @@ final class AppModel {
         if pins.removeValue(forKey: peer.deviceId) != nil {
             UserDefaults.standard.set(pins, forKey: Self.pinsKey)
         }
+        if terminalSettings.removeValue(forKey: peer.deviceId) != nil { persistTerminalSettings() }
+        knownHosts.forget(peer.deviceId)
         macs = peers.hosts
     }
 
@@ -369,6 +450,15 @@ final class AppModel {
         return SoftwareIdentity()
     }
 
+    private static func loadSSHKey(at file: URL, notes: inout [String]) -> SSHDeviceKey {
+        if let key = try? SSHDeviceKey.loadOrCreate(at: file) { return key }
+        // A key this device cannot use, such as an enclave key restored from another device's backup.
+        try? FileManager.default.removeItem(at: file)
+        notes.append("the terminal key could not be used, so this \(deviceKind) has a new one; add it on each Mac again")
+        return (try? SSHDeviceKey.loadOrCreate(at: file)) ?? (try! SSHDeviceKey.loadOrCreate(
+            at: FileManager.default.temporaryDirectory.appendingPathComponent("owndesk-ssh-key.json"), preferSecureEnclave: false))
+    }
+
     private static func loadPeers(in directory: URL, notes: inout [String]) -> PeerStore {
         if let store = try? PeerStore(directory: directory) { return store }
         let file = directory.appendingPathComponent("peers.json")
@@ -394,6 +484,8 @@ final class AppModel {
     ///   -OwnDeskPairCode <base64url of the pairing code text>   pair with it
     ///   -OwnDeskConnect <fingerprint or device id prefix>       open that Mac
     ///   -OwnDeskAddress <host:port>                             pin that address first
+    ///   -OwnDeskTerminal <fingerprint or device id prefix>      open that Mac's terminal
+    ///   -OwnDeskSSHUser <name> -OwnDeskSSHPort <port>           and log in there as
     ///   -OwnDeskReset YES                                       forget everything first
     /// A release build ignores them all.
     private func runLaunchCommands() {
@@ -402,7 +494,8 @@ final class AppModel {
            let data = Base64URL.decode(encoded), let text = String(data: data, encoding: .utf8) {
             pair(code: text)
         }
-        if let prefix = defaults.string(forKey: "OwnDeskConnect") {
+        for (argument, terminal) in [("OwnDeskConnect", false), ("OwnDeskTerminal", true)] {
+            guard let prefix = defaults.string(forKey: argument) else { continue }
             guard let match = macs.first(where: {
                 $0.fingerprint.replacingOccurrences(of: "-", with: "").hasPrefix(prefix.uppercased().replacingOccurrences(of: "-", with: ""))
                     || $0.deviceId.hasPrefix(prefix.lowercased())
@@ -411,7 +504,15 @@ final class AppModel {
                 return
             }
             if let address = defaults.string(forKey: "OwnDeskAddress") { setPin(address, for: match) }
-            connect(match)
+            if terminal {
+                if let user = defaults.string(forKey: "OwnDeskSSHUser") {
+                    let port = defaults.integer(forKey: "OwnDeskSSHPort")
+                    saveTerminalSettings(TerminalSettings(username: user, port: port > 0 ? port : 22), for: match)
+                }
+                openTerminal(match)
+            } else {
+                connect(match)
+            }
         }
     }
     #endif

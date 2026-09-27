@@ -30,8 +30,8 @@ struct HomeView: View {
                     }
                     ForEach(model.macs) { mac in
                         MacRow(mac: mac)
-                            .onTapGesture { model.connect(mac) }
                             .contextMenu {
+                                Button("Terminal settings…", systemImage: "terminal") { model.terminalSetup = mac }
                                 Button("Choose an address…", systemImage: "network") { choosingAddress = mac }
                                 if model.pins[mac.deviceId] != nil {
                                     Button("Use any address", systemImage: "arrow.triangle.branch") { model.setPin(nil, for: mac) }
@@ -45,6 +45,14 @@ struct HomeView: View {
             }
             .refreshable { model.refresh() }
             .background(Theme.content)
+            // On their own views: one view carrying several sheets or covers presents only some.
+            .sheet(item: $model.terminalSetup) { mac in TerminalSheet(mac: mac) }
+            .fullScreenCover(item: $model.activeTerminal) { target in
+                TerminalScreen(target: target)
+                    .environment(model)
+                    .ignoresSafeArea(.container)
+                    .ignoresSafeArea(.keyboard)
+            }
             Divider().overlay(Theme.border)
             thisDevice
             if showLog { logPanel }
@@ -184,12 +192,42 @@ struct HomeView: View {
     }
 }
 
-/// One paired Mac: whether it answers, its name and fingerprint, and the address it will be tried at.
+/// One paired Mac: whether it answers, its name and fingerprint, and the address it will be tried at,
+/// with the two ways in. The row itself opens the screen, as it always has; the terminal has its own
+/// button beside it.
 struct MacRow: View {
     @Environment(AppModel.self) private var model
     let mac: Peer
 
     var body: some View {
+        HStack(spacing: 0) {
+            Button { model.connect(mac) } label: { details }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("mac-\(mac.fingerprint)")
+                .accessibilityLabel("\(mac.name), screen")
+                .accessibilityHint("Opens its screen. Touch and hold for its terminal settings, address and unpairing.")
+            Divider().overlay(Theme.border).padding(.vertical, 10)
+            Button { model.openTerminal(mac) } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 17))
+                    Text("Terminal")
+                        .font(.system(size: Theme.section))
+                }
+                .foregroundStyle(Theme.textDim)
+                .frame(width: 70)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("terminal-\(mac.fingerprint)")
+            .accessibilityLabel("\(mac.name), terminal")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var details: some View {
         HStack(spacing: 10) {
             Circle()
                 .fill(model.reachable.contains(mac.deviceId) ? Theme.online : Theme.textFaint)
@@ -204,17 +242,13 @@ struct MacRow: View {
                 addressLine
             }
             Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
+            Image(systemName: "display")
+                .font(.system(size: 15))
                 .foregroundStyle(Theme.textFaint)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("mac-\(mac.fingerprint)")
-        .accessibilityHint("Opens its screen. Touch and hold for its address and for unpairing.")
     }
 
     /// Where it actually is beats where it last answered: an old address can be a Tailscale one that

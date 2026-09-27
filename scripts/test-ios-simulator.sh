@@ -3,14 +3,20 @@
 #
 #   scripts/test-ios-simulator.sh                 on the first available iPhone simulator
 #   DEVICE="iPhone 17" scripts/test-ios-simulator.sh
-#   SCREENSHOTS=/tmp/shots scripts/test-ios-simulator.sh    also save the session's screens there
+#   SCREENSHOTS=/tmp/shots scripts/test-ios-simulator.sh    also save the screens there
 #
 # Starts the headless owndesk-agent with a 1920x1080 synthetic screen and --print-input, so no
 # permission is needed and nothing on this Mac moves. Full size on purpose: at 1280x720 the picture
-# arrives as H.264 whatever level the iPhone offers, so the codec check would prove nothing. Opens a pairing window, hands the code to the UI test,
-# approves the request when it arrives, runs the UI tests, then checks that the host received each
-# gesture as the right input. No Apple ID or certificate is involved: Simulator builds are signed
-# for this Mac only.
+# arrives as H.264 whatever level the iPhone offers, so the codec check would prove nothing.
+#
+# Three stages, each with its own pairing window, since a window lasts only 120 seconds:
+#   home      the home screen and the pairing sheet, no host needed
+#   session   pairs, opens the Mac's screen, drives the gestures and keys; the host then says
+#             whether each one arrived as the right input
+#   terminal  pairs, opens a terminal on a private sshd (this Mac's own, run as you on a spare
+#             port, never the Remote Login setting), and runs a command that writes a file here
+#
+# No Apple ID or certificate is involved: Simulator builds are signed for this Mac only.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,12 +25,13 @@ WORK="$(mktemp -d -t owndesk-ios-e2e)"
 LOG="$WORK/agent.log"
 FIFO="$WORK/agent.in"
 AGENT_PID=""
-
 APP_LOG_PID=""
+SSHD_PID=""
 
 cleanup() {
   [[ -n "$AGENT_PID" ]] && kill "$AGENT_PID" 2>/dev/null || true
   [[ -n "$APP_LOG_PID" ]] && kill "$APP_LOG_PID" 2>/dev/null || true
+  [[ -n "$SSHD_PID" ]] && kill "$SSHD_PID" 2>/dev/null || true
   exec 3>&- 2>/dev/null || true
   rm -rf "$WORK"
 }
@@ -43,7 +50,7 @@ echo "building owndesk-agent"
 (cd "$ROOT/apps/mac-agent" && swift build --product owndesk-agent >/dev/null)
 AGENT="$ROOT/apps/mac-agent/.build/debug/owndesk-agent"
 
-# Everything slow happens before the pairing window opens, because the window lasts 120 seconds.
+# Everything slow happens before a pairing window opens.
 echo "building the iPhone app and its UI tests"
 xcodebuild build-for-testing -project "$ROOT/apps/ios/OwnDesk.xcodeproj" -scheme OwnDesk \
   -destination "platform=iOS Simulator,name=$DEVICE" -derivedDataPath "$WORK/dd" >"$WORK/build.log" 2>&1 \
@@ -58,9 +65,35 @@ exec 3<>"$FIFO"
 "$AGENT" --name "Test Mac" --port "$PORT" --data-dir "$WORK/host" --file-identity \
   --synthetic-screen --synthetic-size 1920x1080 --print-input --no-bonjour <&3 >"$LOG" 2>&1 &
 AGENT_PID=$!
-
 for _ in $(seq 1 100); do grep -q "listening on port" "$LOG" 2>/dev/null && break; sleep 0.1; done
 grep -q "listening on port" "$LOG" || { echo "the agent did not start:" >&2; cat "$LOG" >&2; exit 1; }
+
+# The terminal's server: this Mac's sshd as you, on a spare port, with its own host key and an
+# authorized_keys that starts empty; the terminal test hands over the app's key.
+SSHD_DIR="$WORK/sshd"
+mkdir -p "$SSHD_DIR"
+ssh-keygen -q -t ed25519 -N "" -f "$SSHD_DIR/host_key"
+: >"$SSHD_DIR/authorized_keys"
+SSH_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+cat >"$SSHD_DIR/sshd_config" <<EOF
+Port $SSH_PORT
+ListenAddress 127.0.0.1
+HostKey $SSHD_DIR/host_key
+AuthorizedKeysFile $SSHD_DIR/authorized_keys
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+StrictModes no
+PerSourcePenalties no
+PidFile $SSHD_DIR/sshd.pid
+EOF
+/usr/sbin/sshd -D -e -f "$SSHD_DIR/sshd_config" </dev/null >"$SSHD_DIR/sshd.log" 2>&1 &
+SSHD_PID=$!
+
+# The app's own log, for when something goes wrong: it says what it tried and what answered.
+xcrun simctl spawn "$DEVICE" log stream --level info --style compact \
+  --predicate 'subsystem BEGINSWITH "owndesk"' >"$WORK/app.log" 2>&1 &
+APP_LOG_PID=$!
 
 run_tests() {
   xcodebuild test-without-building \
@@ -70,36 +103,51 @@ run_tests() {
   return "${PIPESTATUS[0]}"
 }
 
+# Opens a pairing window just before the test that uses it, and approves the request when it comes.
+# On a real Mac a person compares the fingerprints first; here there is nothing to compare against.
+open_pairing() {
+  local before
+  before=$(grep -c '^{"' "$LOG" || true)
+  echo pair >&3
+  for _ in $(seq 1 50); do [[ $(grep -c '^{"' "$LOG" || true) -gt $before ]] && break; sleep 0.1; done
+  CODE="$(grep '^{"' "$LOG" | tail -1 | base64 | tr '+/' '-_' | tr -d '=\n')"
+  local requests
+  requests=$(grep -c "PAIRING REQUEST" "$LOG" || true)
+  (
+    for _ in $(seq 1 1200); do
+      if [[ $(grep -c "PAIRING REQUEST" "$LOG" || true) -gt $requests ]]; then echo y >&3; exit 0; fi
+      sleep 0.1
+    done
+  ) &
+}
+
+[[ -n "${SCREENSHOTS:-}" ]] && mkdir -p "$SCREENSHOTS"
 set +e
 echo "running the home screen UI tests"
 run_tests OwnDeskUITests/HomeScreenUITests
 STATUS=$?
 
-# The pairing window opens only now, just before the test that uses it: it lasts 120 seconds, and
-# the home screen tests alone take about that long.
-echo pair >&3
-for _ in $(seq 1 50); do grep -q '^{"' "$LOG" && break; sleep 0.1; done
-CODE_JSON="$(grep -m1 '^{"' "$LOG")"
-CODE="$(printf %s "$CODE_JSON" | base64 | tr '+/' '-_' | tr -d '=\n')"
+echo "running the session UI test"
+open_pairing
+TEST_RUNNER_OWNDESK_PAIR_CODE="$CODE" TEST_RUNNER_OWNDESK_SCREENSHOTS="${SCREENSHOTS:-}" \
+  run_tests OwnDeskUITests/SessionUITests || STATUS=1
 
-# Approve the pairing request as soon as the iPhone sends it. On a real Mac a person compares the
-# fingerprints first; here there is nothing to compare against.
+echo "running the terminal UI test"
+KEY_FILE="$WORK/app-key.pub"
+MARKER="$WORK/terminal-marker"
 (
-  for _ in $(seq 1 1200); do
-    if grep -q "PAIRING REQUEST" "$LOG"; then echo y >&3; exit 0; fi
+  # Adds the app's key to the server as soon as the test writes it out.
+  for _ in $(seq 1 1800); do
+    if [[ -s "$KEY_FILE" ]]; then cat "$KEY_FILE" >>"$SSHD_DIR/authorized_keys"; echo >>"$SSHD_DIR/authorized_keys"; exit 0; fi
     sleep 0.1
   done
 ) &
-
-# The app's own log, for when something goes wrong: it says what it tried and what answered.
-xcrun simctl spawn "$DEVICE" log stream --level info --style compact \
-  --predicate 'subsystem BEGINSWITH "owndesk"' >"$WORK/app.log" 2>&1 &
-APP_LOG_PID=$!
-
-echo "running the session UI test"
-[[ -n "${SCREENSHOTS:-}" ]] && mkdir -p "$SCREENSHOTS"
+open_pairing
 TEST_RUNNER_OWNDESK_PAIR_CODE="$CODE" TEST_RUNNER_OWNDESK_SCREENSHOTS="${SCREENSHOTS:-}" \
-  run_tests OwnDeskUITests/SessionUITests || STATUS=1
+TEST_RUNNER_OWNDESK_SSH_PORT="$SSH_PORT" TEST_RUNNER_OWNDESK_SSH_USER="$(whoami)" \
+TEST_RUNNER_OWNDESK_SSH_KEY_FILE="$KEY_FILE" TEST_RUNNER_OWNDESK_MARKER="$MARKER" \
+TEST_RUNNER_OWNDESK_AGENT_PORT="$PORT" \
+  run_tests OwnDeskUITests/TerminalUITests || STATUS=1
 set -e
 
 echo
@@ -118,10 +166,23 @@ check '^input mouse_move_rel [1-9]' "trackpad mode moves the pointer relatively"
 check '^input text [0-9]+ characters' "typing arrives as text"
 check '^input key_down Escape' "the key bar sends Escape"
 check '^input key_down KeyC meta' "⌘ then c sends Command-C"
+if [[ "$(cat "$MARKER" 2>/dev/null)" == "owndesk-terminal-42" ]]; then
+  echo "  ok   a command typed in the terminal ran on this Mac"
+else
+  echo "  FAIL a command typed in the terminal ran on this Mac"; STATUS=1
+fi
+if grep -q "Accepted publickey for $(whoami)" "$SSHD_DIR/sshd.log"; then
+  echo "  ok   the terminal logged in with the iPhone's key"
+else
+  echo "  FAIL the terminal logged in with the iPhone's key"; STATUS=1
+fi
 if [[ "$STATUS" != 0 ]]; then
   echo
   echo "the host's log ended with:"
   tail -25 "$LOG" | grep -v '^{"' | sed 's/^/  /'
+  echo
+  echo "the SSH server's log ended with:"
+  tail -15 "$SSHD_DIR/sshd.log" | sed 's/^/  /'
   echo
   echo "the app's log ended with:"
   grep "owndesk" "$WORK/app.log" | tail -25 | sed 's/^/  /'

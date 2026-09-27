@@ -13,6 +13,8 @@
 		0D0E5C000000000000000053 /* OwnDeskControllerCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000043 /* OwnDeskControllerCore */; };
 		0D0E5C000000000000000054 /* OwnDeskTouch in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000044 /* OwnDeskTouch */; };
 		0D0E5C000000000000000055 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000045 /* WebRTC */; };
+		0D0E5C000000000000000056 /* OwnDeskTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000046 /* OwnDeskTerminal */; };
+		0D0E5C000000000000000057 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 0D0E5C000000000000000047 /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +59,8 @@
 				0D0E5C000000000000000053 /* OwnDeskControllerCore in Frameworks */,
 				0D0E5C000000000000000054 /* OwnDeskTouch in Frameworks */,
 				0D0E5C000000000000000055 /* WebRTC in Frameworks */,
+				0D0E5C000000000000000056 /* OwnDeskTerminal in Frameworks */,
+				0D0E5C000000000000000057 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +129,8 @@
 				0D0E5C000000000000000043 /* OwnDeskControllerCore */,
 				0D0E5C000000000000000044 /* OwnDeskTouch */,
 				0D0E5C000000000000000045 /* WebRTC */,
+				0D0E5C000000000000000046 /* OwnDeskTerminal */,
+				0D0E5C000000000000000047 /* SwiftTerm */,
 			);
 			productName = OwnDesk;
 			productReference = 0D0E5C000000000000000007 /* OwnDesk.app */;
@@ -186,6 +192,8 @@
 				0D0E5C000000000000000031 /* XCLocalSwiftPackageReference "../mac-controller" */,
 				0D0E5C000000000000000032 /* XCLocalSwiftPackageReference "OwnDeskTouch" */,
 				0D0E5C000000000000000033 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				0D0E5C000000000000000034 /* XCLocalSwiftPackageReference "../../packages/terminal" */,
+				0D0E5C000000000000000035 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0D0E5C000000000000000003 /* Products */;
@@ -437,6 +445,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = OwnDeskTouch;
 		};
+		0D0E5C000000000000000034 /* XCLocalSwiftPackageReference "../../packages/terminal" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../packages/terminal;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -446,6 +458,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 152.0.0;
+			};
+		};
+		0D0E5C000000000000000035 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.11.2;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -480,6 +500,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0D0E5C000000000000000033 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		0D0E5C000000000000000046 /* OwnDeskTerminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000034 /* XCLocalSwiftPackageReference "../../packages/terminal" */;
+			productName = OwnDeskTerminal;
+		};
+		0D0E5C000000000000000047 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0D0E5C000000000000000035 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
