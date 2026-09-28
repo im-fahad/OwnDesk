@@ -102,5 +102,7 @@ public final class KnownHosts: @unchecked Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try? encoder.encode(all).write(to: url, options: [.atomic])
+        // Public keys only, but kept like the rest of the data folder: readable by this user alone.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }

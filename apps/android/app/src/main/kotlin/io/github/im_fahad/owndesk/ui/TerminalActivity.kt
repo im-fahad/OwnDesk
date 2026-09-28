@@ -33,6 +33,7 @@ import androidx.lifecycle.lifecycleScope
 import com.jcraft.jsch.UIKeyboardInteractive
 import com.jcraft.jsch.UserInfo
 import io.github.im_fahad.owndesk.device.PeerStore
+import io.github.im_fahad.owndesk.net.Discovery
 import io.github.im_fahad.owndesk.net.Endpoints
 import io.github.im_fahad.owndesk.protocol.Peer
 import io.github.im_fahad.owndesk.terminal.DeviceSshKey
@@ -46,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -66,6 +68,8 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
     private lateinit var cardSpinner: ProgressBar
     private lateinit var cardButtons: LinearLayout
     private lateinit var ctrlKey: TextView
+    private lateinit var header: View
+    private lateinit var headerRule: View
     private lateinit var altKey: TextView
 
     private lateinit var peer: Peer
@@ -93,8 +97,31 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
         peer = found
         settings = saved
         setContentView(buildLayout())
+        fitOrientation(resources.configuration)
         // Connect once the terminal has its real size, so the shell starts with the right one.
         terminal.post { connect() }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        fitOrientation(newConfig)
+    }
+
+    /**
+     * Sideways, the keyboard takes most of the screen, and the header and the status bar would
+     * leave the terminal two rows. They make way for it; the key bar stays, since it is the keys.
+     */
+    private fun fitOrientation(config: android.content.res.Configuration) {
+        val landscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        header.visibility = if (landscape) View.GONE else View.VISIBLE
+        headerRule.visibility = header.visibility
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        if (landscape) {
+            bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            bars.show(WindowInsetsCompat.Type.statusBars())
+        }
     }
 
     override fun onDestroy() {
@@ -146,7 +173,9 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
             }
         )
         root.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, dp(48)))
-        root.addView(divider())
+        this.header = header
+        headerRule = divider()
+        root.addView(headerRule)
 
         // The terminal, with a card over it while connecting and when the shell has ended.
         val stage = FrameLayout(this)
@@ -176,8 +205,8 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
         card.addView(cardButtons, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(14) })
         stage.addView(
             card,
-            FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER).apply {
-                leftMargin = dp(24); rightMargin = dp(24)
+            FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER).apply {
+                leftMargin = dp(32); rightMargin = dp(32)
             }
         )
         root.addView(stage, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
@@ -279,43 +308,108 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
         val name = peer.name
         val port = settings.port
         lifecycleScope.launch(Dispatchers.IO) {
-            // Every address at once, on the SSH port: a Mac at home and on a tailnet has two.
-            val hosts = peer.candidates().map { Endpoints.host(it) }.filter { it.isNotEmpty() }.distinct()
+            // Where the Mac says it is right now goes first, then every address it was known by. Away
+            // from Wi-Fi there is no local network to ask, and its local addresses can only time
+            // out, so the tailnet ones go first instead.
+            val local = onLocalNetwork()
+            val live = if (local) findOnNetwork() else null
+            var known = listOfNotNull(live) + peer.candidates()
+            if (!local) known = known.sortedBy { if (Endpoints.path(it) == "lan") 1 else 0 }
+            val hosts = known.map { Endpoints.host(it) }.filter { it.isNotEmpty() }.distinct()
             val addresses = hosts.map { if (it.contains(':')) "[$it]:$port" else "$it:$port" }
-            val reachable = Endpoints.firstReachable(addresses, timeoutMs = 4000)
-            if (reachable == null) {
+            // All probed at once, then tried one by one in that order. A router that moves its
+            // leases can hand an old address of this Mac to another Mac, and both answer on port 22.
+            val reachable = Endpoints.reachableInOrder(addresses, timeoutMs = 4000)
+            if (reachable.isEmpty()) {
                 ended(number, "Nothing answered on port $port of $name. Turn on Remote Login there: System Settings → General → Sharing → Remote Login.")
                 return@launch
             }
-            val host = Endpoints.host(reachable)
-            val fresh = SshShell(this@TerminalActivity)
-            // Kept, so the host key question can show the key this very connection was given.
-            val repository = store.repositoryFor(peer.deviceId)
-            shellRepository = repository
-            try {
-                val key = DeviceSshKey.load()
-                fresh.connect(
-                    host = host, port = port, username = settings.username, key = key,
-                    hostKeys = repository, userInfo = this@TerminalActivity,
-                    columns = terminal.gridColumns.coerceAtLeast(80), rows = terminal.gridRows.coerceAtLeast(24),
-                )
-            } catch (e: SshShellException) {
-                ended(number, describe(e))
-                return@launch
+            val key = try {
+                DeviceSshKey.load()
             } catch (e: Exception) {
-                ended(number, "The connection to $name failed: ${e.message ?: e}")
+                ended(number, "This phone's terminal key could not be used: ${e.message ?: e}")
                 return@launch
             }
-            withContext(Dispatchers.Main) {
-                if (number != attempt || isFinishing) { fresh.close(); return@withContext }
-                shell = fresh
-                connected = true
-                fresh.resize(terminal.gridColumns, terminal.gridRows)
-                card.visibility = View.GONE
-                terminal.showKeyboard()
-                log("terminal open on $name at $host:$port")
+            var changed: String? = null
+            for (address in reachable) {
+                if (number != attempt) return@launch
+                val host = Endpoints.host(address)
+                val fresh = SshShell(this@TerminalActivity)
+                // Kept, so the host key question can show the key this very connection was given.
+                val repository = store.repositoryFor(peer.deviceId)
+                shellRepository = repository
+                try {
+                    fresh.connect(
+                        host = host, port = port, username = settings.username, key = key,
+                        hostKeys = repository, userInfo = this@TerminalActivity,
+                        columns = terminal.gridColumns.coerceAtLeast(80), rows = terminal.gridRows.coerceAtLeast(24),
+                    )
+                } catch (e: SshShellException.HostKeyChanged) {
+                    // Not this Mac's key: another machine at an address this one used to have.
+                    if (changed == null) changed = e.fingerprint
+                    log("$host presented a different SSH key than $name's; trying its next address")
+                    continue
+                } catch (e: SshShellException) {
+                    ended(number, describe(e))
+                    return@launch
+                } catch (e: Exception) {
+                    ended(number, "The connection to $name failed: ${e.message ?: e}")
+                    return@launch
+                }
+                withContext(Dispatchers.Main) {
+                    if (number != attempt || isFinishing) { fresh.close(); return@withContext }
+                    shell = fresh
+                    connected = true
+                    fresh.resize(terminal.gridColumns, terminal.gridRows)
+                    card.visibility = View.GONE
+                    terminal.showKeyboard()
+                    log("terminal open on $name at $host:$port")
+                }
+                return@launch
             }
+            // Every address answered with a key other than the pinned one.
+            val fingerprint = changed ?: return@launch
+            ask(
+                title = "$name's SSH key has changed",
+                message = "It now presents $fingerprint, not the key this phone saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
+                yes = null,
+            )
+            ended(number, "Not connected: $name's SSH key has changed. If it really did, forget the old key in Terminal settings.")
         }
+    }
+
+    /** Whether this phone is on a Wi-Fi or wired network, where a Mac could be found nearby. */
+    private fun onLocalNetwork(): Boolean {
+        val manager = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        @Suppress("DEPRECATION")
+        return manager.allNetworks.any { network ->
+            val caps = manager.getNetworkCapabilities(network) ?: return@any false
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+        }
+    }
+
+    /**
+     * Listens briefly for this Mac's own advertisement, which is where it is now. Its device id is
+     * in the TXT record, so this is the one address known to be this Mac rather than one it used to
+     * have. Remembered, so the home screen and the next connection start from it too.
+     */
+    private fun findOnNetwork(waitMs: Long = 2000): String? {
+        val found = AtomicReference<String?>(null)
+        val done = CountDownLatch(1)
+        val discovery = Discovery(this) { deviceId, address ->
+            if (deviceId == peer.deviceId && found.compareAndSet(null, address)) done.countDown()
+        }
+        discovery.start()
+        try {
+            done.await(waitMs, TimeUnit.MILLISECONDS)
+        } finally {
+            discovery.stop()
+        }
+        val address = found.get() ?: return null
+        PeerStore(this).noteDiscovered(peer.deviceId, address)
+        log("${peer.name} is on this network at $address")
+        return address
     }
 
     private fun ended(number: Int, message: String) = runOnUiThread {
@@ -331,6 +425,8 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
             is SshShellException.Unreachable ->
                 "Nothing answered on port ${settings.port} of $name. Turn on Remote Login there: System Settings → General → Sharing → Remote Login."
             is SshShellException.HostKeyRejected -> "Not connected: $name's SSH key was not trusted."
+            is SshShellException.HostKeyChanged ->
+                "Not connected: $name's SSH key has changed. If it really did, forget the old key in Terminal settings."
             is SshShellException.AuthenticationFailed ->
                 "$name refused the login as ${settings.username}. Check the user name, and add this phone's key on the Mac: touch and hold $name and choose Terminal settings."
             is SshShellException.Cancelled -> "Not connected: no password was given."
@@ -400,14 +496,8 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
                     yes = "Trust",
                 )
             }
-            is HostKeyVerdict.Changed -> {
-                ask(
-                    title = "$name's SSH key has changed",
-                    message = "It now presents ${verdict.fingerprint}, not the key this phone saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
-                    yes = null,
-                )
-                false
-            }
+            // A changed key is refused by JSch without a question, and reported once every address
+            // has been tried: at an old address it is usually just another Mac.
             else -> false
         }
     }

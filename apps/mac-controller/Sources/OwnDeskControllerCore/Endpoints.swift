@@ -92,6 +92,23 @@ public enum Endpoints {
         }
     }
 
+    /// Every candidate that answers, probed at once, in the order they were given rather than the
+    /// order they answered. For a caller that must try them one by one, best first: two Macs on one
+    /// network both answer on the SSH port, and a stale address can be the other one.
+    public static func reachable(_ urls: [URL], timeoutMs: Int = 4000) async -> [URL] {
+        let candidates = urls.filter { $0.host != nil }
+        guard !candidates.isEmpty else { return [] }
+        let answered = await withTaskGroup(of: (Int, Bool).self) { group in
+            for (index, url) in candidates.enumerated() {
+                group.addTask { (index, await isReachable(url, timeoutMs: timeoutMs)) }
+            }
+            var ok = Set<Int>()
+            for await (index, up) in group where up { ok.insert(index) }
+            return ok
+        }
+        return candidates.enumerated().filter { answered.contains($0.offset) }.map(\.element)
+    }
+
     /// A plain TCP connect. It proves the port is open, not that the right host is behind it;
     /// the signed handshake decides that.
     public static func isReachable(_ url: URL, timeoutMs: Int = 4000) async -> Bool {

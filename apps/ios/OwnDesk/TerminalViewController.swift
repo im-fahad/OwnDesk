@@ -184,44 +184,74 @@ final class TerminalViewController: UIViewController, TerminalViewDelegate {
         attempt?.cancel()
         events?.cancel()
         ssh?.close()
+        ssh = nil
         exitStatus = nil
         let settings = target.settings
         let name = target.peer.name
         showCard("Connecting to \(name)…", busy: true)
 
-        let ssh = SSHTerminal()
-        self.ssh = ssh
-        let stream = ssh.events
-        events = Task { [weak self] in
-            for await event in stream {
-                guard let self, !Task.isCancelled else { return }
-                self.handle(event, from: ssh)
-            }
-        }
         attempt = Task { [weak self] in
             guard let self, let model = self.model else { return }
-            // Every address at once, on the SSH port: a Mac at home and on a tailnet has two.
+            // All probed at once, then tried one by one in order, where the Mac is now first. A
+            // router that moves its leases can hand an old address of this Mac to another Mac, and
+            // both answer on the SSH port.
             let urls = self.target.hosts.compactMap { Endpoints.url(host: $0, port: UInt16(clamping: settings.port)) }
-            guard let url = await Endpoints.firstReachable(urls), let host = url.host else {
+            let reachable = await Endpoints.reachable(urls)
+            guard !reachable.isEmpty else {
                 self.ended("Nothing answered on port \(settings.port) of \(name). Turn on Remote Login there: System Settings → General → Sharing → Remote Login.")
                 return
             }
             let terminal = self.terminalView.getTerminal()
-            do {
-                try await ssh.connect(
-                    host: host, port: settings.port, username: settings.username, key: model.sshKey,
-                    password: { [weak self] in await self?.askPassword() },
-                    hostKey: { [weak self] key in await self?.trust(key) ?? false },
-                    options: .init(columns: terminal.cols, rows: terminal.rows))
-                guard !Task.isCancelled else { return }
+            var changedFingerprint: String?
+            for url in reachable {
+                guard let host = url.host, !Task.isCancelled else { return }
+                let candidate = SSHTerminal()
+                let seen = PresentedKey()
+                do {
+                    try await candidate.connect(
+                        host: host, port: settings.port, username: settings.username, key: model.sshKey,
+                        password: { [weak self] in await self?.askPassword() },
+                        hostKey: { [weak self] key in await self?.trust(key, seen: seen) ?? false },
+                        options: .init(columns: terminal.cols, rows: terminal.rows))
+                } catch SSHTerminalError.hostKeyRejected where seen.changed != nil {
+                    // Not this Mac's key: another machine at an address this one used to have.
+                    changedFingerprint = changedFingerprint ?? seen.changed
+                    model.note("\(host) presented a different SSH key than \(name)'s; trying its next address")
+                    continue
+                } catch let error as SSHTerminalError {
+                    self.ended(self.describe(error))
+                    return
+                } catch {
+                    self.ended("The connection to \(name) failed: \(error.localizedDescription)")
+                    return
+                }
+                guard !Task.isCancelled else { candidate.close(); return }
+                self.attach(candidate)
                 self.card.isHidden = true
                 self.spinner.stopAnimating()
                 _ = self.terminalView.becomeFirstResponder()
                 model.note("terminal open on \(name) at \(host):\(settings.port)")
-            } catch let error as SSHTerminalError {
-                self.ended(self.describe(error))
-            } catch {
-                self.ended("The connection to \(name) failed: \(error.localizedDescription)")
+                return
+            }
+            if let changedFingerprint {
+                _ = await self.ask(
+                    title: "\(name)'s SSH key has changed",
+                    message: "It now presents \(changedFingerprint), not the key this \(AppModel.deviceKind) saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
+                    yes: nil, identifier: "host-changed")
+                self.ended("Not connected: \(name)'s SSH key has changed. If it really did, forget the old key in Terminal settings.")
+            }
+        }
+    }
+
+    /// The shell is running on this connection: its output goes to the screen from now on. Events
+    /// wait in the connection's stream until this starts reading them, so nothing is lost.
+    private func attach(_ terminal: SSHTerminal) {
+        ssh = terminal
+        let stream = terminal.events
+        events = Task { [weak self] in
+            for await event in stream {
+                guard let self, !Task.isCancelled else { return }
+                self.handle(event, from: terminal)
             }
         }
     }
@@ -276,7 +306,7 @@ final class TerminalViewController: UIViewController, TerminalViewDelegate {
 
     /// The first time, the person decides from the fingerprint; after that the key is pinned, and a
     /// different one is refused without a question, since that is what an interception looks like.
-    private func trust(_ key: SSHHostKey) async -> Bool {
+    private func trust(_ key: SSHHostKey, seen: PresentedKey) async -> Bool {
         guard let model else { return false }
         let name = target.peer.name
         switch model.knownHosts.verdict(for: key, of: target.peer.deviceId) {
@@ -291,10 +321,9 @@ final class TerminalViewController: UIViewController, TerminalViewDelegate {
             if yes { model.knownHosts.pin(key, for: target.peer.deviceId) }
             return yes
         case .changed(let fingerprint):
-            _ = await ask(
-                title: "\(name)'s SSH key has changed",
-                message: "It now presents \(fingerprint), not the key this \(AppModel.deviceKind) saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
-                yes: nil, identifier: "host-changed")
+            // Refused without a question. Whether to warn is decided once every address has been
+            // tried: at an old address this is usually just another Mac.
+            seen.changed = fingerprint
             return false
         }
     }
@@ -363,4 +392,9 @@ final class TerminalViewController: UIViewController, TerminalViewDelegate {
     func clipboardCopy(source: TerminalView, content: Data) {
         if let text = String(data: content, encoding: .utf8) { UIPasteboard.general.string = text }
     }
+}
+
+/// The key a connection was refused for, when it was not the pinned one.
+final class PresentedKey: @unchecked Sendable {
+    var changed: String?
 }

@@ -1,4 +1,5 @@
 import OwnDeskPeers
+import OwnDeskTerminal
 import SwiftUI
 import UIKit
 
@@ -14,6 +15,9 @@ struct TerminalSheet: View {
     @State private var username = ""
     @State private var port = "22"
     @State private var copied: String?
+    @State private var forgotten = false
+    /// The pinned key as the sheet opened, kept after Forget so the confirmation has somewhere to show.
+    @State private var shownPin: SSHHostKey?
 
     var body: some View {
         NavigationStack {
@@ -62,17 +66,19 @@ struct TerminalSheet: View {
                         .font(.system(size: Theme.section, design: .monospaced))
                         .foregroundStyle(Theme.textFaint)
 
-                    if let pinned = model.knownHosts.pinned(mac.deviceId) {
+                    if let pinned = shownPin {
                         SectionHeading("\(mac.name.uppercased())'S SSH KEY")
                         Text("\(pinned.type)  \(pinned.fingerprint)")
                             .font(.system(size: Theme.section, design: .monospaced))
                             .foregroundStyle(Theme.textDim)
                             .textSelection(.enabled)
-                        Button("Forget it", role: .destructive) { model.forgetHostKey(of: mac) }
+                        Button(forgotten ? "Forgotten" : "Forget it", role: .destructive) { model.forgetHostKey(of: mac); forgotten = true }
                             .font(.system(size: Theme.uiSecondary))
-                        Text("Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.")
+                            .disabled(forgotten)
+                        Text(forgotten ? "The next terminal asks whether to trust its key again."
+                                       : "Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.")
                             .font(.system(size: Theme.uiSmall))
-                            .foregroundStyle(Theme.textFaint)
+                            .foregroundStyle(forgotten ? Theme.online : Theme.textFaint)
                     }
                 }
                 .padding(16)
@@ -94,6 +100,7 @@ struct TerminalSheet: View {
             let saved = model.terminalSettings[mac.deviceId]
             username = saved?.username ?? ""
             port = String(saved?.port ?? 22)
+            shownPin = model.knownHosts.pinned(mac.deviceId)
         }
     }
 

@@ -76,6 +76,32 @@ object Endpoints {
      * waiting out a timeout on the wrong one before the right one is even attempted, which is the
      * difference between connecting in a second from a cafe and appearing not to work at all.
      */
+    /**
+     * Every address that answers, probed at once, in the order given rather than the order they
+     * answered. For a caller that must try them one by one, best first: two Macs on one network
+     * both answer on the SSH port, and a stale address can be the other one.
+     */
+    fun reachableInOrder(addresses: List<String>, timeoutMs: Int = 2500): List<String> {
+        if (addresses.isEmpty()) return emptyList()
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(addresses.size, 8))
+        try {
+            val jobs = addresses.map { address -> pool.submit<Boolean> { reachable(address, timeoutMs) } }
+            val deadline = System.nanoTime() + (timeoutMs + 500) * 1_000_000L
+            // Waits in order, and stops at the first that answers: the best address is known then,
+            // and whatever else has answered by that moment goes behind it as a fallback.
+            for ((index, job) in jobs.withIndex()) {
+                val left = (deadline - System.nanoTime()).coerceAtLeast(0)
+                val up = runCatching { job.get(left, java.util.concurrent.TimeUnit.NANOSECONDS) }.getOrDefault(false)
+                if (!up) continue
+                val later = (index + 1 until jobs.size).filter { jobs[it].isDone && runCatching { jobs[it].get() }.getOrDefault(false) }
+                return listOf(addresses[index]) + later.map { addresses[it] }
+            }
+            return emptyList()
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
     fun firstReachable(addresses: List<String>, timeoutMs: Int = 2500): String? {
         if (addresses.isEmpty()) return null
         if (addresses.size == 1) return if (reachable(addresses[0], timeoutMs)) addresses[0] else null

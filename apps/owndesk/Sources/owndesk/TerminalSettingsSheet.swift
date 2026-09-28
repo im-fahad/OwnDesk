@@ -1,5 +1,6 @@
 import AppKit
 import OwnDeskPeers
+import OwnDeskTerminal
 import SwiftUI
 
 /// How to log in to another Mac's terminal, asked the first time and editable after.
@@ -13,6 +14,9 @@ struct TerminalSettingsSheet: View {
     @State private var username = ""
     @State private var port = "22"
     @State private var copied: String?
+    @State private var forgotten = false
+    /// The pinned key as the sheet opened, kept after Forget so the confirmation has somewhere to show.
+    @State private var shownPin: SSHHostKey?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,15 +55,19 @@ struct TerminalSettingsSheet: View {
             Text("Key \(model.sshKey.fingerprint), kept in this Mac's \(model.sshKey.storage == "Secure Enclave" ? "Secure Enclave" : "storage").")
                 .font(Theme.monoSmall).foregroundStyle(Theme.textFaint)
 
-            if let pinned = model.knownHosts.pinned(mac.deviceId) {
+            if let pinned = shownPin {
                 heading("\(mac.name.uppercased())'S SSH KEY")
                 Text("\(pinned.type)  \(pinned.fingerprint)")
                     .font(Theme.monoSmall).foregroundStyle(Theme.textDim)
+                    .strikethrough(forgotten)
                     .textSelection(.enabled)
                 HStack(spacing: 8) {
-                    Button("Forget it") { model.forgetHostKey(of: mac) }.buttonStyle(HeaderButtonStyle(tint: Theme.danger))
-                    Text("Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.")
-                        .font(Theme.uiSmall).foregroundStyle(Theme.textFaint)
+                    Button(forgotten ? "Forgotten" : "Forget it") { model.forgetHostKey(of: mac); forgotten = true }
+                        .buttonStyle(HeaderButtonStyle(tint: Theme.danger))
+                        .disabled(forgotten)
+                    Text(forgotten ? "The next terminal asks whether to trust its key again."
+                                   : "Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.")
+                        .font(Theme.uiSmall).foregroundStyle(forgotten ? Theme.online : Theme.textFaint)
                 }
             }
 
@@ -79,6 +87,7 @@ struct TerminalSettingsSheet: View {
             let saved = model.terminalSettings[mac.deviceId]
             username = saved?.username ?? ""
             port = String(saved?.port ?? 22)
+            shownPin = model.knownHosts.pinned(mac.deviceId)
         }
     }
 

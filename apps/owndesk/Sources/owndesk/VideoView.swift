@@ -115,7 +115,12 @@ final class InputCaptureView: NSView {
 
     // MARK: Keyboard
 
+    /// True while the pointer is over the remote screen and its keys go to the other Mac, ⌘W and ⌘Q
+    /// included. The app's own ⌘W handling steps aside then.
+    static var capturingKeys = false
+
     private func installKeyMonitor() {
+        Self.capturingKeys = true
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
             guard let self, self.window?.isKeyWindow == true else { return event }
@@ -125,6 +130,7 @@ final class InputCaptureView: NSView {
     }
 
     private func removeKeyMonitor() {
+        Self.capturingKeys = false
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
     }

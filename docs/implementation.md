@@ -527,6 +527,30 @@ shell still running and no way back. They now run over the main windows only, �
 for good, and ⌘K, which connects and disconnects the screen, is ignored while a terminal is in
 front.
 
+**An old address can be the other Mac.** A router that moves its leases handed one Mac's old
+address to the other, and both answer on port 22, so the terminal reached the wrong Mac. The pinned
+key refused it, but the first build then gave up, and with nothing pinned yet it would have asked
+the person to trust the other Mac's key under this one's name. Every app now puts the Mac's live
+Bonjour address first, probes all of them at once and tries them one by one in that order
+(`Endpoints.reachable`, `reachableInOrder` on Android), and passes over an address whose key is not
+the pinned one; "the key has changed" is said only when no address has the right key. Away from
+Wi-Fi the phone skips the lookup and tries the tailnet addresses first, which took a terminal over
+mobile data from seven seconds to one.
+
+**JSch refuses a changed host key without asking.** With `StrictHostKeyChecking=ask` it never calls
+the prompt for a changed key, it ends the connection, so the phone said "not trusted". The shell
+now reports a changed key as its own error, with the fingerprint it saw.
+
+**⌘W was bound to nothing.** SwiftUI silently dropped the Close Window command's shortcut, because
+the system's own Window > Close claims ⌘W, and that one carried none either. A local key monitor in
+the app delegate now closes a terminal or puts the main window away, and steps aside while the
+pointer is over the remote screen, where every key belongs to the other Mac. A related one: when an
+`NSAlert` sheet closes, its window does not become key again by itself, so typing and ⌘W went
+nowhere until a click. The sheet handlers make it key.
+
+**Sideways, the keyboard leaves a phone terminal two rows.** In landscape the header and the status
+bar now make way, which gives seven.
+
 **Drive the phone from the computer, and read the phone's own log.** The terminal was tested on
 the real phone from a Mac: a debug intent opens a terminal on a named Mac, `uiautomator dump` finds
 the Trust button's position for `input tap`, `input text` types (`%s` for a space, one argument),

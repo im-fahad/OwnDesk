@@ -510,13 +510,15 @@ class MainActivity : AppCompatActivity() {
             store.pinned(peer.deviceId)?.let { pinned ->
                 column.addView(sectionHeading("${peer.name.uppercase()}'S SSH KEY"))
                 column.addView(label("${pinned.type}  ${pinned.fingerprint}", Theme.SECTION, Theme.TEXT_DIM, mono = true).apply { setTextIsSelectable(true) })
-                column.addView(
-                    accentButton("Forget it") {
-                        store.forgetHostKey(peer.deviceId)
-                        log("forgot the SSH key of ${peer.name}")
-                    },
-                    rowParams(top = 8),
-                )
+                lateinit var forget: TextView
+                forget = accentButton("Forget it") {
+                    store.forgetHostKey(peer.deviceId)
+                    log("forgot the SSH key of ${peer.name}")
+                    forget.text = "Forgotten. The next terminal asks again."
+                    forget.isClickable = false
+                    forget.alpha = 0.6f
+                }
+                column.addView(forget, rowParams(top = 8))
                 column.addView(label("Only if the Mac's key really changed, as after reinstalling macOS. The next terminal asks again.", Theme.UI_SMALL, Theme.TEXT_FAINT), rowParams(top = 6))
             }
 

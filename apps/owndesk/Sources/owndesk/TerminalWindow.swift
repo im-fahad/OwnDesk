@@ -116,23 +116,15 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
         attempt?.cancel()
         events?.cancel()
         ssh?.close()
+        ssh = nil
         exitStatus = nil
         connected = false
         let name = peer.name
         showCard("Connecting to \(name)…", busy: true)
 
-        let ssh = SSHTerminal()
-        self.ssh = ssh
-        let stream = ssh.events
-        events = Task { [weak self] in
-            for await event in stream {
-                guard let self, !Task.isCancelled else { return }
-                self.handle(event, from: ssh)
-            }
-        }
         attempt = Task { [weak self] in
             guard let self, let state = self.state else { return }
-            // Every address at once, on the SSH port: a Mac at home and on a tailnet has two.
+            // Where the Mac advertises itself now comes first, then every address it was known by.
             let hosts = await state.terminalHosts(for: self.peer)
             let port = UInt16(clamping: self.settings.port)
             let urls = hosts.compactMap { Endpoints.url(host: $0, port: port) }
@@ -140,26 +132,65 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
                 self.ended("No address is known for \(name). Connect to its screen once, or pair again, and try the terminal after.")
                 return
             }
-            guard let url = await Endpoints.firstReachable(urls), let host = url.host else {
+            // All probed at once, then tried one by one in that order. A router that moves its
+            // leases can hand an old address of this Mac to another Mac, and both answer on port 22.
+            let reachable = await Endpoints.reachable(urls)
+            guard !reachable.isEmpty else {
                 self.ended(self.describe(.unreachable("")))
                 return
             }
             let terminal = self.terminalView.getTerminal()
-            do {
-                try await ssh.connect(
-                    host: host, port: self.settings.port, username: self.settings.username, key: state.sshKey,
-                    password: { [weak self] in await self?.askPassword() },
-                    hostKey: { [weak self] key in await self?.trust(key) ?? false },
-                    options: .init(columns: terminal.cols, rows: terminal.rows))
-                guard !Task.isCancelled else { return }
+            var changedFingerprint: String?
+            for url in reachable {
+                guard let host = url.host, !Task.isCancelled else { return }
+                let candidate = SSHTerminal()
+                let seen = PresentedKey()
+                do {
+                    try await candidate.connect(
+                        host: host, port: self.settings.port, username: self.settings.username, key: state.sshKey,
+                        password: { [weak self] in await self?.askPassword() },
+                        hostKey: { [weak self] key in await self?.trust(key, seen: seen) ?? false },
+                        options: .init(columns: terminal.cols, rows: terminal.rows))
+                } catch SSHTerminalError.hostKeyRejected where seen.changed != nil {
+                    // Not this Mac's key: another machine at an address this one used to have.
+                    changedFingerprint = changedFingerprint ?? seen.changed
+                    state.append("\(host) presented a different SSH key than \(name)'s; trying its next address")
+                    continue
+                } catch let error as SSHTerminalError {
+                    self.ended(self.describe(error))
+                    return
+                } catch {
+                    self.ended("The connection to \(name) failed: \(error.localizedDescription)")
+                    return
+                }
+                guard !Task.isCancelled else { candidate.close(); return }
+                self.attach(candidate)
                 self.connected = true
                 self.hideCard()
                 self.window?.makeFirstResponder(self.terminalView)
                 state.append("terminal open on \(name) at \(host):\(self.settings.port)")
-            } catch let error as SSHTerminalError {
-                self.ended(self.describe(error))
-            } catch {
-                self.ended("The connection to \(name) failed: \(error.localizedDescription)")
+                return
+            }
+            // Every address answered with a key other than the pinned one.
+            if let changedFingerprint {
+                _ = await self.ask(
+                    title: "\(name)'s SSH key has changed",
+                    message: "It now presents \(changedFingerprint), not the key this Mac saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
+                    yes: nil)
+                self.ended("Not connected: \(name)'s SSH key has changed. If it really did, forget the old key in Terminal settings.")
+            }
+        }
+    }
+
+    /// The shell is running on this connection: its output goes to the screen from now on. Events
+    /// wait in the connection's stream until this starts reading them, so nothing is lost.
+    private func attach(_ terminal: SSHTerminal) {
+        ssh = terminal
+        let stream = terminal.events
+        events = Task { [weak self] in
+            for await event in stream {
+                guard let self, !Task.isCancelled else { return }
+                self.handle(event, from: terminal)
             }
         }
     }
@@ -207,7 +238,7 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
 
     /// The first time, the person decides from the fingerprint; after that the key is pinned, and a
     /// different one is refused without a question, since that is what an interception looks like.
-    private func trust(_ key: SSHHostKey) async -> Bool {
+    private func trust(_ key: SSHHostKey, seen: PresentedKey) async -> Bool {
         guard let state else { return false }
         let name = peer.name
         switch state.knownHosts.verdict(for: key, of: peer.deviceId) {
@@ -222,10 +253,9 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
             if yes { state.knownHosts.pin(key, for: peer.deviceId) }
             return yes
         case .changed(let fingerprint):
-            _ = await ask(
-                title: "\(name)'s SSH key has changed",
-                message: "It now presents \(fingerprint), not the key this Mac saved, so the connection was refused: this is what someone in the middle would look like. If the Mac's key really changed, for example after reinstalling macOS, forget the old key in Terminal settings.",
-                yes: nil)
+            // Refused without a question. Whether to warn is decided once every address has been
+            // tried: at an old address this is usually just another Mac.
+            seen.changed = fingerprint
             return false
         }
     }
@@ -243,6 +273,8 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
             alert.addButton(withTitle: "Log In")
             alert.addButton(withTitle: "Cancel")
             alert.beginSheetModal(for: window) { response in
+                // A closing sheet does not hand keyboard focus back to its window by itself.
+                window.makeKey()
                 continuation.resume(returning: response == .alertFirstButtonReturn ? field.stringValue : nil)
             }
         }
@@ -258,6 +290,7 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
             alert.addButton(withTitle: yes ?? "OK")
             if yes != nil { alert.addButton(withTitle: "Cancel") }
             alert.beginSheetModal(for: window) { response in
+                window.makeKey()
                 continuation.resume(returning: yes != nil && response == .alertFirstButtonReturn)
             }
         }
@@ -304,6 +337,11 @@ final class TerminalWindowController: NSWindowController, NSWindowDelegate, Term
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
+}
+
+/// The key a connection was refused for, when it was not the pinned one.
+final class PresentedKey: @unchecked Sendable {
+    var changed: String?
 }
 
 extension NSColor {

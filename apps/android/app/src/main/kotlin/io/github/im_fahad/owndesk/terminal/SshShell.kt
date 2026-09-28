@@ -20,6 +20,9 @@ sealed class SshShellException(message: String, cause: Throwable? = null) : Exce
     /** The server's host key was not the one trusted for this Mac, or the person declined it. */
     class HostKeyRejected(cause: Throwable?) : SshShellException("host key rejected", cause)
 
+    /** The server presented a key other than the one pinned for this Mac. */
+    class HostKeyChanged(val fingerprint: String, cause: Throwable?) : SshShellException("host key changed", cause)
+
     /** The server took neither this phone's key nor a password. */
     class AuthenticationFailed(cause: Throwable?) : SshShellException("authentication failed", cause)
 
@@ -192,8 +195,9 @@ class SshShell(private val listener: Listener) {
         val text = e.message.orEmpty()
         val verdict = (hostKeys as? TerminalStore.PinnedHostKeys)?.lastVerdict
         return when {
-            verdict is HostKeyVerdict.Changed || text.contains("HostKey has been changed") ||
-                text.contains("reject HostKey") -> SshShellException.HostKeyRejected(e)
+            // JSch ends a connection with a changed key itself, without asking: say which key it was.
+            verdict is HostKeyVerdict.Changed -> SshShellException.HostKeyChanged(verdict.fingerprint, e)
+            text.contains("HostKey has been changed") || text.contains("reject HostKey") -> SshShellException.HostKeyRejected(e)
             text.contains("Auth cancel") -> SshShellException.Cancelled(e)
             text.contains("Auth fail") -> SshShellException.AuthenticationFailed(e)
             e.cause is java.net.ConnectException || e.cause is java.net.SocketTimeoutException ||

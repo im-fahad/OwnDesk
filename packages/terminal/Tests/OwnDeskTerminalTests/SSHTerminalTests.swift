@@ -193,6 +193,8 @@ struct SSHTerminalTests {
         #expect(hosts.pinned("mac-a") == first)
         #expect(hosts.verdict(for: other, of: "mac-a") == .changed(fingerprint: other.fingerprint))
         #expect(hosts.verdict(for: first, of: "mac-b") == .new(fingerprint: first.fingerprint), "pins are per Mac")
+        let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        #expect(mode == 0o600, "readable by this user only, like the rest of the data folder")
 
         // Kept on disk, and forgetting a Mac clears its pin.
         #expect(KnownHosts(url: url).verdict(for: first, of: "mac-a") == .known)

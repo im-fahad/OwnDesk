@@ -25,7 +25,9 @@ struct OwnDeskApp: App {
                 Button("Toggle Peers") { state.showSidebar.toggle() }.keyboardShortcut("b", modifiers: .command)
                 Button("Toggle Log") { state.showLog.toggle() }.keyboardShortcut("j", modifiers: .command)
                 Divider()
-                Button("Close Window") { AppDelegate.closeKeyWindow() }.keyboardShortcut("w", modifiers: .command)
+                // ⌘W is handled by AppDelegate's key monitor: SwiftUI drops this shortcut, because the
+                // system's own Window > Close item claims it, and that one carries none either.
+                Button("Close Window") { AppDelegate.closeKeyWindow() }
                 Divider()
                 Button(state.isConnected ? "Disconnect" : "Connect") {
                     // Not from a terminal window, where ⌘K means clear.
@@ -64,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Only one copy should serve a Mac: a second would advertise the same identity twice.
         AppDelegate.exitIfAlreadyRunning()
+        AppDelegate.installCloseShortcut()
         let background = AppConfiguration.fromCommandLine().background
         // Accessory suppresses the window entirely, which is what the login copy wants and what a
         // person opening the app does not.
@@ -85,6 +88,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// terminal, which has a life of its own and closes for good.
     static var mainWindows: [NSWindow] {
         NSApp.windows.filter { !$0.className.contains("MenuBarExtra") && !($0 is TerminalWindow) }
+    }
+
+    /// ⌘W, which no menu item can carry here: see the Close Window command. While the pointer is over
+    /// the remote screen the key belongs to the other Mac, so this steps aside.
+    static func installCloseShortcut() {
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers == "w" else { return event }
+            // The main window stands in when nothing is key, as just after a sheet has closed.
+            let front = NSApp.keyWindow ?? NSApp.mainWindow
+            if let key = front, key is TerminalWindow {
+                key.performClose(nil)
+                return nil
+            }
+            if !InputCaptureView.capturingKeys, let key = front, mainWindows.contains(key) {
+                hideWindow()
+                return nil
+            }
+            return event
+        }
     }
 
     /// ⌘W: a terminal closes, the main window is put away.
