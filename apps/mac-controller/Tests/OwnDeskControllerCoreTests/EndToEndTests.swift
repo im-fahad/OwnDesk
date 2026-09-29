@@ -44,7 +44,10 @@ enum E2E {
     /// A real in-process agent with the synthetic screen and input disabled, plus a recorder of its events
     /// that auto-approves pairing requests.
     static func startAgent(media: Bool, screen: (width: Int, height: Int) = (1280, 720)) async throws -> (Agent, Box<[AgentEvent]>) {
-        var config = AgentConfig(hostName: "Test Mini", port: 0, advertiseBonjour: false, dataDirectory: tempDir(), mediaEnabled: media, inputEnabled: false)
+        let directory = tempDir()
+        var config = AgentConfig(hostName: "Test Mini", port: 0, advertiseBonjour: false, dataDirectory: directory, mediaEnabled: media, inputEnabled: false)
+        // Never this Mac's own ~/.ssh: a test host keeps its terminal keys in its temporary folder.
+        config.authorizedKeysFile = directory.appendingPathComponent("authorized_keys")
         config.syntheticScreen = true
         config.syntheticWidth = screen.width
         config.syntheticHeight = screen.height

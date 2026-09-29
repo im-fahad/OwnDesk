@@ -275,6 +275,65 @@ public struct UnpairPayload: WirePayload {
     public func validate() throws {}
 }
 
+/// A device asks a host to let its SSH key log in to the host's own SSH server, for the terminal.
+/// Type and key only: the host writes the authorized_keys line itself, so nothing else can ride along.
+public struct TerminalKeyRequestPayload: WirePayload {
+    public var ssh_public_key: String
+
+    public init(ssh_public_key: String) { self.ssh_public_key = ssh_public_key }
+
+    public func validate() throws {
+        try Wire.require(ssh_public_key.utf8.count <= 800 && Self.isKey(ssh_public_key, types: ["ecdsa-sha2-nistp256", "ssh-ed25519"]), "ssh_public_key")
+    }
+
+    /// "type base64" with nothing before, between or after: no option, no comment, no line break.
+    static func isKey(_ text: String, types: Set<String>) -> Bool {
+        let parts = text.split(separator: " ", omittingEmptySubsequences: false)
+        guard parts.count == 2, types.contains(String(parts[0])) else { return false }
+        let blob = parts[1]
+        guard !blob.isEmpty else { return false }
+        let body = blob
+        var padding = 0
+        for c in body.unicodeScalars {
+            if c == "=" { padding += 1; continue }
+            guard padding == 0, CharacterSet.alphanumerics.contains(c) && c.isASCII || c == "+" || c == "/" else { return false }
+        }
+        return padding <= 2 && body.first != "="
+    }
+}
+
+public enum TerminalKeyStatus: String, Codable, Sendable {
+    case installed
+    case alreadyInstalled = "already_installed"
+    case denied, expired, busy, failed
+}
+
+/// The host's answer. When the key is in place it names the account and lists the host's SSH host
+/// keys, so the device pins them from a signed message rather than a fingerprint shown to a person.
+public struct TerminalKeyResultPayload: WirePayload {
+    public var status: TerminalKeyStatus
+    public var username: String
+    public var host_keys: [String]
+
+    public init(status: TerminalKeyStatus, username: String = "", host_keys: [String] = []) {
+        self.status = status; self.username = username; self.host_keys = host_keys
+    }
+
+    public func validate() throws {
+        try Wire.require(Self.isUsername(username), "username")
+        try Wire.require(host_keys.count <= 4 && host_keys.allSatisfy {
+            $0.utf8.count <= 1200 && TerminalKeyRequestPayload.isKey($0, types: ["ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-rsa"])
+        }, "host_keys")
+    }
+
+    static func isUsername(_ name: String) -> Bool {
+        guard !name.isEmpty else { return true }
+        guard name.utf8.count <= 64, let first = name.unicodeScalars.first,
+              first.isASCII, CharacterSet.alphanumerics.contains(first) || first == "_" else { return false }
+        return name.unicodeScalars.allSatisfy { $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_.-".unicodeScalars.contains($0)) }
+    }
+}
+
 public enum SignalingType: String, CaseIterable, Sendable {
     case pairRequest = "PAIR_REQUEST"
     case pairResult = "PAIR_RESULT"
@@ -289,6 +348,8 @@ public enum SignalingType: String, CaseIterable, Sendable {
     case sessionResume = "SESSION_RESUME"
     case sessionEnd = "SESSION_END"
     case unpair = "UNPAIR"
+    case terminalKeyRequest = "TERMINAL_KEY_REQUEST"
+    case terminalKeyResult = "TERMINAL_KEY_RESULT"
 }
 
 /// A decoded and validated signaling payload.
@@ -306,6 +367,8 @@ public enum SignalingPayload: Sendable, Equatable {
     case sessionResume(SessionResumePayload)
     case sessionEnd(SessionEndPayload)
     case unpair(UnpairPayload)
+    case terminalKeyRequest(TerminalKeyRequestPayload)
+    case terminalKeyResult(TerminalKeyResultPayload)
 
     public var type: SignalingType {
         switch self {
@@ -322,6 +385,8 @@ public enum SignalingPayload: Sendable, Equatable {
         case .sessionResume: .sessionResume
         case .sessionEnd: .sessionEnd
         case .unpair: .unpair
+        case .terminalKeyRequest: .terminalKeyRequest
+        case .terminalKeyResult: .terminalKeyResult
         }
     }
 
@@ -347,6 +412,8 @@ public enum SignalingPayload: Sendable, Equatable {
         case .sessionResume: return .sessionResume(try dec(SessionResumePayload.self))
         case .sessionEnd: return .sessionEnd(try dec(SessionEndPayload.self))
         case .unpair: return .unpair(try dec(UnpairPayload.self))
+        case .terminalKeyRequest: return .terminalKeyRequest(try dec(TerminalKeyRequestPayload.self))
+        case .terminalKeyResult: return .terminalKeyResult(try dec(TerminalKeyResultPayload.self))
         }
     }
 
@@ -367,6 +434,8 @@ public enum SignalingPayload: Sendable, Equatable {
         case .sessionResume(let p): return try e.encode(p)
         case .sessionEnd(let p): return try e.encode(p)
         case .unpair(let p): return try e.encode(p)
+        case .terminalKeyRequest(let p): return try e.encode(p)
+        case .terminalKeyResult(let p): return try e.encode(p)
         }
     }
 }

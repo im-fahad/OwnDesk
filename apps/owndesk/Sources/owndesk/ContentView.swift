@@ -44,6 +44,7 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.15), value: model.showLog)
         .sheet(isPresented: $showPairing) { PairingSheet(isPresented: $showPairing) }
         .sheet(item: $model.terminalSetup) { mac in TerminalSettingsSheet(mac: mac).environmentObject(model) }
+        .sheet(item: $model.terminalKeyRequest) { request in TerminalKeyRequestSheet(request: request).environmentObject(model) }
     }
 
 }

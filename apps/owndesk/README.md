@@ -75,11 +75,18 @@ its right-click menu opens a shell on that Mac in a window of its own. It is the
 server: turn on **Remote Login** there (System Settings → General → Sharing), and behind its ⓘ
 **Allow full disk access for remote users**, or the shell cannot read Documents, Desktop or Downloads.
 
-The first time, a sheet asks for the user name on that Mac, as `whoami` prints it there, and the
-port. It shows this Mac's terminal key and copies either the key or a command that adds it to
-`~/.ssh/authorized_keys` on the other Mac; paste that into Terminal there once and the terminal opens
-without a password from then on. Without it, the account's password is asked for each time.
+The first time, a sheet asks how to log in. **Ask *that Mac* to allow this Mac** sends the request;
+someone at the other Mac clicks **Allow**, and it answers with the account name and its host keys,
+so the terminal opens without a password or a host key question from then on. By hand instead: the
+sheet copies this Mac's key, or a command that adds it to `~/.ssh/authorized_keys` there, and takes
+the user name, as `whoami` prints it. Without a key, the account's password is asked for each time.
 **Terminal settings…** in the row's menu brings the sheet back.
+
+When another device asks this Mac, the window comes forward with **Terminal access**: its name, its
+fingerprint, its key's fingerprint and the account. **Allow** adds that key to this account's
+`~/.ssh/authorized_keys`, in a line tagged with the device; **Deny** or two minutes without an
+answer adds nothing. Unpairing the device removes its tagged line again and leaves any key added by
+hand alone. The script channel cannot answer the question.
 
 The first connection shows the other Mac's host key fingerprint and asks whether to trust it; after
 that the key is pinned, and a different one is refused with an explanation. **Forget it** in the
@@ -96,6 +103,8 @@ protocol, and the script channel below has no terminal command, by design.
 the script channel, `ssh-key.json` (the terminal key, an opaque Secure Enclave reference on a Mac
 that has one) and `known-hosts.json` (the other Macs' pinned SSH host keys). Logs are in
 `~/Library/Logs/OwnDesk`. Nothing there is a secret except the two keys and the token in `control.json`.
+Outside it, OwnDesk touches only lines tagged `owndesk-…` in `~/.ssh/authorized_keys`, and only after
+an **Allow**.
 
 ## Upgrading from PRC
 

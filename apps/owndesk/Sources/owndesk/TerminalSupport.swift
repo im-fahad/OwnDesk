@@ -1,8 +1,20 @@
 import AppKit
 import Foundation
+import OwnDeskAgentCore
 import OwnDeskControllerCore
 import OwnDeskPeers
+import OwnDeskProtocol
 import OwnDeskTerminal
+
+/// Another device asking to open terminals on this Mac, shown until someone here answers.
+struct TerminalKeyRequest: Identifiable, Equatable {
+    let deviceId: String
+    let deviceName: String
+    let deviceFingerprint: String
+    let keyFingerprint: String
+    let username: String
+    var id: String { deviceId }
+}
 
 /// How to log in to a Mac's terminal: its user name there, and the port its SSH server listens on.
 struct TerminalSettings: Codable, Equatable {
@@ -42,12 +54,65 @@ extension AppState {
     /// then every address it was known by, with OwnDesk's port dropped in favour of the SSH one.
     func terminalHosts(for peer: Peer) async -> [String] {
         var hosts: [String] = []
+        // An address typed in the header, as for the screen: the way to reach a Mac whose pairing
+        // carried no Tailscale address.
+        if !manualAddress.isEmpty, let host = Endpoints.url(for: manualAddress)?.host { hosts.append(host) }
         if let found = discoveredPeer(for: peer.deviceId), let url = await Endpoints.resolve(found.endpoint), let host = url.host {
             hosts.append(host)
         }
         hosts += peer.addresses.compactMap { Endpoints.url(for: $0)?.host }
         var seen = Set<String>()
         return hosts.filter { seen.insert($0).inserted }
+    }
+
+    // MARK: Keys, both ways
+
+    /// The answer here to another device's request. Only a click reaches this.
+    func answerTerminalKey(allow: Bool) {
+        guard let agent else { return }
+        Task { await agent.coordinator.resolveTerminalKey(approved: allow) }
+    }
+
+    static func describeTerminalKey(_ status: TerminalKeyStatus, device: String) -> String {
+        switch status {
+        case .installed: "\(device) can now open terminals on this Mac"
+        case .alreadyInstalled: "\(device) could already open terminals on this Mac"
+        case .denied: "refused terminal access to \(device)"
+        case .expired: "\(device)'s terminal request went unanswered"
+        case .busy: "\(device) asked for terminal access while another request was open"
+        case .failed: "could not add \(device)'s key to authorized_keys"
+        }
+    }
+
+    /// Asks another Mac to let this Mac's key in, and waits for someone there to answer. On a yes the
+    /// login is saved and that Mac's host keys are pinned from its signed answer, so the first
+    /// terminal needs neither a pasted line nor a fingerprint to compare. Returns what to tell the person.
+    func requestTerminalKey(from peer: Peer, port: Int) async -> (ok: Bool, message: String) {
+        var urls: [URL] = []
+        if let found = discoveredPeer(for: peer.deviceId), let url = await Endpoints.resolve(found.endpoint) { urls.append(url) }
+        urls += peer.addresses.compactMap { Endpoints.url(for: $0) }
+        let key = sshKey.authorizedKeysLine(comment: "")
+        do {
+            let answer = try await TerminalKeyClient.request(key: key, host: peer, urls: urls, identity: identity)
+            switch answer.status {
+            case .installed, .alreadyInstalled:
+                saveTerminalSettings(TerminalSettings(username: answer.username, port: port), for: peer)
+                let keys = answer.host_keys.compactMap { try? SSHHostKey(openSSH: $0) }
+                knownHosts.pin(keys, for: peer.deviceId)
+                append("\(peer.name) allowed this Mac's terminal key; logging in as \(answer.username)")
+                return (true, answer.status == .installed
+                        ? "\(peer.name) added this Mac's key. The terminal opens without a password."
+                        : "\(peer.name) already had this Mac's key.")
+            case .denied: return (false, "Someone on \(peer.name) said no, or it is not letting others in right now.")
+            case .expired: return (false, "Nobody answered on \(peer.name) in time. Try again when someone is at it.")
+            case .busy: return (false, "\(peer.name) is answering another request. Try again in a moment.")
+            case .failed: return (false, "\(peer.name) could not write its authorized_keys file.")
+            }
+        } catch TerminalKeyClient.Failure.unreachable {
+            return (false, "\(peer.name) did not answer. It has to be on, with \"Let others control it\" switched on.")
+        } catch {
+            return (false, "\(peer.name) did not answer in time.")
+        }
     }
 
     func saveTerminalSettings(_ settings: TerminalSettings, for peer: Peer) {

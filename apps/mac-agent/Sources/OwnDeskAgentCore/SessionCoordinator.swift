@@ -55,6 +55,13 @@ public actor SessionCoordinator {
         let connection: ConnectionID
     }
 
+    struct PendingTerminalKey {
+        let deviceId: String
+        let deviceName: String
+        let key: String
+        let connection: ConnectionID
+    }
+
     struct PairingState {
         let sessionId: String
         let code: Data
@@ -72,6 +79,11 @@ public actor SessionCoordinator {
     /// The newest UNPAIR accepted from each device. A copy replayed after the two pair again, still
     /// inside the clock window, is older than this and is refused.
     private var lastUnpairTs: [String: Int64] = [:]
+    /// TERMINAL_KEY_REQUEST, like UNPAIR, may come from any paired device, so it has a receiver of
+    /// its own that handles nothing else; its replay guard is the timestamp, as UNPAIR's is.
+    private var terminalKeyReceiver: EnvelopeReceiver
+    private var lastTerminalKeyTs: [String: Int64] = [:]
+    private var pendingTerminalKey: PendingTerminalKey?
     private var connections: [ConnectionID: String] = [:]
     private var deviceConnections: [String: ConnectionID] = [:]
     private var pairing: PairingState?
@@ -95,6 +107,7 @@ public actor SessionCoordinator {
         // checks the switch, and every later message is bound to the session that request opened.
         receiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
         unpairReceiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
+        terminalKeyReceiver = EnvelopeReceiver(selfDeviceId: deps.identity.deviceId, resolveKey: { peers.pairedKey($0) }, now: deps.now)
         var continuation: AsyncStream<AgentEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation = $0 }
         eventContinuation = continuation
@@ -125,6 +138,14 @@ public actor SessionCoordinator {
             }
             return
         }
+        if (try? JSONDecoder().decode(Envelope.self, from: data))?.type == SignalingType.terminalKeyRequest.rawValue {
+            if case .accepted(let env, .terminalKeyRequest(let p), _) = terminalKeyReceiver.receive(data) {
+                handleTerminalKeyRequest(env, p, connection: connection)
+            } else {
+                deps.transport.close(connection)
+            }
+            return
+        }
         let result = receiver.receive(data)
         switch result {
         case .rejected(let reason, let detail):
@@ -147,7 +168,8 @@ public actor SessionCoordinator {
             case .iceCandidate(let p): handleIceCandidate(env, p)
             case .sessionResume: await handleSessionResume(env, connection: connection)
             case .sessionEnd(let p): await handleSessionEnd(env, p)
-            case .pairResult, .sessionChallenge, .sessionAccept, .sessionReject, .sdpAnswer, .unpair:
+            case .pairResult, .sessionChallenge, .sessionAccept, .sessionReject, .sdpAnswer, .unpair,
+                 .terminalKeyRequest, .terminalKeyResult:
                 Log.session.notice("ignoring controller-bound type \(env.type, privacy: .public)")
             }
         }
@@ -162,6 +184,12 @@ public actor SessionCoordinator {
         if let pending = pairing?.pending, pending.connection == connection {
             pairing?.pending = nil
             emit(.pairingFailed("controller disconnected before approval"))
+        }
+        if let pending = pendingTerminalKey, pending.connection == connection {
+            // The device gave up waiting; the question it asked no longer has anyone to answer.
+            pendingTerminalKey = nil
+            cancelTimer("terminal-key")
+            emit(.terminalKeyResolved(deviceName: pending.deviceName, status: .expired))
         }
         if var s = session, s.connection == connection {
             s.signalingUp = false
@@ -573,6 +601,7 @@ public actor SessionCoordinator {
     public func revoke(deviceId: String) async {
         guard deps.peers.peer(deviceId) != nil else { return }
         _ = try? deps.peers.forget(deviceId)
+        removeTerminalKeys(of: deviceId)
         receiver.forgetSender(deviceId)
         if let s = session, s.deviceId == deviceId {
             await tearDown(reason: .revoked, notify: true)
@@ -594,10 +623,95 @@ public actor SessionCoordinator {
             await tearDown(reason: .revoked, notify: true)
         }
         _ = try? deps.peers.forget(env.from)
+        removeTerminalKeys(of: env.from)
         receiver.forgetSender(env.from)
         unpairReceiver.forgetSender(env.from)
         deps.transport.close(connection)
         emit(.deviceUnpaired(deviceId: env.from, deviceName: peer.name))
+    }
+
+    // MARK: Terminal keys
+
+    private var authorizedKeys: AuthorizedKeys { AuthorizedKeys(file: deps.config.authorizedKeysFile ?? AuthorizedKeys.standardFile) }
+
+    /// A paired device asks to open terminals on this Mac with its SSH key (spec section 7.7). A key
+    /// already there is confirmed at once; a new one waits for a click here, one request at a time.
+    private func handleTerminalKeyRequest(_ env: Envelope, _ p: TerminalKeyRequestPayload, connection: ConnectionID) {
+        // Seq restarts at 1 with every attempt, so the timestamp is what keeps a copy from replaying.
+        terminalKeyReceiver.forgetSender(env.from)
+        guard let peer = deps.peers.peer(env.from), env.ts > (lastTerminalKeyTs[env.from] ?? 0) else {
+            deps.transport.close(connection)
+            return
+        }
+        lastTerminalKeyTs[env.from] = env.ts
+        guard remoteAccessEnabled else {
+            sendTerminalKeyResult(.denied, to: env.from, connection: connection)
+            return
+        }
+        if authorizedKeys.contains(key: p.ssh_public_key) {
+            sendTerminalKeyResult(.alreadyInstalled, to: env.from, connection: connection)
+            return
+        }
+        if let pending = pendingTerminalKey, pending.deviceId != env.from {
+            sendTerminalKeyResult(.busy, to: env.from, connection: connection)
+            return
+        }
+        pendingTerminalKey = PendingTerminalKey(deviceId: env.from, deviceName: peer.name, key: p.ssh_public_key, connection: connection)
+        let fingerprint = (try? DeviceID.fingerprint(deviceId: env.from)) ?? env.from
+        emit(.terminalKeyRequest(deviceId: env.from, deviceName: peer.name, deviceFingerprint: fingerprint,
+                                 keyFingerprint: AuthorizedKeys.fingerprint(of: p.ssh_public_key), username: AuthorizedKeys.username))
+        schedule("terminal-key", afterMs: Pairing.ttlMs) { [weak self] in await self?.terminalKeyExpired() }
+    }
+
+    /// The decision made here, by a person, about the request on screen.
+    public func resolveTerminalKey(approved: Bool) {
+        guard let pending = pendingTerminalKey else { return }
+        pendingTerminalKey = nil
+        cancelTimer("terminal-key")
+        var status: TerminalKeyStatus = .denied
+        if approved {
+            do {
+                status = try authorizedKeys.install(key: pending.key, deviceId: pending.deviceId, deviceName: pending.deviceName) == .installed
+                    ? .installed : .alreadyInstalled
+            } catch {
+                status = .failed
+                emit(.warning("could not add \(pending.deviceName)'s key to authorized_keys: \(error.localizedDescription)"))
+            }
+        }
+        sendTerminalKeyResult(status, to: pending.deviceId, connection: pending.connection)
+        emit(.terminalKeyResolved(deviceName: pending.deviceName, status: status))
+    }
+
+    private func terminalKeyExpired() {
+        guard let pending = pendingTerminalKey else { return }
+        pendingTerminalKey = nil
+        sendTerminalKeyResult(.expired, to: pending.deviceId, connection: pending.connection)
+        emit(.terminalKeyResolved(deviceName: pending.deviceName, status: .expired))
+    }
+
+    /// Only a key that is in place comes with the account and this Mac's host keys.
+    private func sendTerminalKeyResult(_ status: TerminalKeyStatus, to deviceId: String, connection: ConnectionID) {
+        let granted = status == .installed || status == .alreadyInstalled
+        let payload = TerminalKeyResultPayload(status: status,
+                                               username: granted ? AuthorizedKeys.username : "",
+                                               host_keys: granted ? Array(hostKeys().prefix(4)) : [])
+        send(.terminalKeyResult(payload), to: deviceId, session: "", via: connection)
+        sender.forgetSession(to: deviceId, session: "")
+    }
+
+    private func hostKeys() -> [String] {
+        deps.config.sshHostKeysDirectory.map { AuthorizedKeys.hostKeys(directory: $0) } ?? AuthorizedKeys.hostKeys()
+    }
+
+    /// A device that is no longer paired loses the key OwnDesk put in for it.
+    private func removeTerminalKeys(of deviceId: String) {
+        if let removed = try? authorizedKeys.remove(deviceId: deviceId), removed > 0 {
+            emit(.info("removed \(removed) terminal key\(removed == 1 ? "" : "s") of an unpaired device from authorized_keys"))
+        }
+        if pendingTerminalKey?.deviceId == deviceId {
+            pendingTerminalKey = nil
+            cancelTimer("terminal-key")
+        }
     }
 
     public func setRemoteAccess(_ enabled: Bool) async {

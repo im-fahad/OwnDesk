@@ -54,6 +54,8 @@ Commands while running:
 pair              open a 120 s pairing window, print the QR payload JSON to paste into a controller
 cancel            close the pairing window
 y | n             approve or deny the pending pairing request after comparing fingerprints
+key y | key n     allow or refuse a paired device's terminal key; it goes into <data-dir>/authorized_keys
+                  (or --authorized-keys <path>), never ~/.ssh, when run from here
 devices           list trusted devices
 revoke <prefix>   revoke by device id prefix
 access on|off     Remote Access kill switch: off ends sessions, stops listening and advertising

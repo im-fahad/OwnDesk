@@ -18,6 +18,8 @@ export interface ProtocolCatalog {
   signaling_SESSION_REJECT?: SessionRejectPayload;
   signaling_SESSION_REQUEST?: SessionRequestPayload;
   signaling_SESSION_RESUME?: SessionResumePayload;
+  signaling_TERMINAL_KEY_REQUEST?: TerminalKeyRequestPayload;
+  signaling_TERMINAL_KEY_RESULT?: TerminalKeyResultPayload;
   signaling_UNPAIR?: UnpairPayload;
   datachannel_bye?: ByeMessage;
   datachannel_capture_state?: CaptureStateMessage;
@@ -217,6 +219,23 @@ export interface SessionRequestPayload {
   };
 }
 export interface SessionResumePayload {}
+/**
+ * A paired device asks the host to let its SSH key log in to the host's own SSH server, for the terminal. The host shows the request and installs the key only after a click there. Type and key only: the host writes the authorized_keys line itself, so no option or comment can be smuggled in.
+ */
+export interface TerminalKeyRequestPayload {
+  ssh_public_key: string;
+}
+/**
+ * The host's answer to TERMINAL_KEY_REQUEST. When the key was installed, or already was, it names the account the key logs in to and lists the host's SSH host keys, so the device can pin them from a signed message instead of asking the person to trust a fingerprint. Otherwise the two are empty.
+ */
+export interface TerminalKeyResultPayload {
+  status: "installed" | "already_installed" | "denied" | "expired" | "busy" | "failed";
+  username: string;
+  /**
+   * @maxItems 4
+   */
+  host_keys: string[];
+}
 /**
  * The sender has removed the pairing and asks the host to remove it too. Signed like every envelope, so only the paired device itself can end the pairing.
  */

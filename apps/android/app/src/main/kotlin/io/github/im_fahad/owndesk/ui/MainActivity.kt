@@ -32,6 +32,7 @@ import io.github.im_fahad.owndesk.protocol.Encoding
 import io.github.im_fahad.owndesk.protocol.Identity
 import io.github.im_fahad.owndesk.protocol.Peer
 import io.github.im_fahad.owndesk.session.PairingClient
+import io.github.im_fahad.owndesk.session.TerminalKeyClient
 import io.github.im_fahad.owndesk.session.UnpairClient
 import io.github.im_fahad.owndesk.terminal.DeviceSshKey
 import io.github.im_fahad.owndesk.terminal.TerminalSettings
@@ -144,6 +145,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 openTerminal(match)
             }
+        }
+        // Asks a Mac to allow this phone's terminal key, as the dialog's button does.
+        intent.getStringExtra("terminal_ask")?.let { prefix ->
+            val match = peers.all().firstOrNull {
+                it.fingerprint.startsWith(prefix, ignoreCase = true) || it.deviceId.startsWith(prefix)
+            }
+            if (match == null) log("no paired Mac matches $prefix")
+            else lifecycleScope.launch { log(askForTerminalKey(match, port = 22).second) }
         }
         // The phone's terminal key, so a test can put it on a Mac without reading the screen.
         if (intent.hasExtra("ssh_key")) {
@@ -416,6 +425,39 @@ class MainActivity : AppCompatActivity() {
 
     // Terminal ----------------------------------------------------------------------------------
 
+    /**
+     * Asks a Mac to let this phone's key in, and waits for someone there to answer. On a yes the login
+     * is saved and the Mac's host keys are pinned from its signed answer, so the first terminal needs
+     * neither a pasted line nor a fingerprint to compare. Returns whether it worked, and what to say.
+     */
+    private suspend fun askForTerminalKey(peer: Peer, port: Int): Pair<Boolean, String> {
+        val hostKey = peers.publicKey(peer.deviceId) ?: return false to "${peer.name} is not paired any more."
+        val key = withContext(Dispatchers.IO) { DeviceSshKey.load() }
+        val addresses = (listOfNotNull(onThisNetwork[peer.deviceId]) + peer.candidates()).distinct()
+        log("asking ${peer.name} to allow this phone's terminal key")
+        return when (val outcome = TerminalKeyClient(identity).request(key.authorizedKeysLine(""), peer.deviceId, hostKey, addresses)) {
+            is TerminalKeyClient.Outcome.Answered -> {
+                val result = outcome.result
+                if (result.granted) {
+                    val store = TerminalStore(this)
+                    store.saveSettings(peer.deviceId, TerminalSettings(result.username, port))
+                    store.pinAll(peer.deviceId, result.host_keys)
+                    true to if (result.status == "installed") "${peer.name} added this phone's key. The terminal opens without a password."
+                    else "${peer.name} already had this phone's key."
+                } else {
+                    false to when (result.status) {
+                        "expired" -> "Nobody answered on ${peer.name} in time. Try again when someone is at it."
+                        "busy" -> "${peer.name} is answering another request. Try again in a moment."
+                        "failed" -> "${peer.name} could not write its authorized_keys file."
+                        else -> "Someone on ${peer.name} said no, or it is not letting others in right now."
+                    }
+                }
+            }
+            TerminalKeyClient.Outcome.Unreachable -> false to "${peer.name} did not answer. It has to be on, with \"Let others control it\" switched on."
+            TerminalKeyClient.Outcome.NoAnswer -> false to "${peer.name} did not answer in time."
+        }
+    }
+
     /** Opens a Mac's terminal, asking how to log in first if that is not known yet. */
     private fun openTerminal(peer: Peer) {
         val saved = TerminalStore(this).settings(peer.deviceId)
@@ -465,7 +507,30 @@ class MainActivity : AppCompatActivity() {
             )
             column.addView(label("The short name of the account, as whoami prints it in Terminal on the Mac.", Theme.UI_SMALL, Theme.TEXT_FAINT), rowParams(top = 6))
 
-            column.addView(sectionHeading("THIS PHONE'S KEY"))
+            column.addView(sectionHeading("LET ${peer.name.uppercase()} KNOW THIS PHONE"))
+            val askNote = label(
+                "Someone at ${peer.name} clicks Allow, and the terminal opens without a password from then on. It needs \"Let others control it\" on there.",
+                Theme.UI_SMALL, Theme.TEXT_FAINT,
+            )
+            lateinit var ask: TextView
+            ask = accentButton("Ask ${peer.name} to allow this phone") {
+                ask.text = "Waiting for ${peer.name}…"
+                ask.isClickable = false
+                lifecycleScope.launch {
+                    val port = portField.text.toString().trim().toIntOrNull() ?: 22
+                    val (ok, message) = askForTerminalKey(peer, port)
+                    log(message)
+                    askNote.text = message
+                    askNote.setTextColor(if (ok) Theme.ONLINE else Theme.WARN)
+                    ask.text = "Ask ${peer.name} to allow this phone"
+                    ask.isClickable = true
+                    if (ok) store.settings(peer.deviceId)?.let { userField.setText(it.username) }
+                }
+            }
+            column.addView(ask, rowParams(top = 0))
+            column.addView(askNote, rowParams(top = 6))
+
+            column.addView(sectionHeading("OR ADD THIS PHONE'S KEY BY HAND"))
             column.addView(
                 label(
                     "With this key on ${peer.name}, the terminal opens without a password. Without it, you are asked for the account's password each time.",

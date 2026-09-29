@@ -50,6 +50,22 @@ class TerminalStoreTest {
     }
 
     @Test
+    fun `every host key a Mac vouched for is known, anything else is a change`() {
+        val ed = blob("ssh-ed25519", ByteArray(32) { 5 })
+        val ec = blob("ecdsa-sha2-nistp256", ByteArray(65) { 6 })
+        val other = blob("ssh-ed25519", ByteArray(32) { 7 })
+        fun line(b: ByteArray) = "${DeviceSshKey.typeOf(b)} ${Base64.getEncoder().encodeToString(b)}"
+        store.pinAll("mac-a", listOf(line(ed), line(ec) + " comment dropped", line(ed)))
+        assertEquals(HostKeyVerdict.Known, store.verdict("mac-a", ed))
+        assertEquals(HostKeyVerdict.Known, store.verdict("mac-a", ec))
+        assertTrue(store.verdict("mac-a", other) is HostKeyVerdict.Changed)
+        assertEquals(2, store.pinnedAll("mac-a").size)
+        assertEquals("ssh-ed25519", store.pinned("mac-a")?.type)
+        store.forgetHostKey("mac-a")
+        assertTrue(store.pinnedAll("mac-a").isEmpty())
+    }
+
+    @Test
     fun `the repository the SSH library sees answers with the verdict and pins on add`() {
         val key = blob("ecdsa-sha2-nistp256", ByteArray(65) { 3 })
         val repository = store.repositoryFor("mac-a")

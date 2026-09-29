@@ -189,6 +189,7 @@ and Accessibility. A Mac you only control *from* never sees those prompts.
 | [InputInjector.swift](apps/mac-agent/Sources/OwnDeskAgentCore/InputInjector.swift) | CGEvent posting: clicks, drags, scroll phases, Unicode text, relative cursor accumulation |
 | [MediaSession.swift](apps/mac-agent/Sources/OwnDeskAgentCore/MediaSession.swift) | The seam between the coordinator and the real capture + encode stack |
 | [PowerAssertion.swift](apps/mac-agent/Sources/OwnDeskAgentCore/PowerAssertion.swift) | Keeps the Mac awake while a session is live |
+| [AuthorizedKeys.swift](apps/mac-agent/Sources/OwnDeskAgentCore/AuthorizedKeys.swift) | A paired device's terminal key into `~/.ssh/authorized_keys` after an Allow, tagged, and out again on unpairing |
 
 ### The controlling half — `OwnDeskControllerCore` (`apps/mac-controller`)
 
@@ -200,6 +201,7 @@ and Accessibility. A Mac you only control *from* never sees those prompts.
 | [SessionClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/SessionClient.swift) | Authentication, the offer, ICE, keepalive, reconnection, teardown |
 | [WebRTCClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/WebRTCClient.swift) | Offerer, data channels, the remote track, path detection |
 | [InputMapper.swift](apps/mac-controller/Sources/OwnDeskControllerCore/InputMapper.swift) | Letterbox-aware coordinates, key code inversion, modifiers, scroll |
+| [TerminalKeyClient.swift](apps/mac-controller/Sources/OwnDeskControllerCore/TerminalKeyClient.swift) | Asks a Mac to allow this device's terminal key, and takes only its signed answer |
 
 ### The Android phone — `apps/android`
 
@@ -210,7 +212,7 @@ The same protocol, translated to Kotlin and checked against the same vectors.
 | `protocol/` | Encodings, identity, envelopes, receiver rules, pairing proof, payload types |
 | `device/` | The Keystore identity, the list of paired Macs, the QR decoder |
 | `net/` | The WebSocket, and the address parsing that decides `lan` or `cloud` |
-| `session/` | Pairing, and the session handshake that becomes a media session on the same socket |
+| `session/` | Pairing, unpairing, asking a Mac for terminal access, and the session handshake that becomes a media session on the same socket |
 | `media/` | The WebRTC client, H.264 level query, SDP preference rewriting |
 | `terminal/` | The VT emulator, the view that draws it, the SSH shell, the phone's terminal key, the pinned host keys |
 | `ui/` | The home screen, the scanner, the session screen, the terminal screen, gestures and pointer mapping |
@@ -366,11 +368,20 @@ flowchart TD
     I -->|Elsewhere| K[Tailscale on both devices,<br/>same tailnet]
     K --> J
     J --> L[Screen appears. Control it.]
+    G --> M{Want a shell too?}
+    M --> N[Remote Login ON on that Mac]
+    N --> O[Terminal settings:<br/>Ask the Mac, click Allow there]
+    O --> P[Terminal opens,<br/>no password]
 ```
+
+Screen control and the terminal are separate: the screen needs hosting on (section 6.2), the
+terminal needs the Mac's own Remote Login (section 6.9). Pairing once covers both.
 
 ### 6.2 Install on a Mac
 
 You need macOS 14 or newer and Xcode 26 or newer. No Apple account or certificate is involved.
+The first build downloads its Swift packages (WebRTC, SwiftNIO SSH, SwiftTerm), so it needs the
+Internet once and takes a few minutes.
 
 ```sh
 git clone https://github.com/im-fahad/OwnDesk.git
@@ -378,6 +389,9 @@ cd OwnDesk
 scripts/build-apps.sh owndesk      # dist/OwnDesk.app, ad-hoc signed, no certificate needed
 scripts/install-owndesk.sh         # to ~/Applications, in the menu bar, and again at login
 ```
+
+To update later, `git pull` and run the same two commands; pairings, the terminal key and pinned
+host keys are kept in `~/Library/Application Support/OwnDesk` and survive a reinstall.
 
 Then open it from the menu bar. To let this Mac be controlled, switch **Let others control it**
 on under **THIS MAC**. The first time, macOS asks for Screen Recording and Accessibility; grant
@@ -389,17 +403,30 @@ those grants to the signature. The install script clears the stale entry for you
 `scripts/install-owndesk.sh --stage` copies the app into place without starting anything, which is what
 to use for a Mac you are not sitting at.
 
+For terminals on this Mac, also turn on **Remote Login**: System Settings → General → Sharing →
+Remote Login, and behind its ⓘ, **Allow full disk access for remote users**, so a shell can read
+Documents, Desktop and Downloads. A Mac used only to open terminals on others needs neither.
+
 ### 6.3 Install on an Android phone
 
 You need a JDK 17 or newer and the Android SDK; Android Studio brings both. Without a separate JDK,
 point `JAVA_HOME` at the one inside Android Studio:
 `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`.
 
+On the phone, once: **Settings → About phone**, tap **Build number** (on Xiaomi, **OS version**)
+seven times, then in **Developer options** turn on **USB debugging**. Connect the cable and allow
+this computer when the phone asks.
+
 ```sh
 cd apps/android
 ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Some phones, Xiaomi's among them, cancel the install unless you tap **Install** on the phone within
+a few seconds, and want **Install via USB** switched on in Developer options first. Open OwnDesk and
+allow the camera when you first scan a code. **Wireless debugging** in the same menu lets later
+installs go over Wi-Fi with `adb pair` and `adb connect`.
 
 ### 6.4 Install on an iPhone
 
@@ -491,7 +518,7 @@ An iPad works the same way.
 
 | On the host Mac | On the controller |
 |---|---|
-| Open OwnDesk, **Pair a Mac…** → **Show a code** | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On a phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
+| Open OwnDesk, **Pair a Mac…** → **Show a code** (it needs **Let others control it** on) | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On a phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
 | It shows the other device's fingerprint | It shows its own fingerprint |
 | Compare the two. If they match, **Approve** | The Mac appears in the list |
 
@@ -507,7 +534,8 @@ To unpair, hover over a device in the sidebar and click ⓧ, or right-click it a
 side ends the pairing on both, and they must pair again. Another Mac is told at once when it can be
 reached. A phone never listens, so it finds out the next time it tries to connect: the Mac turns it
 away and the phone removes the Mac itself. If the other side cannot be reached, OwnDesk says so, and
-you unpair there too.
+you unpair there too. Unpairing also takes away the terminal key OwnDesk added for that device on
+the Mac, and the device forgets the Mac's login and host keys.
 
 ### 6.6 Control from a Mac
 
@@ -569,8 +597,17 @@ Pairing is LAN-only by design. Once paired, a Mac can be reached from anywhere o
 the same tailnet, and connect as usual. Every address a Mac advertised at pairing time is probed at
 once and the first to answer wins, so the same button works at home and in a cafe.
 
-On a phone, touch and hold a Mac in the list to pin one address (**Choose an address**) when only
-Tailscale will reach it, or go back to **Use any address**.
+A device knows only the addresses the Mac had when they paired, plus where it hears the Mac on the
+local network now. A Mac paired while its Tailscale was off gave no Tailscale address, so away from
+home nothing reaches it, for the screen or the terminal. Give it one by hand, once, from
+`tailscale ip -4` on that Mac:
+
+- On a phone, touch and hold the Mac in the list, **Choose an address**, and enter
+  `100.x.y.z:47500`. **Use any address** undoes it. A pinned Tailscale address works at home too,
+  since Tailscale connects directly on the same network.
+- On a Mac, type the same into the address field in the header before **Connect** or **Terminal**.
+
+The terminal uses the same addresses with the SSH port in place of 47500.
 
 ### 6.9 Open a terminal
 
@@ -580,8 +617,8 @@ It is the Mac's own SSH server, so the Mac needs two things:
 1. **Remote Login** on: System Settings → General → Sharing → Remote Login. Behind its ⓘ, also
    turn on **Allow full disk access for remote users**, or the shell cannot read Documents, Desktop
    or Downloads and says `Operation not permitted`.
-2. To know this device: either this device's key in `~/.ssh/authorized_keys` on the Mac, which the
-   terminal settings make a single paste, or the account's password, typed each time.
+2. To know this device: this device's key in `~/.ssh/authorized_keys` on the Mac, which the
+   terminal settings ask the Mac for, or the account's password, typed each time.
 
 | Where | How to open it | Settings |
 |---|---|---|
@@ -589,23 +626,30 @@ It is the Mac's own SSH server, so the Mac needs two things:
 | Android | The **Terminal** button on the Mac's row | Touch and hold the Mac, **Terminal settings** |
 | iPhone | The **Terminal** button on the Mac's row | Touch and hold the Mac, **Terminal settings…** |
 
-The first time, the settings ask for the user name on that Mac, as `whoami` prints it there, and
-the port. They show this device's key with **Copy the key** and **Copy a command** that adds it to
-`authorized_keys`; paste that into Terminal on the Mac once, and from then on the terminal opens
-without a password.
+The easy way: in the terminal settings, **Ask *that Mac* to allow this device**. The Mac shows who
+is asking, with the device's fingerprint and its key's, and someone there clicks **Allow**. The Mac
+adds the key, answers with the account name and its SSH host keys in a signed message, and from
+then on the terminal opens without a password and without asking about the host key. It needs "Let
+others control it" on at the Mac, and it is the only way OwnDesk ever adds a key: a click there.
 
-The first connection shows the Mac's SSH host key fingerprint and asks whether to trust it; on the
-Mac, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the same if it is that Mac. After
-that the key is pinned, and a different one is refused with an explanation rather than asked about,
+By hand instead: the settings show this device's key with **Copy the key** and **Copy a command**
+that adds it to `authorized_keys`; paste that into Terminal on the Mac once, and type the user name
+on that Mac, as `whoami` prints it there.
+
+With a key added by hand, the first connection shows the Mac's SSH host key fingerprint and asks
+whether to trust it; on the Mac, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the same
+if it is that Mac. After that the key is pinned, and a different one is refused with an explanation rather than asked about,
 because a changed host key is what someone in the middle looks like. If the Mac's key really did
 change, as after reinstalling macOS, **Forget it** in the terminal settings and the next terminal
 asks again.
 
-On the phones a key bar under the terminal gives what a phone keyboard lacks: Esc, Tab, Ctrl and Alt
-for the next key, the arrows, Home, End, Page Up and Down, and paste. Pinch changes the text size, a
-drag scrolls back, and a long press offers paste and a copy of what is on screen. On the Mac the
+On Android a key bar under the terminal gives what a phone keyboard lacks: Esc, Tab, Ctrl and Alt
+for the next key, the arrows, Home, End, Page Up and Down, a few symbols, and paste. Pinch changes
+the text size, a drag scrolls back, and a long press offers paste and a copy of what is on screen.
+Turned sideways, the header and status bar make way for more rows. On the iPhone, SwiftTerm's own
+bar above the keyboard gives Esc, Ctrl, Tab and the arrows, and a drag scrolls back. On the Mac the
 terminal is an ordinary window: ⌘C and ⌘V work, ⌘W closes it and ends the shell, and the shell sees
-the window's real size as it is resized.
+the window's real size as it is resized. Several can be open at once.
 
 The terminal key is separate from the device's OwnDesk identity, so nothing signed for one can ever
 pass as the other, and unpairing a Mac forgets its terminal settings and pinned key along with
@@ -625,7 +669,9 @@ everything else.
 | The iPhone finds no Mac, and none answers | Local Network access was refused | **Settings → Privacy & Security → Local Network → OwnDesk** |
 | OwnDesk on the iPhone will not open after a week | A free Apple ID's signature lasts seven days | Connect it and press ⌘R in Xcode again |
 | The terminal says nothing answered on port 22 | Remote Login is off on that Mac | System Settings → General → Sharing → Remote Login |
-| The terminal asks for a password, or refuses the login | The Mac does not have this device's key, or the user name is wrong | Check the name with `whoami` on the Mac; copy the command from Terminal settings and paste it there once |
+| The terminal asks for a password, or refuses the login | The Mac does not have this device's key, or the user name is wrong | **Ask *that Mac* to allow this device** in Terminal settings, and click Allow on the Mac; or check the name with `whoami` there and paste the command |
+| Asking the Mac says it did not answer | It is off, asleep, or not letting others in | Switch on **Let others control it** on that Mac, then ask again |
+| Everything works at home, nothing away from home | The Mac was paired while its Tailscale was off, so no Tailscale address is known | Section 6.8: pin its `100.x.y.z:47500` address, from `tailscale ip -4` on that Mac |
 | `ls: Operation not permitted` in Documents, Desktop or Downloads, in the terminal only | macOS keeps those folders from remote logins until told otherwise | Behind Remote Login's ⓘ, turn on **Allow full disk access for remote users** |
 | The terminal refuses because the Mac's SSH key has changed | The pinned host key no longer matches: macOS was reinstalled, or someone is in the middle | If the Mac really changed, **Forget it** in Terminal settings; otherwise stop and look |
 
@@ -692,10 +738,10 @@ Last run, all passing:
 | `packages/swift` | 35 tests | The same vectors on Swift, plus peers and the control channel |
 | `packages/terminal` | 9 tests | Key login, the shell, resize, exit status, refusals, the password fallback and OpenSSH-identical fingerprints, against a private sshd |
 | `apps/mac-agent` | 52 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
-| `apps/mac-controller` | 25 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264 |
-| `apps/android` | 101 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings and pinned host keys |
+| `apps/mac-controller` | 29 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264; and asking a host for terminal access, allowed, refused and by a stranger |
+| `apps/android` | 104 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings, pinned host keys and the terminal key messages |
 | `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
-| `scripts/test-ios-simulator.sh` | 4 UI tests, 8 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host |
+| `scripts/test-ios-simulator.sh` | 5 UI tests, 12 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host; then it asks the host for terminal access, is allowed, and runs a command on a private sshd with no host key question |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
 | `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
 
@@ -733,7 +779,7 @@ The short version:
 - The terminal is the Mac's own SSH server and OwnDesk is its client, with a key of its own per
   device and the host key pinned after the first connection. It never routes a command through
   OwnDesk's channels, never relaxes host key checking, and never installs a key on a Mac without a
-  click there.
+  click there: a device may only ask, and the Mac writes the line itself from a bare key.
 
 ---
 
@@ -743,8 +789,7 @@ The short version:
 - Audio, in either direction.
 - Clipboard, file transfer, multiple monitors, local cursor rendering.
 - Waking a sleeping host.
-- Installing a device's terminal key on a Mac with a click; today it is a paste. Text selection and
-  mouse reporting in the Android terminal.
+- Text selection beyond copying the screen, and mouse reporting, in the Android terminal.
 
 ---
 

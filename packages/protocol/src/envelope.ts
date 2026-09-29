@@ -26,6 +26,8 @@ export const SIGNALING_TYPES = [
   'SESSION_RESUME',
   'SESSION_END',
   'UNPAIR',
+  'TERMINAL_KEY_REQUEST',
+  'TERMINAL_KEY_RESULT',
 ] as const;
 export type SignalingType = (typeof SIGNALING_TYPES)[number];
 

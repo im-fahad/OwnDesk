@@ -13,8 +13,9 @@
 #   home      the home screen and the pairing sheet, no host needed
 #   session   pairs, opens the Mac's screen, drives the gestures and keys; the host then says
 #             whether each one arrived as the right input
-#   terminal  pairs, opens a terminal on a private sshd (this Mac's own, run as you on a spare
-#             port, never the Remote Login setting), and runs a command that writes a file here
+#   terminal  pairs, asks the host to allow the iPhone's terminal key (answered yes here), then opens
+#             a terminal on a private sshd (this Mac's own, run as you on a spare port, never the
+#             Remote Login setting) with no host key question, and runs a command that writes a file
 #
 # No Apple ID or certificate is involved: Simulator builds are signed for this Mac only.
 set -euo pipefail
@@ -62,23 +63,26 @@ xcrun simctl bootstatus "$DEVICE" -b >/dev/null
 # The agent takes commands on stdin. A FIFO opened read-write keeps it open without blocking.
 mkfifo "$FIFO"
 exec 3<>"$FIFO"
+mkdir -p "$WORK/sshd"
 "$AGENT" --name "Test Mac" --port "$PORT" --data-dir "$WORK/host" --file-identity \
-  --synthetic-screen --synthetic-size 1920x1080 --print-input --no-bonjour <&3 >"$LOG" 2>&1 &
+  --synthetic-screen --synthetic-size 1920x1080 --print-input --no-bonjour \
+  --authorized-keys "$WORK/sshd/authorized_keys" --ssh-host-keys "$WORK/sshd" <&3 >"$LOG" 2>&1 &
 AGENT_PID=$!
 for _ in $(seq 1 100); do grep -q "listening on port" "$LOG" 2>/dev/null && break; sleep 0.1; done
 grep -q "listening on port" "$LOG" || { echo "the agent did not start:" >&2; cat "$LOG" >&2; exit 1; }
 
 # The terminal's server: this Mac's sshd as you, on a spare port, with its own host key and an
-# authorized_keys that starts empty; the terminal test hands over the app's key.
+# authorized_keys that starts empty. The agent, below, installs the app's key there when asked and
+# vouches for this server's host key, exactly as OwnDesk.app does with ~/.ssh and /etc/ssh.
 SSHD_DIR="$WORK/sshd"
 mkdir -p "$SSHD_DIR"
-ssh-keygen -q -t ed25519 -N "" -f "$SSHD_DIR/host_key"
+ssh-keygen -q -t ed25519 -N "" -f "$SSHD_DIR/ssh_host_ed25519_key"
 : >"$SSHD_DIR/authorized_keys"
 SSH_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 cat >"$SSHD_DIR/sshd_config" <<EOF
 Port $SSH_PORT
 ListenAddress 127.0.0.1
-HostKey $SSHD_DIR/host_key
+HostKey $SSHD_DIR/ssh_host_ed25519_key
 AuthorizedKeysFile $SSHD_DIR/authorized_keys
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -133,20 +137,18 @@ TEST_RUNNER_OWNDESK_PAIR_CODE="$CODE" TEST_RUNNER_OWNDESK_SCREENSHOTS="${SCREENS
   run_tests OwnDeskUITests/SessionUITests || STATUS=1
 
 echo "running the terminal UI test"
-KEY_FILE="$WORK/app-key.pub"
 MARKER="$WORK/terminal-marker"
 (
-  # Adds the app's key to the server as soon as the test writes it out.
+  # Allows the app's terminal key when the host asks, as a person at the Mac would.
   for _ in $(seq 1 1800); do
-    if [[ -s "$KEY_FILE" ]]; then cat "$KEY_FILE" >>"$SSHD_DIR/authorized_keys"; echo >>"$SSHD_DIR/authorized_keys"; exit 0; fi
+    if grep -q "TERMINAL KEY REQUEST" "$LOG" 2>/dev/null; then echo "key y" >&3; exit 0; fi
     sleep 0.1
   done
 ) &
 open_pairing
 TEST_RUNNER_OWNDESK_PAIR_CODE="$CODE" TEST_RUNNER_OWNDESK_SCREENSHOTS="${SCREENSHOTS:-}" \
 TEST_RUNNER_OWNDESK_SSH_PORT="$SSH_PORT" TEST_RUNNER_OWNDESK_SSH_USER="$(whoami)" \
-TEST_RUNNER_OWNDESK_SSH_KEY_FILE="$KEY_FILE" TEST_RUNNER_OWNDESK_MARKER="$MARKER" \
-TEST_RUNNER_OWNDESK_AGENT_PORT="$PORT" \
+TEST_RUNNER_OWNDESK_MARKER="$MARKER" TEST_RUNNER_OWNDESK_AGENT_PORT="$PORT" \
   run_tests OwnDeskUITests/TerminalUITests || STATUS=1
 set -e
 
@@ -175,6 +177,12 @@ if grep -q "Accepted publickey for $(whoami)" "$SSHD_DIR/sshd.log"; then
   echo "  ok   the terminal logged in with the iPhone's key"
 else
   echo "  FAIL the terminal logged in with the iPhone's key"; STATUS=1
+fi
+check 'terminal key of "iPhone 17[^"]*": installed' "the host installed the key only after it was allowed"
+if grep -qE '^ecdsa-sha2-nistp256 [A-Za-z0-9+/=]+ owndesk-[0-9a-f]{16} ' "$SSHD_DIR/authorized_keys"; then
+  echo "  ok   the key line was written by the host, tagged with the device"
+else
+  echo "  FAIL the key line was written by the host, tagged with the device"; STATUS=1
 fi
 if [[ "$STATUS" != 0 ]]; then
   echo

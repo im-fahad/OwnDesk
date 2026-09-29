@@ -16,6 +16,8 @@ struct TerminalSheet: View {
     @State private var port = "22"
     @State private var copied: String?
     @State private var forgotten = false
+    @State private var asking = false
+    @State private var askResult: (ok: Bool, message: String)?
     /// The pinned key as the sheet opened, kept after Forget so the confirmation has somewhere to show.
     @State private var shownPin: SSHHostKey?
 
@@ -42,7 +44,21 @@ struct TerminalSheet: View {
                         .font(.system(size: Theme.uiSmall))
                         .foregroundStyle(Theme.textFaint)
 
-                    SectionHeading("THIS \(AppModel.deviceKind.uppercased())'S KEY")
+                    SectionHeading("LET \(mac.name.uppercased()) KNOW THIS \(AppModel.deviceKind.uppercased())")
+                    HStack(spacing: 10) {
+                        Button(asking ? "Waiting for \(mac.name)…" : "Ask \(mac.name) to allow this \(AppModel.deviceKind)") { ask() }
+                            .font(.system(size: Theme.uiSecondary))
+                            .buttonStyle(.borderedProminent)
+                            .disabled(asking)
+                            .accessibilityIdentifier("terminal-ask")
+                        if asking { ProgressView() }
+                    }
+                    Text(askResult?.message ?? "Someone at \(mac.name) taps Allow, and the terminal opens without a password from then on. It needs \"Let others control it\" on there.")
+                        .font(.system(size: Theme.uiSmall))
+                        .foregroundStyle(askResult.map { $0.ok ? Theme.online : Theme.warn } ?? Theme.textFaint)
+                        .accessibilityIdentifier("terminal-ask-result")
+
+                    SectionHeading("OR ADD THIS \(AppModel.deviceKind.uppercased())'S KEY BY HAND")
                     Text("With this key on \(mac.name), the terminal opens without a password. Without it, you are asked for the account's password each time.")
                         .font(.system(size: Theme.uiSmall))
                         .foregroundStyle(Theme.textDim)
@@ -112,6 +128,22 @@ struct TerminalSheet: View {
             .padding(10)
             .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6))
             .accessibilityIdentifier(id)
+    }
+
+    /// Sends the request and waits for the Mac's answer, filling in the login on a yes.
+    private func ask() {
+        asking = true
+        askResult = nil
+        Task {
+            let result = await model.requestTerminalKey(from: mac, port: Int(port) ?? 22)
+            asking = false
+            askResult = result
+            if result.ok {
+                if let saved = model.terminalSettings[mac.deviceId] { username = saved.username }
+                shownPin = model.knownHosts.pinned(mac.deviceId)
+                forgotten = false
+            }
+        }
     }
 
     private func copyButton(_ title: String, _ text: String) -> some View {

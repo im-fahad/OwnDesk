@@ -31,6 +31,13 @@ public struct AgentConfig: Sendable {
     /// the sizes real displays have.
     public var syntheticWidth = 1280
     public var syntheticHeight = 720
+    /// Where a paired device's terminal key goes once someone here allows it. Nil is this user's
+    /// own `~/.ssh/authorized_keys`; the headless agent keeps a file in its data folder instead, so
+    /// a test never touches the real one.
+    public var authorizedKeysFile: URL?
+    /// Where this Mac's SSH host keys are read from for a terminal key answer. Nil is /etc/ssh; a test
+    /// that runs its own sshd points this at that server's keys.
+    public var sshHostKeysDirectory: URL?
 
     public static let defaultPort: UInt16 = 47500
     public static let serviceType = "_owndesk._tcp"

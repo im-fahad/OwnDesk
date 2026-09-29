@@ -243,7 +243,8 @@ public actor SessionClient {
             case .sessionEnd(let e):
                 guard env.session == sessionId else { return }
                 end("host ended the session: \(e.reason.rawValue)")
-            case .pairRequest, .pairResult, .sessionRequest, .sessionAuth, .sdpOffer, .sessionResume, .unpair:
+            case .pairRequest, .pairResult, .sessionRequest, .sessionAuth, .sdpOffer, .sessionResume, .unpair,
+                 .terminalKeyRequest, .terminalKeyResult:
                 log("ignoring host-bound type \(env.type)")
             }
         }

@@ -305,6 +305,34 @@ final class AppModel {
         activeTerminal = TerminalTarget(peer: peer, hosts: hosts, settings: settings)
     }
 
+    /// Asks a Mac to let this device's key in, and waits for someone there to answer. On a yes the login
+    /// is saved and the Mac's host keys are pinned from its signed answer, so the first terminal needs
+    /// neither a pasted line nor a fingerprint to compare. Returns what to tell the person.
+    func requestTerminalKey(from peer: Peer, port: Int) async -> (ok: Bool, message: String) {
+        let urls = candidates(for: peer).compactMap { Endpoints.url(for: $0) }
+        let key = sshKey.authorizedKeysLine(comment: "")
+        do {
+            let answer = try await TerminalKeyClient.request(key: key, host: peer, urls: urls, identity: identity)
+            switch answer.status {
+            case .installed, .alreadyInstalled:
+                saveTerminalSettings(TerminalSettings(username: answer.username, port: port), for: peer)
+                knownHosts.pin(answer.host_keys.compactMap { try? SSHHostKey(openSSH: $0) }, for: peer.deviceId)
+                note("\(peer.name) allowed this \(Self.deviceKind)'s terminal key; logging in as \(answer.username)")
+                return (true, answer.status == .installed
+                        ? "\(peer.name) added this \(Self.deviceKind)'s key. The terminal opens without a password."
+                        : "\(peer.name) already had this \(Self.deviceKind)'s key.")
+            case .denied: return (false, "Someone on \(peer.name) said no, or it is not letting others in right now.")
+            case .expired: return (false, "Nobody answered on \(peer.name) in time. Try again when someone is at it.")
+            case .busy: return (false, "\(peer.name) is answering another request. Try again in a moment.")
+            case .failed: return (false, "\(peer.name) could not write its authorized_keys file.")
+            }
+        } catch TerminalKeyClient.Failure.unreachable {
+            return (false, "\(peer.name) did not answer. It has to be on, with \"Let others control it\" switched on.")
+        } catch {
+            return (false, "\(peer.name) did not answer in time.")
+        }
+    }
+
     func saveTerminalSettings(_ settings: TerminalSettings, for peer: Peer) {
         terminalSettings[peer.deviceId] = settings
         persistTerminalSettings()

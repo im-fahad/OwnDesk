@@ -4,7 +4,7 @@ What exists today, how it works, and the things that were learned the hard way. 
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
 been amended to match.
 
-Written 2026-09-09 and brought up to date 2026-09-28. Tag `v0.1.0` is the last state where the
+Written 2026-09-09 and brought up to date 2026-09-30. Tag `v0.1.0` is the last state where the
 agent and the controller were separate apps. The project was called PRC until 2026-09-25.
 [../README.md](../README.md) is the guided tour: the technology, the flow, and how to use it. This
 file is the record of decisions and traps.
@@ -203,6 +203,16 @@ own, which is how the phone's Keystore key signs the login without ever being ex
 `TerminalStore` keeps the settings and the pinned host keys as small JSON files and adapts them to
 JSch's `HostKeyRepository`.
 
+Asking a Mac for access is `TERMINAL_KEY_REQUEST` (spec 7.7), built like `UNPAIR`: a receiver of
+its own on the host, accepting any paired device, with the timestamp as the replay guard. The host
+side is `AuthorizedKeys` in `OwnDeskAgentCore`, which builds each line itself from a bare key, tags
+it `owndesk-<device id prefix>`, appends with `O_APPEND` rather than rewriting, and on unpairing
+removes only the tagged lines, rewriting the file in place so its mode and any link survive. The
+answer carries the Mac's host keys from `/etc/ssh`, which the device pins all of, since which one a
+connection uses depends on negotiation: the Macs settled on ed25519 with SwiftNIO SSH and on ECDSA
+with JSch. The headless agent writes to `<data-dir>/authorized_keys` unless told otherwise, and test
+hosts are pointed at a temporary file, so no test can change who logs in to the machine it runs on.
+
 ### Testing without hardware
 
 - `--synthetic-screen` streams a generated pattern, so video paths can be exercised with no Screen
@@ -250,10 +260,9 @@ xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
 A real iPhone needs a team: README section 6.4 walks through it with a free Apple ID. Xcode 27 has
 no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
 
-Suite sizes, all passing on 2026-09-28: protocol 27, packages/swift 35, packages/terminal 9,
-agent 52, controller 25, android 101, OwnDeskTouch 26, end to end 17 steps, android frames 13. The
-iPhone's UI tests (4, with 8 checks on the host) last passed on 2026-09-26; the terminal stage added
-to that script has not been run through yet.
+Suite sizes, all passing on 2026-09-30: protocol 27, packages/swift 35, packages/terminal 9,
+agent 52, controller 29, android 104, OwnDeskTouch 26, end to end 17 steps, android frames 13. The
+iPhone's UI tests (5, with 12 checks on the host) passed on 2026-09-30, the terminal stage included.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -551,6 +560,17 @@ nowhere until a click. The sheet handlers make it key.
 **Sideways, the keyboard leaves a phone terminal two rows.** In landscape the header and the status
 bar now make way, which gives seven.
 
+**A blinking caret keeps an iPhone app from ever going idle.** XCUITest waits for the app to idle
+before every step, up to a minute, and SwiftTerm's blinking cursor animates for ever, so the
+terminal's UI test took seven and a half minutes and looked hung. The iPhone terminal now starts
+with a steady cursor, which a shell can still change; the test takes twenty-three seconds.
+
+**An AsyncStream has one reader.** A test that iterated the host's event stream alongside the
+harness's own reader took the pairing requests away from the reader that approves them, and every
+pairing timed out. Tests answer from the harness's record of events instead. A related one: the
+pairing client checks one host at a time through a shared slot, so tests that pair must not run in
+parallel suites; the terminal key tests live in the serialized end-to-end suite.
+
 **Drive the phone from the computer, and read the phone's own log.** The terminal was tested on
 the real phone from a Mac: a debug intent opens a terminal on a named Mac, `uiautomator dump` finds
 the Trust button's position for `input tap`, `input text` types (`%s` for a space, one argument),
@@ -584,6 +604,13 @@ keys in each other's `authorized_keys` and each other's host keys pinned; the ph
 on the Mac mini, run `top`, and sent Ctrl-C from its key bar. Screen Recording and Accessibility had
 to be granted again, as after every reinstall.
 
+On 2026-09-30 the phone asked the MacBook for terminal access, someone there clicked Allow, and the
+phone's terminal opened with no password and no host key question; asked of the Mac mini, which
+already had the key, the answer came back at once with its host keys. With Wi-Fi off, over mobile
+data and Tailscale, the phone opened terminals on both Macs in about two seconds, once the MacBook,
+paired while its Tailscale was off, had its tailnet address pinned by hand. The two Macs asked each
+other the same way.
+
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at
 under a megabit; the picture stays sharp and the frame rate gives way. `tailscale netcheck` shows
@@ -605,10 +632,11 @@ why a direct path is unavailable: on this network the home router offers no port
   down reaches the Mac once, not repeated, since iOS sends no repeat events for it. While the app is
   in the background iOS suspends it, so a session there survives only if the app comes back within
   the reconnect window.
-- Installing a device's terminal key on a Mac with a click there, and the Mac sending its host key
-  the same way; today the key is a paste and the host key a question. The Android terminal has no
-  text selection beyond copying what is on screen, and no mouse reporting. The iPhone's terminal
-  has run in the Simulator against a Mac but its scripted Simulator stage has not passed yet.
+- The Android terminal has no text selection beyond copying what is on screen, and no mouse
+  reporting. The iPhone's terminal has run only in the Simulator.
+- A Mac's addresses are learned at pairing and from Bonjour on the same network, never later from
+  the Mac itself, so one paired while its Tailscale was off needs its tailnet address pinned by
+  hand. The Mac could send its current addresses in `SESSION_ACCEPT` or `TERMINAL_KEY_RESULT`.
 - The Android phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,

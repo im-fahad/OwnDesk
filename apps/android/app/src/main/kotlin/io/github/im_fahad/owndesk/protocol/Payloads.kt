@@ -83,6 +83,42 @@ data class PairResultPayload(
     val rendezvous_url: String? = null,
 )
 
+/**
+ * A device asks a Mac to let its SSH key open terminals there (spec section 7.7). Type and key only:
+ * the Mac writes the authorized_keys line itself, so no option or comment can ride along.
+ */
+@Serializable
+data class TerminalKeyRequestPayload(val ssh_public_key: String) {
+    init {
+        require(ssh_public_key.length <= 800 && ssh_public_key.matches(DEVICE_KEY)) { "ssh_public_key" }
+    }
+
+    companion object {
+        val DEVICE_KEY = Regex("^(ecdsa-sha2-nistp256|ssh-ed25519) [A-Za-z0-9+/]+={0,2}$")
+    }
+}
+
+/**
+ * The Mac's answer. When the key is in place it names the account and lists the Mac's SSH host keys,
+ * so the phone pins them from a signed message rather than a fingerprint shown to a person.
+ */
+@Serializable
+data class TerminalKeyResultPayload(val status: String, val username: String, val host_keys: List<String>) {
+    init {
+        require(status in STATUSES) { "status" }
+        require(username.matches(USERNAME)) { "username" }
+        require(host_keys.size <= 4 && host_keys.all { it.length <= 1200 && it.matches(HOST_KEY) }) { "host_keys" }
+    }
+
+    val granted: Boolean get() = status == "installed" || status == "already_installed"
+
+    companion object {
+        val STATUSES = setOf("installed", "already_installed", "denied", "expired", "busy", "failed")
+        val USERNAME = Regex("^([A-Za-z0-9_][A-Za-z0-9_.-]{0,63})?$")
+        val HOST_KEY = Regex("^(ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|ssh-rsa) [A-Za-z0-9+/]+={0,2}$")
+    }
+}
+
 /** The pairing payload shown by a Mac as a code or a QR image (spec section 7). */
 @Serializable
 data class QrPayload(

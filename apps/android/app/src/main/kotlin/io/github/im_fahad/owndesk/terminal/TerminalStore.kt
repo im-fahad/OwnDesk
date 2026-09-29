@@ -59,8 +59,22 @@ class TerminalStore(private val settingsFile: File, private val hostsFile: File)
     fun verdict(deviceId: String, blob: ByteArray): HostKeyVerdict {
         val type = DeviceSshKey.typeOf(blob)
         val fingerprint = DeviceSshKey.fingerprint(blob)
-        val pinned = pinned(deviceId) ?: return HostKeyVerdict.New(type, fingerprint)
-        return if (pinned.blob.contentEquals(blob)) HostKeyVerdict.Known else HostKeyVerdict.Changed(type, fingerprint)
+        val pinned = pinnedAll(deviceId)
+        if (pinned.isEmpty()) return HostKeyVerdict.New(type, fingerprint)
+        return if (pinned.any { it.blob.contentEquals(blob) }) HostKeyVerdict.Known else HostKeyVerdict.Changed(type, fingerprint)
+    }
+
+    /**
+     * Pins every key a Mac vouched for in a signed answer, "type base64" each, replacing what was
+     * pinned before. Which one a connection ends up using depends on what the two sides negotiate.
+     * Kept as lines of one string, so a file with a single pinned key reads the same.
+     */
+    fun pinAll(deviceId: String, openSsh: List<String>) = synchronized(lock) {
+        val lines = openSsh.map { it.trim().split(' ') }.filter { it.size >= 2 }.map { "${it[0]} ${it[1]}" }.distinct()
+        if (lines.isEmpty()) return@synchronized
+        val all = loadHosts().toMutableMap()
+        all[deviceId] = lines.joinToString("\n")
+        hostsFile.writeText(json.encodeToString(hostsSerializer, all))
     }
 
     fun pin(deviceId: String, blob: ByteArray) = synchronized(lock) {
@@ -69,12 +83,16 @@ class TerminalStore(private val settingsFile: File, private val hostsFile: File)
         hostsFile.writeText(json.encodeToString(hostsSerializer, all))
     }
 
-    fun pinned(deviceId: String): PinnedHostKey? = synchronized(lock) {
-        val line = loadHosts()[deviceId] ?: return null
-        val fields = line.split(' ')
-        if (fields.size < 2) return null
-        val blob = runCatching { Base64.getDecoder().decode(fields[1]) }.getOrNull() ?: return null
-        PinnedHostKey(fields[0], blob)
+    fun pinned(deviceId: String): PinnedHostKey? = pinnedAll(deviceId).firstOrNull()
+
+    fun pinnedAll(deviceId: String): List<PinnedHostKey> = synchronized(lock) {
+        val text = loadHosts()[deviceId] ?: return emptyList()
+        text.split('\n').mapNotNull { line ->
+            val fields = line.trim().split(' ')
+            if (fields.size < 2) return@mapNotNull null
+            val blob = runCatching { Base64.getDecoder().decode(fields[1]) }.getOrNull() ?: return@mapNotNull null
+            PinnedHostKey(fields[0], blob)
+        }
     }
 
     /** Forgets the pinned key, so the next terminal asks again. */

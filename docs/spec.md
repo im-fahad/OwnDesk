@@ -257,13 +257,15 @@ iPhone; the Android app carries the same rules in Kotlin over JSch.
 OwnDesk identity, in the Secure Enclave or the Android Keystore where there is one. The two sign
 for different protocols, and keeping them apart means nothing signed for one can be replayed as
 the other. OpenSSH knows the key as `ecdsa-sha2-nistp256`. The apps show its `authorized_keys`
-line and a one-line command that appends it on the Mac; installing it is a paste by the owner,
-never something OwnDesk does on its own (the click-to-install exchange is a later phase, section
-30). Login offers the key first, and asks for the account's password only if the Mac refuses it.
+line and a one-line command that appends it on the Mac, and they can instead ask the Mac to install
+it with `TERMINAL_KEY_REQUEST` (section 7.7), which a person there allows or refuses. Either way the
+key goes in only by someone's hand at the Mac. Login offers the key first, and asks for the
+account's password only if the Mac refuses it.
 
 **The host key.** SSH's defence against someone in the middle is that the client knows the
-server's key. The first time it cannot, so the person is shown the fingerprint, in the form
-`ssh-keygen -l` prints, and decides. After that the key is pinned by the Mac's OwnDesk device id,
+server's key. When the Mac has answered a `TERMINAL_KEY_REQUEST`, the device already has every host
+key the Mac vouched for in that signed answer, and pins them all. Otherwise, the first time it
+cannot know, so the person is shown the fingerprint, in the form `ssh-keygen -l` prints, and decides. After that the key is pinned by the Mac's OwnDesk device id,
 and a different key is refused outright with an explanation rather than asked about, because a
 changed host key is what an interception looks like. "Forget it" in the terminal settings is the
 one way to clear a pin, for a Mac that was reinstalled.
@@ -487,8 +489,8 @@ Unpairing on either side ends the pairing on both, so both must pair again from 
 
   A host accepts `UNPAIR` from any paired device, whichever way the pairing goes, checked against
   that device's key and by a receiver that handles no other type. It removes the peer in both
-  directions, ends a session from it, and closes the connection, which is the sender's
-  acknowledgement. It keeps the timestamp of the newest `UNPAIR` from each device and refuses any
+  directions, ends a session from it, removes the terminal key OwnDesk added for it (section 7.7),
+  and closes the connection, which is the sender's acknowledgement. It keeps the timestamp of the newest `UNPAIR` from each device and refuses any
   that is not newer, so a captured copy cannot end a pairing made again inside the clock window.
 - Only hosts listen, so a phone cannot be told. It finds out the next time it tries to connect: the
   host answers `SESSION_REJECT` with `untrusted`, signed with the host's key the phone already
@@ -496,6 +498,45 @@ Unpairing on either side ends the pairing on both, so both must pair again from 
   unpaired while this one could not be told, removes that Mac too.
 - A host that is off, asleep or not hosting cannot be told either. The side that unpaired says so,
   and the person unpairs on the other device too.
+
+### 7.7 Terminal keys
+
+A paired device can ask a host to let its terminal key (section 4.7) log in to the host's own SSH
+server, so nobody pastes an `authorized_keys` line by hand. Like `UNPAIR`, the request is an
+envelope in the empty session namespace, accepted from any paired device, whichever way the pairing
+goes, by a receiver that handles no other type; its replay guard is the timestamp, since `seq`
+restarts with every attempt.
+
+`TERMINAL_KEY_REQUEST`, device to host:
+
+```json
+{ "ssh_public_key": "ecdsa-sha2-nistp256 AAAAE2VjZHNh…" }
+```
+
+Type and key only, matching `^(ecdsa-sha2-nistp256|ssh-ed25519) [A-Za-z0-9+/]+={0,2}$`: no option
+such as `command=`, no comment, no line break. The host builds the line it writes itself.
+
+`TERMINAL_KEY_RESULT`, host to device, signed like every envelope:
+
+```json
+{ "status": "installed", "username": "alice", "host_keys": ["ssh-ed25519 AAAAC3Nz…", "ecdsa-sha2-nistp256 AAAAE2Vj…"] }
+```
+
+`status` is `installed`, `already_installed`, `denied`, `expired`, `busy` or `failed`. Only the first
+two carry the account and the host keys; otherwise both are empty.
+
+- A key already in the account's `authorized_keys` is answered `already_installed` at once.
+- Otherwise the host shows the request: the device's name and fingerprint, the key's SHA-256
+  fingerprint, and the account it would log in to. Nothing is installed until a person there
+  allows it; after 120 seconds the answer is `expired`, and a second device asking meanwhile gets
+  `busy`. The local control channel and any script have no way to answer it.
+- On a yes the host appends `<type> <key> owndesk-<first 16 hex of the device id> <device name>` to
+  `~/.ssh/authorized_keys`, creating `~/.ssh` with mode 0700 and the file with 0600 if needed.
+- The device pins every host key in the answer (section 4.7), saves the account as the terminal's
+  user name, and needs neither a fingerprint question nor a password for the first terminal.
+- Unpairing on either side removes every line tagged with that device, and only those: a key added
+  by hand is never touched.
+- A host that is not hosting cannot be asked; the device says so and the paste remains.
 
 ---
 
@@ -1295,9 +1336,6 @@ Phase 2:
   which took most of the need out of this.
 - TLS on the LAN signaling endpoint.
 - Explicit quality policy on top of the stats API.
-- Installing a device's terminal key on a Mac with a click there, through signed messages, in
-  place of pasting its `authorized_keys` line; and the Mac sending its host key the same way, so
-  the first terminal need not ask.
 
 Phase 3:
 

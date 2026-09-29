@@ -112,6 +112,9 @@ final class TerminalViewController: UIViewController, TerminalViewDelegate {
         terminalView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         terminalView.nativeBackgroundColor = UIColor(hex: 0x1F1F1F)
         terminalView.nativeForegroundColor = UIColor(hex: 0xD4D4D4)
+        // Steady unless the shell asks otherwise: a blinking caret never lets the app go idle, which
+        // costs battery, and UI tests wait a minute for idleness before every step.
+        terminalView.getTerminal().setCursorStyle(.steadyBlock)
         terminalView.accessibilityIdentifier = "terminal-view"
         terminalView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(terminalView)

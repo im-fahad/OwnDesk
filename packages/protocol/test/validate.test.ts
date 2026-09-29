@@ -38,6 +38,8 @@ const validSignaling: Record<(typeof SIGNALING_TYPES)[number], object> = {
   SESSION_RESUME: {},
   SESSION_END: { reason: 'user' },
   UNPAIR: {},
+  TERMINAL_KEY_REQUEST: { ssh_public_key: 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTY=' },
+  TERMINAL_KEY_RESULT: { status: 'installed', username: 'alice', host_keys: ['ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA=='] },
 };
 
 test('every signaling payload has a passing sample and fails when a required field is missing', () => {
@@ -57,6 +59,12 @@ test('every signaling payload has a passing sample and fails when a required fie
   assert.equal(validateSignalingPayload('SDP_OFFER', { sdp: 'x'.repeat(40000), ice_restart: false }).valid, false);
   assert.equal(validateSignalingPayload('PAIR_REQUEST', { ...validSignaling.PAIR_REQUEST, device_type: 'ios' }).valid, true);
   assert.equal(validateSignalingPayload('PAIR_REQUEST', { ...validSignaling.PAIR_REQUEST, device_type: 'windows' }).valid, false);
+  // The host writes the authorized_keys line itself: an option, a comment or a line break in the key is refused.
+  for (const bad of ['command="rm -rf ~" ssh-ed25519 AAAA', 'ssh-ed25519 AAAA comment', 'ssh-ed25519 AAAA\nssh-ed25519 BBBB', 'ssh-rsa AAAA', 'ssh-ed25519 '])
+    assert.equal(validateSignalingPayload('TERMINAL_KEY_REQUEST', { ssh_public_key: bad }).valid, false, bad);
+  assert.equal(validateSignalingPayload('TERMINAL_KEY_RESULT', { status: 'denied', username: '', host_keys: [] }).valid, true);
+  assert.equal(validateSignalingPayload('TERMINAL_KEY_RESULT', { status: 'installed', username: 'a b', host_keys: [] }).valid, false);
+  assert.equal(validateSignalingPayload('TERMINAL_KEY_RESULT', { status: 'maybe', username: '', host_keys: [] }).valid, false);
 });
 
 test('data channel messages: valid samples parse and land on the right channel', () => {

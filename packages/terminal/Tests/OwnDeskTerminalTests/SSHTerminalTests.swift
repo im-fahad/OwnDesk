@@ -196,6 +196,14 @@ struct SSHTerminalTests {
         let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
         #expect(mode == 0o600, "readable by this user only, like the rest of the data folder")
 
+        // Several keys vouched for at once: each is known, anything else is still a change.
+        let third = try SSHHostKey(openSSH: freshKey().authorizedKeysLine(comment: "three"))
+        hosts.pin([first, other], for: "mac-c")
+        #expect(hosts.verdict(for: first, of: "mac-c") == .known)
+        #expect(hosts.verdict(for: other, of: "mac-c") == .known)
+        #expect(hosts.verdict(for: third, of: "mac-c") == .changed(fingerprint: third.fingerprint))
+        #expect(hosts.pinnedAll("mac-c").count == 2)
+
         // Kept on disk, and forgetting a Mac clears its pin.
         #expect(KnownHosts(url: url).verdict(for: first, of: "mac-a") == .known)
         hosts.forget("mac-a")

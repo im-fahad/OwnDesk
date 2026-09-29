@@ -18,6 +18,11 @@ public enum AgentEvent: Sendable {
     case deviceRevoked(deviceId: String)
     /// The device removed the pairing on its side, and it is now gone here too.
     case deviceUnpaired(deviceId: String, deviceName: String)
+    /// A paired device asks to open terminals here with this SSH key. Nothing is installed until
+    /// `resolveTerminalKey(approved:)` says so, after a person here has looked.
+    case terminalKeyRequest(deviceId: String, deviceName: String, deviceFingerprint: String, keyFingerprint: String, username: String)
+    /// The request ended: installed, refused, or gone unanswered.
+    case terminalKeyResolved(deviceName: String, status: TerminalKeyStatus)
     case warning(String)
     case info(String)
 }

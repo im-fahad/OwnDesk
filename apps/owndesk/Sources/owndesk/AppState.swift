@@ -76,6 +76,8 @@ final class AppState: ObservableObject {
     @Published var hostAddresses: [String] = []
     @Published var incoming: IncomingSession?
     /// A request to compare and approve must never sit behind the full-screen code.
+    /// A paired device asking to open terminals here, waiting for Allow or Deny.
+    @Published var terminalKeyRequest: TerminalKeyRequest?
     @Published var pendingRequest: PendingRequest? {
         didSet { if pendingRequest != nil { PairingCodeWindow.close() } }
     }
@@ -132,7 +134,7 @@ final class AppState: ObservableObject {
     @Published var terminalSettings: [String: TerminalSettings] = [:]
     /// The Mac whose terminal settings are being asked for or edited.
     @Published var terminalSetup: Peer?
-    private var agent: Agent?
+    private(set) var agent: Agent?
     private var agentEvents: Task<Void, Never>?
     private var session: SessionClient?
     private var sessionEvents: Task<Void, Never>?
@@ -321,6 +323,14 @@ final class AppState: ObservableObject {
             if !on { incoming = nil }
         case .deviceRevoked:
             refreshPeers()
+        case .terminalKeyRequest(let deviceId, let name, let deviceFingerprint, let keyFingerprint, let username):
+            terminalKeyRequest = TerminalKeyRequest(deviceId: deviceId, deviceName: name, deviceFingerprint: deviceFingerprint,
+                                                    keyFingerprint: keyFingerprint, username: username)
+            AppDelegate.showExistingWindow()
+            notify("Terminal access", "\(name) asks to open terminals on this Mac. Allow or deny it in OwnDesk.")
+        case .terminalKeyResolved(let name, let status):
+            terminalKeyRequest = nil
+            append(Self.describeTerminalKey(status, device: name))
         case .deviceUnpaired(let deviceId, let name):
             refreshPeers()
             if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
@@ -407,6 +417,8 @@ final class AppState: ObservableObject {
     func forget(_ deviceId: String) {
         try? peers.forget(deviceId)
         forgetTerminal(deviceId)
+        // Also when hosting is off and the host half is not there to do it.
+        _ = try? AuthorizedKeys().remove(deviceId: deviceId)
         refreshPeers()
         if selectedPeerId == deviceId { selectedPeerId = peers.hosts.first?.deviceId }
     }

@@ -61,7 +61,12 @@ public enum HostKeyVerdict: Equatable, Sendable {
     case changed(fingerprint: String)
 }
 
-/// The pinned host key of each Mac, by the Mac's OwnDesk device id, in one small file.
+/// The pinned host keys of each Mac, by the Mac's OwnDesk device id, in one small file.
+///
+/// Usually one key, the one a person trusted by its fingerprint. A Mac that installed this device's
+/// key hands over all of its host keys in a signed answer, and then every one of them is pinned, since
+/// which one a connection ends up using depends on what the two sides negotiate. They are kept as
+/// lines of one string, so a file written by a build that pinned only one still reads the same.
 public final class KnownHosts: @unchecked Sendable {
     private let url: URL
     private let lock = NSLock()
@@ -72,11 +77,19 @@ public final class KnownHosts: @unchecked Sendable {
 
     public func verdict(for key: SSHHostKey, of deviceId: String) -> HostKeyVerdict {
         guard let pinned = load()[deviceId] else { return .new(fingerprint: key.fingerprint) }
-        return pinned == key.openSSH ? .known : .changed(fingerprint: key.fingerprint)
+        return Self.lines(pinned).contains(key.openSSH) ? .known : .changed(fingerprint: key.fingerprint)
     }
 
     public func pin(_ key: SSHHostKey, for deviceId: String) {
         update { $0[deviceId] = key.openSSH }
+    }
+
+    /// Pins every key a Mac vouched for in a signed answer, replacing what was pinned before.
+    public func pin(_ keys: [SSHHostKey], for deviceId: String) {
+        guard !keys.isEmpty else { return }
+        var seen = Set<String>()
+        let lines = keys.map(\.openSSH).filter { seen.insert($0).inserted }
+        update { $0[deviceId] = lines.joined(separator: "\n") }
     }
 
     public func forget(_ deviceId: String) {
@@ -85,7 +98,15 @@ public final class KnownHosts: @unchecked Sendable {
 
     /// The pinned key, if there is one.
     public func pinned(_ deviceId: String) -> SSHHostKey? {
-        load()[deviceId].flatMap { try? SSHHostKey(openSSH: $0) }
+        pinnedAll(deviceId).first
+    }
+
+    public func pinnedAll(_ deviceId: String) -> [SSHHostKey] {
+        load()[deviceId].map { Self.lines($0).compactMap { try? SSHHostKey(openSSH: $0) } } ?? []
+    }
+
+    private static func lines(_ text: String) -> [String] {
+        text.split(separator: "\n").map(String.init)
     }
 
     private func load() -> [String: String] {

@@ -20,12 +20,16 @@ enum OwnDeskAgentCLI {
       --synthetic-size <w>x<h>  TEST ONLY: the pattern's size (default 1280x720)
       --print-input       TEST ONLY: print each input message instead of injecting it (no Accessibility needed).
                           Typed text is printed as a character count, never as the text itself.
+      --authorized-keys <path>  Where an allowed terminal key goes (default: <data-dir>/authorized_keys,
+                          never ~/.ssh, so running this never changes who can log in to this Mac)
+      --ssh-host-keys <dir>  TEST ONLY: the SSH host keys to vouch for (default /etc/ssh), for a test's own sshd
       --help
 
     Commands while running:
       pair                Open a 120 s pairing window and print the QR payload text
       cancel              Close the pairing window
       y | n               Approve or deny the pending pairing request
+      key y | key n       Allow or refuse the pending terminal key request
       devices             List trusted devices
       revoke <prefix>     Revoke a trusted device by device id prefix
       access on|off       Remote Access kill switch
@@ -58,6 +62,8 @@ enum OwnDeskAgentCLI {
                 config.syntheticWidth = size[0]
                 config.syntheticHeight = size[1]
             case "--print-input": printInput = true; config.inputEnabled = true
+            case "--authorized-keys": if !args.isEmpty { config.authorizedKeysFile = URL(fileURLWithPath: args.removeFirst()) }
+            case "--ssh-host-keys": if !args.isEmpty { config.sshHostKeysDirectory = URL(fileURLWithPath: args.removeFirst(), isDirectory: true) }
             case "--help", "-h": print(usage); return
             default: print("unknown option \(arg)\n\(usage)"); exit(2)
             }
@@ -65,6 +71,7 @@ enum OwnDeskAgentCLI {
 
         // Resolved after parsing so --data-dir applies regardless of flag order.
         if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
+        if config.authorizedKeysFile == nil { config.authorizedKeysFile = config.dataDirectory.appendingPathComponent("authorized_keys") }
 
         let agent = try Agent(config: config, input: printInput ? PrintedInput() : nil)
         print("OwnDesk agent")
@@ -105,6 +112,9 @@ enum OwnDeskAgentCLI {
                 case "cancel": await agent.coordinator.cancelPairing()
                 case "y", "yes": await agent.coordinator.resolvePairing(approved: true)
                 case "n", "no": await agent.coordinator.resolvePairing(approved: false)
+                case "key":
+                    guard parts.count == 2, ["y", "n"].contains(parts[1]) else { print("key y | key n"); continue }
+                    await agent.coordinator.resolveTerminalKey(approved: parts[1] == "y")
                 case "devices":
                     let devices = await agent.coordinator.trustedDevices
                     if devices.isEmpty { print("no trusted devices") }
@@ -170,6 +180,10 @@ enum OwnDeskAgentCLI {
             print("revoked \(deviceId.prefix(12))…")
         case .deviceUnpaired(let deviceId, let name):
             print("\"\(name)\" unpaired itself (\(deviceId.prefix(12))…)")
+        case .terminalKeyRequest(_, let name, let device, let key, let user):
+            print("\nTERMINAL KEY REQUEST from \"\(name)\" (\(device))\n  key \(key), to log in as \(user)\n  type key y or key n\n")
+        case .terminalKeyResolved(let name, let status):
+            print("terminal key of \"\(name)\": \(status.rawValue)")
         case .warning(let text):
             print("warning: \(text)")
         case .info(let text):

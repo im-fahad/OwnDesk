@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owndesk.local/schemas/signaling/TERMINAL_KEY_REQUEST.json",
+  "description": "A paired device asks the host to let its SSH key log in to the host's own SSH server, for the terminal. The host shows the request and installs the key only after a click there. Type and key only: the host writes the authorized_keys line itself, so no option or comment can be smuggled in.",
+  "type": "object",
+  "required": ["ssh_public_key"],
+  "properties": {
+    "ssh_public_key": {
+      "type": "string",
+      "maxLength": 800,
+      "pattern": "^(ecdsa-sha2-nistp256|ssh-ed25519) [A-Za-z0-9+/]+={0,2}$"
+    }
+  }
+}

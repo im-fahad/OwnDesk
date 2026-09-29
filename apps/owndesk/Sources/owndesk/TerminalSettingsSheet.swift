@@ -15,6 +15,8 @@ struct TerminalSettingsSheet: View {
     @State private var port = "22"
     @State private var copied: String?
     @State private var forgotten = false
+    @State private var asking = false
+    @State private var askResult: (ok: Bool, message: String)?
     /// The pinned key as the sheet opened, kept after Forget so the confirmation has somewhere to show.
     @State private var shownPin: SSHHostKey?
 
@@ -34,7 +36,20 @@ struct TerminalSettingsSheet: View {
             Text("The short name of the account, as whoami prints it in Terminal on \(mac.name).")
                 .font(Theme.uiSmall).foregroundStyle(Theme.textFaint)
 
-            heading("THIS MAC'S KEY")
+            heading("LET \(mac.name.uppercased()) KNOW THIS MAC")
+            HStack(spacing: 10) {
+                Button(asking ? "Waiting for \(mac.name)…" : "Ask \(mac.name) to allow this Mac") { ask() }
+                    .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
+                    .disabled(asking)
+                if asking { ProgressView().controlSize(.small) }
+                Spacer()
+            }
+            Text(askResult?.message ?? "Someone at \(mac.name) clicks Allow, and the terminal opens without a password from then on. It needs \"Let others control it\" on there.")
+                .font(Theme.uiSmall)
+                .foregroundStyle(askResult.map { $0.ok ? Theme.online : Theme.warn } ?? Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            heading("OR ADD THIS MAC'S KEY BY HAND")
             Text("With this key on \(mac.name), the terminal opens without a password. Without it, you are asked for the account's password each time.")
                 .font(Theme.uiSmall).foregroundStyle(Theme.textDim)
                 .fixedSize(horizontal: false, vertical: true)
@@ -88,6 +103,22 @@ struct TerminalSettingsSheet: View {
             username = saved?.username ?? ""
             port = String(saved?.port ?? 22)
             shownPin = model.knownHosts.pinned(mac.deviceId)
+        }
+    }
+
+    /// Sends the request and waits for the answer from the other Mac, filling in the login on a yes.
+    private func ask() {
+        asking = true
+        askResult = nil
+        Task {
+            let result = await model.requestTerminalKey(from: mac, port: Int(port) ?? 22)
+            asking = false
+            askResult = result
+            if result.ok {
+                if let saved = model.terminalSettings[mac.deviceId] { username = saved.username }
+                shownPin = model.knownHosts.pinned(mac.deviceId)
+                forgotten = false
+            }
         }
     }
 

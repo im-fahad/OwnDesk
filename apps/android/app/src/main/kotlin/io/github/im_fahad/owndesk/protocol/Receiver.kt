@@ -127,6 +127,7 @@ class EnvelopeReceiver(
                 "SESSION_REJECT" -> j.decodeFromString(SessionRejectPayload.serializer(), json)
                 "SESSION_END" -> j.decodeFromString(SessionEndPayload.serializer(), json)
                 "PAIR_RESULT" -> j.decodeFromString(PairResultPayload.serializer(), json)
+                "TERMINAL_KEY_RESULT" -> j.decodeFromString(TerminalKeyResultPayload.serializer(), json)
                 // Media messages are carried through untouched until the video half is built.
                 else -> j.parseToJsonElement(json) as? JsonObject ?: throw ProtocolException("not an object")
             }
