@@ -186,7 +186,19 @@ final class AppState: ObservableObject {
             // This Mac hears its own advertisement, including over loopback, and would otherwise
             // list itself as a stranger nearby.
             let others = found.filter { $0.deviceId != ownId }
-            Task { @MainActor in self?.discovered = others }
+            Task { @MainActor in
+                guard let self else { return }
+                self.discovered = others
+                // A paired Mac's Tailscale addresses, kept for when this Mac is away from it.
+                var learned = false
+                for host in others where !host.elsewhere.isEmpty && self.peers.peer(host.deviceId) != nil {
+                    if self.peers.noteAddresses(host.deviceId, host.elsewhere) {
+                        learned = true
+                        self.append("learned where \(host.name) is reachable away from home: \(host.elsewhere.joined(separator: ", "))")
+                    }
+                }
+                if learned { self.refreshPeers() }
+            }
         }
         discovery.start()
         append("identity \(identity.fingerprint) ready")

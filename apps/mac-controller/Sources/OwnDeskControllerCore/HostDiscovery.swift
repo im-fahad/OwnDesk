@@ -7,7 +7,20 @@ public final class HostDiscovery: @unchecked Sendable {
         public var deviceId: String
         public var name: String
         public var endpoint: NWEndpoint
+        /// Where it says it can be reached away from home: its Tailscale addresses, "host:port".
+        public var elsewhere: [String] = []
         public var id: String { deviceId }
+
+        /// The "via" entry of an announcement, keeping only overlay addresses that parse, at most three.
+        /// It comes unsigned from the local network, so it is a list of places to try and no more:
+        /// the signed handshake decides who answers there.
+        public static func elsewhere(fromVia via: String?) -> [String] {
+            guard let via, via.utf8.count <= 200 else { return [] }
+            return Array(via.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { address in
+                guard let host = Endpoints.url(for: address)?.host else { return false }
+                return PathClassifier.isOverlay(host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")))
+            }.prefix(3))
+        }
     }
 
     private let queue = DispatchQueue(label: "owndesk.discovery")
@@ -28,7 +41,8 @@ public final class HostDiscovery: @unchecked Sendable {
                       let id = txt.dictionary["id"], id.count == 64,
                       txt.dictionary["proto"] == "1"
                 else { continue }
-                hosts.append(DiscoveredHost(deviceId: id, name: txt.dictionary["name"] ?? "Mac", endpoint: result.endpoint))
+                hosts.append(DiscoveredHost(deviceId: id, name: txt.dictionary["name"] ?? "Mac", endpoint: result.endpoint,
+                                            elsewhere: DiscoveredHost.elsewhere(fromVia: txt.dictionary["via"])))
             }
             self?.onUpdate?(hosts.sorted { $0.name < $1.name })
         }

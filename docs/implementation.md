@@ -572,6 +572,16 @@ pairing timed out. Tests answer from the harness's record of events instead. A r
 pairing client checks one host at a time through a shared slot, so tests that pair must not run in
 parallel suites; the terminal key tests live in the serialized end-to-end suite.
 
+**A Mac paired without Tailscale was unreachable away from home.** A device knew only the addresses
+a Mac had at pairing, plus where Bonjour heard it on the same network; a MacBook paired while its
+Tailscale was off had given none, so from mobile data nothing reached it until its tailnet address
+was pinned by hand. Adding the addresses to a signed message would have broken older Android
+builds, which reject unknown fields, so the Mac instead lists its overlay addresses in a `via` entry
+of its Bonjour record, which older apps ignore, and devices at home append them to that Mac's
+known addresses. Only overlay addresses are taken, and on Android they are the last to go when the
+list hits its cap of six. Seen working: the phone, its MacBook record stripped of tailnet
+addresses, learned both back within seconds of opening the app at home.
+
 **JSch on Android has no ed25519 host keys.** It offers ECDSA and RSA only, so an SSH server with
 nothing but an ed25519 host key turns the phone away with "no matching host key type". Every Mac
 has ECDSA and RSA host keys as well, so it never shows on a real Mac; it did show on a test server
@@ -647,9 +657,6 @@ why a direct path is unavailable: on this network the home router offers no port
   the reconnect window.
 - The Android terminal has no text selection beyond copying what is on screen, and no mouse
   reporting. The iPhone's terminal has run only in the Simulator.
-- A Mac's addresses are learned at pairing and from Bonjour on the same network, never later from
-  the Mac itself, so one paired while its Tailscale was off needs its tailnet address pinned by
-  hand. The Mac could send its current addresses in `SESSION_ACCEPT` or `TERMINAL_KEY_RESULT`.
 - The Android phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,

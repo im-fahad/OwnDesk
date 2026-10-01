@@ -3,6 +3,17 @@ import OwnDeskIdentity
 import OwnDeskPeers
 import OwnDeskProtocol
 import Testing
+
+@Suite struct OverlayAddressTests {
+    @Test func tailscaleRangesAreOverlay() {
+        #expect(NetworkInterfaces.isOverlay("100.64.0.1:47500"))
+        #expect(NetworkInterfaces.isOverlay("100.127.255.254:47500"))
+        #expect(NetworkInterfaces.isOverlay("[fd7a:115c:a1e0::10]:47500"))
+        #expect(!NetworkInterfaces.isOverlay("100.128.0.1:47500"))
+        #expect(!NetworkInterfaces.isOverlay("192.168.1.20:47500"))
+        #expect(!NetworkInterfaces.isOverlay("[fd00::1]:47500"))
+    }
+}
 import WebRTC
 @testable import OwnDeskAgentCore
 

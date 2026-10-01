@@ -3,6 +3,7 @@ package io.github.im_fahad.owndesk.net
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import io.github.im_fahad.owndesk.protocol.Peer
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.ArrayDeque
@@ -18,6 +19,8 @@ import java.util.ArrayDeque
  */
 class Discovery(
     context: Context,
+    /** Where the Mac also says it can be reached away from home: its Tailscale addresses. */
+    private val onElsewhere: ((deviceId: String, addresses: List<String>) -> Unit)? = null,
     private val onFound: (deviceId: String, address: String) -> Unit,
 ) {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -91,6 +94,8 @@ class Discovery(
         if (id.length != DEVICE_ID_LENGTH) return
         val address = format(host, info.port)
         if (address.isNotEmpty()) onFound(id, address)
+        val via = elsewhere(info.attributes["via"]?.toString(Charsets.UTF_8))
+        if (via.isNotEmpty()) onElsewhere?.invoke(id, via)
     }
 
     private fun format(host: InetAddress, port: Int): String {
@@ -102,6 +107,18 @@ class Discovery(
     }
 
     companion object {
+        /**
+         * The "via" entry of an announcement, keeping only overlay addresses, at most three. It comes
+         * unsigned from the local network, so it is a list of places to try and no more: the signed
+         * handshake and the pinned host key decide who answers there.
+         */
+        fun elsewhere(via: String?): List<String> {
+            if (via == null || via.length > 200) return emptyList()
+            return via.split(',').map { it.trim() }.filter { address ->
+                address.isNotEmpty() && Endpoints.port(address) != null && Peer.isOverlay(Endpoints.host(address))
+            }.take(3)
+        }
+
         /** Matches AgentConfig.serviceType on the Mac. */
         const val SERVICE_TYPE = "_owndesk._tcp"
         private const val DEVICE_ID_LENGTH = 64

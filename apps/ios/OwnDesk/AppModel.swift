@@ -178,6 +178,13 @@ final class AppModel {
     }
 
     private func found(_ hosts: [HostDiscovery.DiscoveredHost]) {
+        // A paired Mac's Tailscale addresses, kept for when this iPhone is away from it.
+        for host in hosts where !host.elsewhere.isEmpty && peers.peer(host.deviceId) != nil {
+            if peers.noteAddresses(host.deviceId, host.elsewhere) {
+                note("learned where \(host.name) is reachable away from home: \(host.elsewhere.joined(separator: ", "))")
+                macs = peers.hosts
+            }
+        }
         for host in hosts where peers.peer(host.deviceId) != nil {
             let described = Endpoints.describe(host.endpoint)
             guard resolvedEndpoints[host.deviceId] != described else { continue }

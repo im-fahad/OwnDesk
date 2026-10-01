@@ -57,7 +57,11 @@ class MainActivity : AppCompatActivity() {
     private val peers by lazy { PeerStore(this) }
     /** Macs heard advertising themselves on this network, by device id. */
     private val onThisNetwork = mutableMapOf<String, String>()
-    private val discovery by lazy { Discovery(this) { deviceId, address -> foundOnNetwork(deviceId, address) } }
+    private val discovery by lazy {
+        Discovery(this, onElsewhere = { deviceId, addresses -> learnedElsewhere(deviceId, addresses) }) { deviceId, address ->
+            foundOnNetwork(deviceId, address)
+        }
+    }
 
     private lateinit var peerList: LinearLayout
     private lateinit var logView: TextView
@@ -98,6 +102,18 @@ class MainActivity : AppCompatActivity() {
         val known = onThisNetwork.put(deviceId, address) == address
         if (peers.noteDiscovered(deviceId, address) || !known) {
             log("${peers.peer(deviceId)?.name ?: "a Mac"} is on this network at $address")
+            refreshPeers()
+        }
+    }
+
+    /**
+     * A Mac said where it can be reached away from home, its Tailscale addresses. Kept, so a Mac
+     * paired while its Tailscale was off is still found from a cafe without anyone typing.
+     */
+    private fun learnedElsewhere(deviceId: String, addresses: List<String>) = runOnUiThread {
+        if (peers.peer(deviceId) == null) return@runOnUiThread
+        if (peers.noteElsewhere(deviceId, addresses)) {
+            log("learned where ${peers.peer(deviceId)?.name ?: "a Mac"} is reachable away from home: ${addresses.joinToString(", ")}")
             refreshPeers()
         }
     }

@@ -597,9 +597,10 @@ Pairing is LAN-only by design. Once paired, a Mac can be reached from anywhere o
 the same tailnet, and connect as usual. Every address a Mac advertised at pairing time is probed at
 once and the first to answer wins, so the same button works at home and in a cafe.
 
-A device knows only the addresses the Mac had when they paired, plus where it hears the Mac on the
-local network now. A Mac paired while its Tailscale was off gave no Tailscale address, so away from
-home nothing reaches it, for the screen or the terminal. Give it one by hand, once, from
+A Mac announces its Tailscale addresses on the local network along with its name, and every paired
+device that hears it at home keeps them for later. So a Mac paired while its Tailscale was off is
+still found from a cafe, as long as the device has been home with it since Tailscale came on there,
+with OwnDesk open. If that has not happened yet, give the address by hand, once, from
 `tailscale ip -4` on that Mac:
 
 - On a phone, touch and hold the Mac in the list, **Choose an address**, and enter
@@ -671,7 +672,7 @@ everything else.
 | The terminal says nothing answered on port 22 | Remote Login is off on that Mac | System Settings → General → Sharing → Remote Login |
 | The terminal asks for a password, or refuses the login | The Mac does not have this device's key, or the user name is wrong | **Ask *that Mac* to allow this device** in Terminal settings, and click Allow on the Mac; or check the name with `whoami` there and paste the command |
 | Asking the Mac says it did not answer | It is off, asleep, or not letting others in | Switch on **Let others control it** on that Mac, then ask again |
-| Everything works at home, nothing away from home | The Mac was paired while its Tailscale was off, so no Tailscale address is known | Section 6.8: pin its `100.x.y.z:47500` address, from `tailscale ip -4` on that Mac |
+| Everything works at home, nothing away from home | The device has not heard the Mac's Tailscale address yet | Open OwnDesk on the device once at home, with Tailscale on at the Mac; or pin `100.x.y.z:47500` by hand (section 6.8) |
 | An Android terminal says "no matching host key type" | The Mac's SSH server has only an ed25519 host key, which the Android app's SSH library cannot use | Every Mac has an ECDSA one too unless it was removed; `ssh-keygen -A` with sudo puts the standard set back |
 | `ls: Operation not permitted` in Documents, Desktop or Downloads, in the terminal only | macOS keeps those folders from remote logins until told otherwise | Behind Remote Login's ⓘ, turn on **Allow full disk access for remote users** |
 | The terminal refuses because the Mac's SSH key has changed | The pinned host key no longer matches: macOS was reinstalled, or someone is in the middle | If the Mac really changed, **Forget it** in Terminal settings; otherwise stop and look |

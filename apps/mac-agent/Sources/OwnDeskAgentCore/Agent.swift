@@ -37,8 +37,13 @@ public final class Agent: @unchecked Sendable {
         }
 
         let peers = self.peers
+        // "via" lists the Tailscale addresses a device at home can note for when it is away (spec 17):
+        // a pairing made while Tailscale was off carried none.
+        var txt = ["id": self.identity.deviceId, "name": config.hostName, "proto": String(Envelope.protocolVersion)]
+        let via = config.port == 0 ? [] : Array(NetworkInterfaces.overlayAddresses(port: config.port).prefix(3))
+        if !via.isEmpty { txt["via"] = via.joined(separator: ",") }
         let advertisement: SignalingServer.Advertisement? = config.advertiseBonjour
-            ? .init(name: config.hostName, type: config.serviceType, txt: ["id": self.identity.deviceId, "name": config.hostName, "proto": String(Envelope.protocolVersion)])
+            ? .init(name: config.hostName, type: config.serviceType, txt: txt)
             : nil
         server = SignalingServer(port: config.port, advertisement: advertisement)
 

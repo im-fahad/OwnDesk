@@ -39,4 +39,19 @@ public enum NetworkInterfaces {
             return ra != rb ? ra < rb : a < b
         }
     }
+
+    /// This Mac's addresses on an overlay network, Tailscale's 100.64/10 and fd7a:115c:a1e0::/48:
+    /// the ones that still reach it away from home.
+    public static func overlayAddresses(port: UInt16) -> [String] {
+        lanAddresses(port: port).filter(isOverlay)
+    }
+
+    /// "100.64.0.1:47500" or "[fd7a:115c:a1e0::1]:47500".
+    public static func isOverlay(_ address: String) -> Bool {
+        let host = address.hasPrefix("[") ? String(address.dropFirst().prefix { $0 != "]" }) : String(address.prefix { $0 != ":" })
+        if host.lowercased().hasPrefix("fd7a:115c:a1e0:") { return true }
+        let parts = host.split(separator: ".")
+        guard parts.count == 4, parts[0] == "100", let second = Int(parts[1]) else { return false }
+        return (64...127).contains(second)
+    }
 }

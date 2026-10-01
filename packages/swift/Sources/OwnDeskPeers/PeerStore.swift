@@ -134,6 +134,20 @@ public final class PeerStore: @unchecked Sendable {
         }
     }
 
+    /// Adds addresses a paired Mac announced on the local network, after the ones already known, and
+    /// returns whether any was new. Only adds: what was learned at pairing stays.
+    @discardableResult
+    public func noteAddresses(_ deviceId: String, _ addresses: [String]) -> Bool {
+        var added = false
+        try? update(deviceId) { peer in
+            for address in addresses where !address.isEmpty && !peer.addresses.contains(address) {
+                peer.addresses.append(address)
+                added = true
+            }
+        }
+        return added
+    }
+
     private func update(_ deviceId: String, _ change: (inout Peer) -> Void) throws {
         lock.lock(); defer { lock.unlock() }
         guard var peer = peers[deviceId] else { return }

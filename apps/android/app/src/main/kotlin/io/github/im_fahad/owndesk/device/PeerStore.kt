@@ -46,6 +46,14 @@ class PeerStore(private val file: File) {
         true
     }
 
+    /** Adds the Tailscale addresses a Mac announced on the local network. Whether anything changed. */
+    fun noteElsewhere(deviceId: String, addresses: List<String>): Boolean = update { peers ->
+        val index = peers.indexOfFirst { it.deviceId == deviceId }
+        val updated = peers.getOrNull(index)?.withElsewhere(addresses) ?: return@update false
+        peers[index] = updated
+        true
+    }
+
     /** Records an address the owner typed, or clears it when the text is blank. */
     fun setPreferred(deviceId: String, address: String?) = update { peers ->
         val index = peers.indexOfFirst { it.deviceId == deviceId }

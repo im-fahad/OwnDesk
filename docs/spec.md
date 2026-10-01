@@ -985,7 +985,15 @@ TXT record:
 id=<device_id>
 name=Mac Mini M4
 proto=1
+via=100.64.0.10:47500,[fd7a:115c:a1e0::10]:47500
 ```
+
+`via`, when present, lists up to three of the host's overlay addresses (Tailscale's 100.64.0.0/10
+and fd7a:115c:a1e0::/48) with the signaling port. A controller that hears a paired host adds them
+to that host's known addresses, after the ones it had, so a host paired while its Tailscale was
+off is still reachable from away once a device has been home with it. It is unsigned, like the
+rest of the record, so a controller takes overlay addresses only and treats them as places to try:
+the signed handshake and the pinned SSH host key decide who answers there.
 
 No secrets in the TXT record. The controller matches `id` against its paired hosts and ignores unknown ones. The advertised port serves the embedded signaling WebSocket. The signaling transport is plain WS on the LAN because every message is signed and contains no secrets. TLS can be added later without protocol changes.
 

@@ -14,6 +14,21 @@ private let macBook = SoftwareIdentity()
 private let mini = SoftwareIdentity()
 
 @Suite struct PeerStoreTests {
+    /// A Mac paired while its Tailscale was off gave no tailnet address; one it announces later on
+    /// the local network is added after what was known, and nothing is ever taken away.
+    @Test func addressesAMacAnnouncesAreAddedNeverReplaced() throws {
+        let dir = tempDir()
+        let store = try PeerStore(directory: dir)
+        let mac = SoftwareIdentity()
+        try store.pair(deviceId: mac.deviceId, publicKey: mac.publicKeyB64, name: "Test Mini", type: .mac,
+                       mayControlUs: true, weMayControl: true, addresses: ["192.168.1.20:47500"], now: 100)
+        #expect(store.noteAddresses(mac.deviceId, ["100.64.0.20:47500", "192.168.1.20:47500"]))
+        #expect(store.peer(mac.deviceId)?.addresses == ["192.168.1.20:47500", "100.64.0.20:47500"])
+        #expect(store.noteAddresses(mac.deviceId, ["100.64.0.20:47500"]) == false, "nothing new")
+        #expect(store.noteAddresses(SoftwareIdentity().deviceId, ["100.64.0.30:47500"]) == false, "only for a paired device")
+        #expect(try PeerStore(directory: dir).peer(mac.deviceId)?.addresses.count == 2, "kept on disk")
+    }
+
     /// The bug this exists to prevent: pairing recorded both directions for every device, so a
     /// phone landed in "Macs you can control" with a dot that could never go green. A phone runs no
     /// hosting half and has no address to reach, so permission alone is not enough.

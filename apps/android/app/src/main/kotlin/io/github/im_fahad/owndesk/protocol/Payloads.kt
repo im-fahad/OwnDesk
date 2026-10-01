@@ -1,5 +1,7 @@
 package io.github.im_fahad.owndesk.protocol
 
+import io.github.im_fahad.owndesk.net.Endpoints
+
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -190,7 +192,33 @@ data class Peer(
         return if (merged == addresses) null else copy(addresses = merged)
     }
 
+    /**
+     * Adds the Tailscale addresses this Mac announced on the local network, after the ones known.
+     * Over the cap, the oldest local ones go first, never these: they are what reaches the Mac away
+     * from home. Null when nothing changed.
+     */
+    fun withElsewhere(elsewhere: List<String>, max: Int = MAX_ADDRESSES): Peer? {
+        val missing = elsewhere.map { it.trim() }.filter { it.isNotEmpty() && it !in addresses }
+        if (missing.isEmpty()) return null
+        val merged = (addresses + missing).toMutableList()
+        while (merged.size > max) {
+            val drop = merged.indexOfLast { !isOverlay(Endpoints.host(it)) && merged.indexOf(it) != 0 }
+            if (drop <= 0) break
+            merged.removeAt(drop)
+        }
+        return copy(addresses = merged.take(max))
+    }
+
     companion object {
         const val MAX_ADDRESSES = 6
+
+        /** Tailscale's 100.64.0.0/10 and fd7a:115c:a1e0::/48. */
+        fun isOverlay(host: String): Boolean {
+            val h = host.lowercase().removePrefix("[").removeSuffix("]")
+            if (h.startsWith("fd7a:115c:a1e0:")) return true
+            val parts = h.split('.')
+            if (parts.size != 4 || parts[0] != "100") return false
+            return parts[1].toIntOrNull() in 64..127
+        }
     }
 }
