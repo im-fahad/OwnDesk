@@ -18,7 +18,8 @@ public final class Agent: @unchecked Sendable {
     /// `peers` is injected by the merged app so the hosting and controlling halves share one list.
     /// When it is nil the agent owns its own and imports any legacy stores.
     public init(config: AgentConfig, identity: (any SigningIdentity)? = nil, peers: PeerStore? = nil,
-                mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil) throws {
+                mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil,
+                clipboard: (any ClipboardBridge)? = nil) throws {
         self.config = config
         if let identity {
             self.identity = identity
@@ -49,9 +50,11 @@ public final class Agent: @unchecked Sendable {
 
         let media: MediaSessionFactory? = mediaFactory ?? (config.mediaEnabled ? { try LiveMediaSession(config: config) } : nil)
         let inputSink: (any InputSink)? = input ?? (config.inputEnabled ? InputInjector() : nil)
+        // The real clipboard only where input is real too: a test host never reads or writes it.
+        let clipboardBridge: (any ClipboardBridge)? = clipboard ?? (config.inputEnabled && input == nil ? SystemClipboard() : nil)
         coordinator = SessionCoordinator(.init(
             identity: self.identity, peers: peers, config: config, transport: server,
-            mediaFactory: media, input: inputSink, power: PowerAssertion()
+            mediaFactory: media, input: inputSink, clipboard: clipboardBridge, power: PowerAssertion()
         ))
         bridge = ServerBridge(coordinator: coordinator)
         server.delegate = bridge

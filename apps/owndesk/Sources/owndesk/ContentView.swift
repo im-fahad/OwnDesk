@@ -156,6 +156,12 @@ struct HeaderBar: View {
             .fixedSize()
             .foregroundStyle(Theme.textDim)
 
+            IconButton(systemName: model.clipboardSync ? "doc.on.clipboard.fill" : "doc.on.clipboard",
+                       help: model.clipboardSync
+                           ? (model.hostSharesClipboard == false ? "Clipboard sync on, to that Mac only: it does not share its own" : "Clipboard sync on")
+                           : "Clipboard sync off",
+                       isOn: model.clipboardSync) { model.clipboardSync.toggle() }
+
             IconButton(systemName: model.sendInput ? "cursorarrow.click" : "cursorarrow.slash",
                        help: model.sendInput ? "Input is being sent" : "Input is paused",
                        isOn: model.sendInput) { model.sendInput.toggle() }
@@ -288,6 +294,11 @@ struct SidebarPanel: View {
         Toggle("Allow it to control this Mac", isOn: Binding(
             get: { peer.mayControlUs },
             set: { model.setMayControlUs(peer.deviceId, $0) }))
+        // Off by default: with it on, what anyone copies here goes to that device whenever it has
+        // clipboard sync on during a session, passwords included.
+        Toggle("Share this Mac's clipboard with it", isOn: Binding(
+            get: { peer.sharesClipboard },
+            set: { model.setShareClipboard(peer.deviceId, $0) }))
         Divider()
         Button("Unpair \(peer.name)…", role: .destructive) { unpairing = peer }
     }

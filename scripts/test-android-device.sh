@@ -14,6 +14,8 @@
 # Two stages, each with the phone driven by the debug build's intent extras:
 #   session   pairs, opens the host's screen (a synthetic 1920x1080 pattern) and taps it; the host
 #             prints the input instead of injecting it, so nothing on this Mac moves
+#   clipboard the host shares its (test) clipboard with the phone; the phone's clipboard button turns
+#             sync on, the host's line arrives, and switched off and on the phone sends it back
 #   terminal  asks the host to allow the phone's terminal key (answered yes here, as a person would),
 #             then opens a terminal with no host key question and runs a command that writes a file
 #
@@ -92,6 +94,11 @@ fi
 AGENT="$ROOT/apps/mac-agent/.build/debug/owndesk-agent"
 echo "installing it (some phones want Install tapped on the screen)"
 adb install -r -t "$ROOT/apps/android/app/build/outputs/apk/debug/app-debug.apk" >/dev/null
+# Opened once and given time to start: a pairing intent sent to an app that is still starting after
+# an install can be lost.
+adb logcat -c
+adb shell am start -n "$APP/.ui.MainActivity" >/dev/null
+wait_phone "this phone is" 20 || echo "  the app did not report starting"
 
 # The terminal's server: this Mac's sshd as you, on a spare port, with its own host key and an
 # authorized_keys that starts empty. The agent installs the phone's key there when asked, and
@@ -165,6 +172,44 @@ fi
 adb shell am force-stop "$APP"
 sleep 2
 
+echo "running the clipboard stage"
+# The host's test clipboard holds a known line; the phone's own clipboard is never read by the test.
+DEVICE_NAME="$(sed -n 's/^paired "\(.*\)"$/\1/p' "$LOG" | tail -1)"
+echo "share $DEVICE_NAME on" >&3
+adb logcat -c
+adb shell am start -n "$APP/.ui.MainActivity" --es connect "$HOST_FP" >/dev/null
+for _ in $(seq 1 60); do [[ $(grep -c '"[^"]*" connected' "$LOG") -ge 2 ]] && break; sleep 0.5; done
+sleep 3
+tap_clipboard() {
+  [[ "$(front)" == "SessionActivity" ]] || { echo "  the session is not in front, so nothing was tapped"; return 1; }
+  adb shell uiautomator dump /sdcard/owndesk-e2e.xml >/dev/null 2>&1
+  adb pull /sdcard/owndesk-e2e.xml "$WORK/session.xml" >/dev/null 2>&1
+  adb shell rm -f /sdcard/owndesk-e2e.xml
+  local at
+  at="$(python3 - "$WORK/session.xml" <<'PY'
+import re, sys
+s = open(sys.argv[1]).read()
+m = re.search(r'content-desc="Clipboard sync"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', s)
+print(f"{(int(m[1])+int(m[3]))//2} {(int(m[2])+int(m[4]))//2}" if m else "")
+PY
+)"
+  [[ -n "$at" ]] || { echo "  no clipboard button on the session screen"; return 1; }
+  adb shell input tap $at
+}
+if grep -q '"[^"]*" connected' "$LOG" && tap_clipboard; then
+  # On: the host's clipboard comes to the phone.
+  wait_phone "clipboard from Test Mac: 25 characters" 15
+  # Off and on again: the phone sends what is now on its clipboard, which is that same line.
+  sleep 1; tap_clipboard; sleep 1; tap_clipboard
+  for _ in $(seq 1 20); do grep -q "^clipboard 25 characters" "$LOG" && break; sleep 0.5; done
+  # Left off, as it was.
+  sleep 1; tap_clipboard
+fi
+snap clipboard
+phone_log > "$WORK/phone-clipboard.log"
+adb shell am force-stop "$APP"
+sleep 2
+
 echo "running the terminal stage"
 MARKER="$WORK/terminal-marker"
 ( for _ in $(seq 1 1800); do grep -q "TERMINAL KEY REQUEST" "$LOG" && { echo "key y" >&3; exit 0; }; sleep 0.1; done ) &
@@ -200,6 +245,9 @@ check 'grep -qE "^ecdsa-sha2-nistp256 [A-Za-z0-9+/=]+ owndesk-[0-9a-f]{16} " "$S
 check '! grep -q "text=\"Trust" "$WORK/screen.xml"' "no host key question: the host vouched for its key"
 check 'grep -q "Accepted publickey for $(whoami)" "$SSHD_DIR/sshd.log"' "the terminal logged in with the phone's key"
 check '[[ "$(cat "$MARKER" 2>/dev/null)" == "owndesk-android-42" ]]' "a command typed on the phone ran on this Mac"
+check 'grep -q "clipboard shared with" "$LOG"' "the host shared its clipboard with the phone, as switched on there"
+check 'grep -qE "clipboard from Test Mac: 25 characters" "$WORK/phone-clipboard.log"' "the host's clipboard reached the phone once sync was on"
+check 'grep -q "^clipboard 25 characters" "$LOG"' "the phone's clipboard reached the host"
 
 if [[ "$STATUS" != 0 ]]; then
   echo

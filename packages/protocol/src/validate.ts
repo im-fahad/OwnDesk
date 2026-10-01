@@ -25,6 +25,8 @@ export const DATACHANNEL_TYPES = [
   'ping',
   'pong',
   'bye',
+  'clipboard',
+  'clipboard_sync',
 ] as const;
 export type DataChannelType = (typeof DATACHANNEL_TYPES)[number];
 

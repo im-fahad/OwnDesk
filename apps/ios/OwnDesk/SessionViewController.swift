@@ -48,6 +48,14 @@ final class SessionViewController: UIViewController {
     private var modeButton: UIButton!
     private var keyboardButton: UIButton!
     private var infoButton: UIButton!
+    private var clipboardButton: UIButton!
+    /// Clipboard sync, remembered between sessions. Off by default.
+    private var clipboardSync = UserDefaults.standard.bool(forKey: "clipboardSync")
+    /// The Mac shares its own clipboard with this iPhone; nil until it says.
+    private var macSharesClipboard: Bool?
+    /// The pasteboard counter last sent or written, so a clipboard is not sent back where it came from.
+    private var clipboardSeen = -1
+    private var activeObserver: NSObjectProtocol?
 
     private let scheduler = MainQueueScheduler()
     private lazy var gestures = Gestures(output: self, scheduler: scheduler)
@@ -99,6 +107,8 @@ final class SessionViewController: UIViewController {
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) }
+        activeObserver = nil
         UIApplication.shared.isIdleTimerDisabled = false
         if !finished {
             let client = self.client
@@ -152,9 +162,15 @@ final class SessionViewController: UIViewController {
                 self.handle(event)
             }
         }
+        // Back from another app: whatever was copied there goes over now. iOS lets an app read the
+        // pasteboard only in front, and asks the person unless pasting from other apps is allowed.
+        activeObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sendLocalClipboard() }
+        }
         connecting = Task { [weak self] in
             guard let self else { return }
             await client.attach(renderer: videoView)
+            if clipboardSync { await client.setClipboardSync(true) }
             // Every address is probed at once. A Mac usually has a home address and a tailnet one,
             // and trying them in turn means waiting out a timeout on the wrong network first.
             let urls = target.addresses.compactMap(Endpoints.url(for:))
@@ -198,7 +214,50 @@ final class SessionViewController: UIViewController {
             model?.note("receiving \(target.peer.name)'s screen")
         case .log(let text):
             model?.note(text)
+        case .clipboard(let text):
+            guard clipboardSync else { return }
+            UIPasteboard.general.string = text
+            clipboardSeen = UIPasteboard.general.changeCount
+            model?.note("clipboard from \(target.peer.name): \(text.count) characters")
+        case .clipboardShared(let shared):
+            let before = macSharesClipboard
+            macSharesClipboard = shared
+            if clipboardSync, !shared, before != false {
+                showStatus("\(target.peer.name) keeps its clipboard to itself; yours still goes there", hideAfter: 4)
+            }
         }
+    }
+
+    // MARK: Clipboard
+
+    /// Switches clipboard sync. On, what is copied on this iPhone goes to the Mac when OwnDesk comes
+    /// back to the front, and the Mac's clipboard comes here if the Mac shares it with this iPhone.
+    private func toggleClipboard() {
+        clipboardSync.toggle()
+        UserDefaults.standard.set(clipboardSync, forKey: "clipboardSync")
+        tint(clipboardButton, on: clipboardSync)
+        let client = self.client
+        let on = clipboardSync
+        Task { await client.setClipboardSync(on) }
+        if clipboardSync {
+            clipboardSeen = -1
+            sendLocalClipboard()
+            showStatus("clipboard sync on", hideAfter: 2)
+        } else {
+            macSharesClipboard = nil
+            showStatus("clipboard sync off", hideAfter: 2)
+        }
+    }
+
+    private func sendLocalClipboard() {
+        guard clipboardSync else { return }
+        let board = UIPasteboard.general
+        // The counter costs no permission; only reading the text does, so it is read only when new.
+        guard board.changeCount != clipboardSeen else { return }
+        clipboardSeen = board.changeCount
+        guard board.hasStrings, let text = board.string, !text.isEmpty else { return }
+        let client = self.client
+        Task { await client.sendClipboard(text) }
     }
 
     private func send(_ message: DataChannelMessage) {
@@ -287,8 +346,10 @@ final class SessionViewController: UIViewController {
         modeButton = iconButton("hand.point.up.left", name: "Touch", id: "session-mode") { [weak self] in self?.toggleMode() }
         keyboardButton = iconButton("keyboard", name: "Keyboard", id: "session-keyboard") { [weak self] in self?.toggleKeyboard() }
         infoButton = iconButton("info.circle", name: "Session info", id: "session-info") { [weak self] in self?.toggleInfo() }
+        clipboardButton = iconButton("doc.on.clipboard", name: "Clipboard sync", id: "session-clipboard") { [weak self] in self?.toggleClipboard() }
+        tint(clipboardButton, on: clipboardSync)
         let endButton = iconButton("xmark.circle", name: "End session", id: "session-end") { [weak self] in self?.confirmEnd() }
-        [modeButton, keyboardButton, infoButton, endButton].forEach { sidebar.addArrangedSubview($0) }
+        [modeButton, keyboardButton, clipboardButton, infoButton, endButton].forEach { sidebar.addArrangedSubview($0) }
         view.addSubview(sidebar)
 
         infoContainer.backgroundColor = UIColor(hex: 0x1B1B1B, alpha: 0.92)

@@ -104,6 +104,15 @@ final class AppState: ObservableObject {
     @Published var quality: QualityPreset = .auto { didSet { applyStreamSettings() } }
     @Published var smoothMotion = false { didSet { applyStreamSettings() } }
     @Published var sendInput = true
+    /// Clipboard sync with the Mac being controlled, remembered between sessions. Off by default.
+    @Published var clipboardSync = UserDefaults.standard.bool(forKey: "clipboardSync") {
+        didSet { clipboardSyncChanged() }
+    }
+    /// Whether the controlled Mac shares its own clipboard with this one; nil until it says.
+    @Published var hostSharesClipboard: Bool?
+    /// The local clipboard counter last sent or written, so neither side echoes the other.
+    var pasteboardSeen = -1
+    var clipboardTimer: Timer?
     @Published var manualAddress = ""
     @Published var textToSend = ""
 
@@ -437,6 +446,52 @@ final class AppState: ObservableObject {
 
     /// "Allow it to control this Mac", per device. Off keeps the pairing and ends that device's
     /// session if it has one; the device is told why the next time it tries.
+    /// "Share this Mac's clipboard with it", per device: a click here, never a script.
+    func setShareClipboard(_ deviceId: String, _ shared: Bool) {
+        try? peers.setShareClipboard(deviceId, shared)
+        refreshPeers()
+        if let agent { Task { await agent.coordinator.clipboardSharingChanged(for: deviceId) } }
+    }
+
+    // MARK: Clipboard sync, while controlling
+
+    private func clipboardSyncChanged() {
+        UserDefaults.standard.set(clipboardSync, forKey: "clipboardSync")
+        // On switching on, what is on the clipboard now goes over at the next look.
+        pasteboardSeen = -1
+        if let session { Task { await session.setClipboardSync(clipboardSync) } }
+        if !clipboardSync { hostSharesClipboard = nil }
+        append("clipboard sync \(clipboardSync ? "on" : "off")")
+    }
+
+    /// Looks at this Mac's clipboard once a second during a session and sends it when it changed.
+    private func startClipboardWatch() {
+        clipboardTimer?.invalidate()
+        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self, let session = self.session else { timer.invalidate(); return }
+                guard self.isConnected else { return }
+                guard self.clipboardSync else { return }
+                let board = NSPasteboard.general
+                guard board.changeCount != self.pasteboardSeen else { return }
+                self.pasteboardSeen = board.changeCount
+                if let text = board.string(forType: .string), !text.isEmpty {
+                    await session.sendClipboard(text)
+                }
+            }
+        }
+    }
+
+    /// The other Mac's clipboard, put on this one's. Its counter is noted so it is not sent back.
+    private func receivedClipboard(_ text: String, from name: String) {
+        guard clipboardSync else { return }
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(text, forType: .string)
+        pasteboardSeen = board.changeCount
+        append("clipboard from \(name): \(text.count) characters")
+    }
+
     func setMayControlUs(_ deviceId: String, _ allowed: Bool) {
         try? peers.setMayControlUs(deviceId, allowed)
         refreshPeers()
@@ -522,6 +577,8 @@ final class AppState: ObservableObject {
 
         let session = SessionClient(.init(identity: identity, host: peer, config: config.controllerConfig()))
         self.session = session
+        hostSharesClipboard = nil
+        if clipboardSync { await session.setClipboardSync(true) }
         let stream = session.events
         sessionEvents?.cancel()
         sessionEvents = Task { [weak self] in
@@ -542,6 +599,7 @@ final class AppState: ObservableObject {
                         self.peers.touchConnected(peer.deviceId, at: currentMs(), address: addressUsed)
                         self.refreshPeers()
                         self.applyStreamSettings()
+                        self.startClipboardWatch()
                     }
                 case .rtt(let ms): self.rtt = ms
                 case .display(let d): self.display = d
@@ -550,6 +608,13 @@ final class AppState: ObservableObject {
                     self.append(Self.describeCapture(capture, detail: detail))
                 case .remoteVideo: self.append("video track received")
                 case .log(let text): self.append(text)
+                case .clipboard(let text): self.receivedClipboard(text, from: peer.name)
+                case .clipboardShared(let shared):
+                    self.hostSharesClipboard = shared
+                    if self.clipboardSync {
+                        self.append(shared ? "\(peer.name) shares its clipboard with this Mac"
+                                           : "\(peer.name) keeps its clipboard to itself; what you copy here still goes there. Switch on \"Share this Mac's clipboard with it\" on \(peer.name) for the other way.")
+                    }
                 }
             }
         }

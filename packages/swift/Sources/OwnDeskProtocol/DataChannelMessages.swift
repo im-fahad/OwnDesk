@@ -28,12 +28,14 @@ public enum DataChannelType: String, Sendable, CaseIterable {
     case ping
     case pong
     case bye
+    case clipboard
+    case clipboardSync = "clipboard_sync"
 
     public var channel: ChannelLabel {
         switch self {
         case .mouseMove, .mouseMoveRel: .inputLossy
         case .mouseDown, .mouseUp, .scroll, .keyDown, .keyUp, .text: .inputReliable
-        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye: .control
+        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye, .clipboard, .clipboardSync: .control
         }
     }
 }
@@ -70,6 +72,8 @@ public enum Limits {
     public static let pingIntervalMs = 5000
     public static let missedPongsBeforeReconnect = 3
     public static let textMaxCodePoints = 256
+    /// Clipboard text, in code points. Its frame alone may pass 4 KB, up to `DataChannelCodec.maxClipboardBytes`.
+    public static let clipboardMaxCodePoints = 32768
     public static let maxRelativeDelta: Double = 4096
     public static let maxScrollDelta: Double = 10000
     public static let doubleClickMs = 500
@@ -97,6 +101,11 @@ public enum DataChannelMessage: Sendable, Equatable {
     case ping(nonce: UInt32)
     case pong(nonce: UInt32)
     case bye(SessionEndReason)
+    /// Clipboard text, either way, once clipboard_sync has turned that direction on. Never logged.
+    case clipboard(String)
+    /// From a controller: the person wants clipboard sync. From the host: it shares its clipboard
+    /// with this device, which is that device's switch on the host.
+    case clipboardSync(enabled: Bool)
 
     public var type: DataChannelType {
         switch self {
@@ -115,6 +124,8 @@ public enum DataChannelMessage: Sendable, Equatable {
         case .ping: .ping
         case .pong: .pong
         case .bye: .bye
+        case .clipboard: .clipboard
+        case .clipboardSync: .clipboardSync
         }
     }
 
@@ -143,11 +154,14 @@ public enum DataChannelError: Error, Equatable, Sendable {
 /// JSON encoding and strict decoding of data channel frames. Never crashes on bad input.
 public enum DataChannelCodec {
     public static let maxBytes = 4096
+    /// The one exception to `maxBytes`: a clipboard frame, whose text is up to 32768 code points.
+    public static let maxClipboardBytes = 163840
 
     public static func decode(_ data: Data, receivedOn: ChannelLabel? = nil) throws -> DataChannelFrame {
-        guard data.count <= maxBytes else { throw DataChannelError.tooLarge }
+        guard data.count <= maxClipboardBytes else { throw DataChannelError.tooLarge }
         guard let any = try? JSONSerialization.jsonObject(with: data), let obj = any as? [String: Any] else { throw DataChannelError.malformed }
         guard let typeString = obj["type"] as? String, let type = DataChannelType(rawValue: typeString) else { throw DataChannelError.unknownType }
+        guard type == .clipboard || data.count <= maxBytes else { throw DataChannelError.tooLarge }
         let r = Reader(obj)
         let v = try r.int("v", 1...1000)
         let ts = try r.int64("ts", 0...Int64.max)
@@ -191,6 +205,12 @@ public enum DataChannelCodec {
             message = .pong(nonce: UInt32(try r.int64("nonce", 0...Int64(UInt32.max))))
         case .bye:
             message = .bye(try r.enumValue("reason", SessionEndReason.self))
+        case .clipboard:
+            let text = try r.string("text", 1...Int.max)
+            guard text.unicodeScalars.count <= Limits.clipboardMaxCodePoints else { throw DataChannelError.invalid("text") }
+            message = .clipboard(text)
+        case .clipboardSync:
+            message = .clipboardSync(enabled: try r.bool("enabled"))
         }
         if let receivedOn, receivedOn != type.channel { throw DataChannelError.wrongChannel(expected: type.channel) }
         return DataChannelFrame(v: v, ts: ts, message: message)
@@ -229,6 +249,10 @@ public enum DataChannelCodec {
             obj["nonce"] = nonce
         case .bye(let reason):
             obj["reason"] = reason.rawValue
+        case .clipboard(let text):
+            obj["text"] = text
+        case .clipboardSync(let enabled):
+            obj["enabled"] = enabled
         }
         return try JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])
     }

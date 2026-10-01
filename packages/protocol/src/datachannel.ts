@@ -5,6 +5,8 @@ import { DATACHANNEL_TYPES, isDataChannelType, validateDataChannelMessage, type 
 export { DATACHANNEL_TYPES, isDataChannelType, type DataChannelType };
 
 export const MAX_DATACHANNEL_BYTES = 4096;
+/** `clipboard` alone may be larger: 32768 code points, escaped, fit in this. */
+export const MAX_CLIPBOARD_BYTES = 163840;
 
 export const CHANNEL_LABELS = {
   lossy: 'input-lossy',
@@ -36,6 +38,8 @@ export const CHANNEL_FOR_TYPE: Record<DataChannelType, ChannelLabel> = {
   ping: 'control',
   pong: 'control',
   bye: 'control',
+  clipboard: 'control',
+  clipboard_sync: 'control',
 };
 
 export const MODIFIERS = ['shift', 'control', 'alt', 'meta', 'capslock'] as const;
@@ -78,7 +82,7 @@ export type DataChannelParseResult =
  */
 export function parseDataChannelMessage(raw: string | Uint8Array, receivedOn?: ChannelLabel): DataChannelParseResult {
   const bytes = typeof raw === 'string' ? utf8Encode(raw) : raw;
-  if (bytes.length > MAX_DATACHANNEL_BYTES) return { ok: false, reason: 'too_large' };
+  if (bytes.length > MAX_CLIPBOARD_BYTES) return { ok: false, reason: 'too_large' };
   let parsed: unknown;
   try {
     parsed = JSON.parse(utf8Decode(bytes));
@@ -88,6 +92,7 @@ export function parseDataChannelMessage(raw: string | Uint8Array, receivedOn?: C
   if (typeof parsed !== 'object' || parsed === null) return { ok: false, reason: 'malformed' };
   const t = (parsed as { type?: unknown }).type;
   if (typeof t !== 'string' || !isDataChannelType(t)) return { ok: false, reason: 'unknown_type' };
+  if (t !== 'clipboard' && bytes.length > MAX_DATACHANNEL_BYTES) return { ok: false, reason: 'too_large' };
   const v = validateDataChannelMessage(parsed);
   if (!v.valid) {
     const detail = v.errors[0];

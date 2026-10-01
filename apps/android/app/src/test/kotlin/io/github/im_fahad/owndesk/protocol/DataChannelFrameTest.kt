@@ -29,11 +29,16 @@ class DataChannelFrameTest {
             DataChannel.streamSettings(720, 30, "quality", ts),
             DataChannel.ping(42, ts),
             DataChannel.bye("user", ts),
+            DataChannel.clipboard("copied on the phone, ünïcödé 👋", ts),
+            DataChannel.clipboard("x".repeat(30000), ts),
+            DataChannel.clipboardSync(true, ts),
         )
 
         for (frame in frames) {
-            assertTrue("frame is too large: $frame", frame.toString().toByteArray().size <= DataChannel.MAX_BYTES)
+            val limit = if (frame.optString("type") == "clipboard") DataChannel.MAX_CLIPBOARD_BYTES else DataChannel.MAX_BYTES
+            assertTrue("frame is too large: ${frame.optString("type")}", frame.toString().toByteArray().size <= limit)
         }
+        assertEquals(DataChannel.CONTROL, DataChannel.channelFor("clipboard"))
         // Each type travels on one channel, and putting it on another is a protocol error.
         assertEquals(DataChannel.LOSSY, DataChannel.channelFor("mouse_move"))
         assertEquals(DataChannel.RELIABLE, DataChannel.channelFor("key_down"))

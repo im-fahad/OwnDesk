@@ -14,13 +14,17 @@ object DataChannel {
     const val RELIABLE = "input-reliable"
     const val CONTROL = "control"
     const val MAX_BYTES = 4096
+    /** `clipboard` alone may be larger: 32768 code points, escaped, fit in this. */
+    const val MAX_CLIPBOARD_BYTES = 163840
+    const val CLIPBOARD_MAX_CODE_POINTS = 32768
 
     /** Pointer moves are coalesced to this, which is about one frame at 240 Hz. */
     const val MOVE_COALESCE_MS = 4L
 
     fun channelFor(type: String): String = when (type) {
         "mouse_move", "mouse_move_rel" -> LOSSY
-        "hello", "display_info", "capture_state", "stream_settings", "ping", "pong", "bye" -> CONTROL
+        "hello", "display_info", "capture_state", "stream_settings", "ping", "pong", "bye",
+        "clipboard", "clipboard_sync" -> CONTROL
         else -> RELIABLE
     }
 
@@ -74,6 +78,12 @@ object DataChannel {
 
     fun bye(reason: String, ts: Long): JSONObject = frame("bye", ts).put("reason", reason)
 
+    /** Clipboard text, sent only while clipboard sync is on. Never logged. */
+    fun clipboard(text: String, ts: Long): JSONObject = frame("clipboard", ts).put("text", text)
+
+    /** Whether the person has clipboard sync on. */
+    fun clipboardSync(enabled: Boolean, ts: Long): JSONObject = frame("clipboard_sync", ts).put("enabled", enabled)
+
     /**
      * What the Mac sends back on the control channel. Only the messages the phone acts on are
      * modelled; anything else decodes to null rather than an error, because a newer Mac is allowed
@@ -87,6 +97,10 @@ object DataChannel {
         data class Capture(val state: String, val detail: String?) : Incoming
         /** The Mac ended the session over the data channel rather than signaling. */
         data class Bye(val reason: String) : Incoming
+        /** The Mac's clipboard text. Never logged. */
+        data class Clipboard(val text: String) : Incoming
+        /** Whether the Mac shares its clipboard with this phone: a switch on the Mac. */
+        data class ClipboardShared(val enabled: Boolean) : Incoming
     }
 
     val CAPTURE_STATES = setOf("active", "paused_locked", "paused_display_asleep", "paused_error")
@@ -97,9 +111,11 @@ object DataChannel {
      * Mirrors packages/protocol/src/datachannel.ts and the Swift DataChannelCodec.
      */
     fun parse(text: String, receivedOn: String): Incoming? {
-        if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return null
+        val size = text.toByteArray(Charsets.UTF_8).size
+        if (size > MAX_CLIPBOARD_BYTES) return null
         val obj = runCatching { JSONObject(text) }.getOrNull() ?: return null
         val type = obj.optString("type").ifEmpty { return null }
+        if (type != "clipboard" && size > MAX_BYTES) return null
         // A control message arriving on an input channel is a protocol error, not a surprise.
         if (channelFor(type) != receivedOn) return null
         return when (type) {
@@ -117,6 +133,13 @@ object DataChannel {
                 Incoming.Capture(state, obj.optString("detail").ifEmpty { null })
             }
             "bye" -> Incoming.Bye(obj.optString("reason").ifEmpty { "error" })
+            "clipboard" -> {
+                val value = obj.opt("text") as? String ?: return null
+                val points = value.codePointCount(0, value.length)
+                if (points !in 1..CLIPBOARD_MAX_CODE_POINTS) return null
+                Incoming.Clipboard(value)
+            }
+            "clipboard_sync" -> Incoming.ClipboardShared(obj.opt("enabled") as? Boolean ?: return null)
             else -> null
         }
     }

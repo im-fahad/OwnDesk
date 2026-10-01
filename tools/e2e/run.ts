@@ -55,9 +55,13 @@ async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+// Shared CI machines are slower and busier than a developer's Mac; GitHub Actions sets CI.
+const SLOWDOWN = process.env.CI ? 3 : 1;
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  const limit = ms * SLOWDOWN;
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`timeout after ${ms} ms: ${label}`)), ms);
+    const t = setTimeout(() => reject(new Error(`timeout after ${limit} ms: ${label}`)), limit);
     p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
   });
 }

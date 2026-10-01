@@ -91,6 +91,9 @@ test('data channel messages: valid samples parse and land on the right channel',
   ok({ v: 1, type: 'ping', ts: 0, nonce: 7 }, 'control');
   ok({ v: 1, type: 'pong', ts: 0, nonce: 7 }, 'control');
   ok({ v: 1, type: 'bye', ts: 0, reason: 'idle_timeout' }, 'control');
+  ok({ v: 1, type: 'clipboard', ts: 0, text: 'copied text, ünïcödé 👋' }, 'control');
+  ok({ v: 1, type: 'clipboard', ts: 0, text: 'x'.repeat(30000) }, 'control');
+  ok({ v: 1, type: 'clipboard_sync', ts: 0, enabled: true }, 'control');
 });
 
 test('data channel messages: invalid inputs are rejected with the right reason', () => {
@@ -99,7 +102,12 @@ test('data channel messages: invalid inputs are rejected with the right reason',
     assert.equal(r.ok, false, raw);
     if (!r.ok) assert.equal(r.reason, reason, raw);
   };
-  bad('x'.repeat(5000), 'too_large');
+  bad('x'.repeat(170000), 'too_large');
+  // Past 4 KB only clipboard text is allowed, and it has its own ceiling.
+  bad(JSON.stringify({ v: 1, type: 'text', ts: 1, text: 'x'.repeat(200), pad: 'y'.repeat(5000) }), 'too_large');
+  bad(JSON.stringify({ v: 1, type: 'clipboard', ts: 1, text: 'x'.repeat(40000) }), 'invalid');
+  bad(JSON.stringify({ v: 1, type: 'clipboard', ts: 1, text: '' }), 'invalid');
+  bad(JSON.stringify({ v: 1, type: 'clipboard_sync', ts: 1, enabled: 'yes' }), 'invalid');
   bad('{', 'malformed');
   bad('"str"', 'malformed');
   bad(JSON.stringify({ v: 1, type: 'execute_shell', ts: 1, cmd: 'rm -rf /' }), 'unknown_type');

@@ -23,6 +23,11 @@ public struct Peer: Codable, Sendable, Equatable, Identifiable {
     public var lastSeen: Int64?
     /// Last time we connected to it.
     public var lastConnected: Int64?
+    /// This Mac sends its clipboard to the device when the device asks for clipboard sync. Off unless
+    /// switched on for that device; nil in records from before the switch existed, which reads as off.
+    public var shareClipboard: Bool?
+
+    public var sharesClipboard: Bool { shareClipboard ?? false }
 
     public var id: String { deviceId }
     public var fingerprint: String { (try? DeviceID.fingerprint(deviceId: deviceId)) ?? deviceId }

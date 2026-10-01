@@ -547,6 +547,7 @@ the Mac, and the device forgets the Mac's login and host keys.
 | Keys menu | ⌘Tab, ⌘Space, ⌘Q — the shortcuts macOS never lets a window see — and a text sender |
 | Log, ⌘J | The event log along the bottom |
 | Pointer button | Pauses input without disconnecting |
+| Clipboard button | Clipboard sync, off until switched on and then remembered. What you copy here goes to the other Mac within a second; its clipboard comes here only if it shares it with this Mac |
 
 While the pointer is over the video, every key goes to the host, including ⌘Q and ⌘W. Move the
 pointer off the video to get your own keyboard back. Double-clicking the header zooms the window
@@ -580,7 +581,13 @@ The sidebar sits on the black bar beside the picture, so it costs no part of the
 | Touch / trackpad | **Touch** puts the pointer where your finger lands. **Trackpad** nudges it from where it is, like a laptop trackpad: slower, far more precise |
 | Keyboard | Opens the soft keyboard; typing is sent as text, and special keys as key events |
 | Info | Expands the panel: which Mac, address, route, resolution, frame rate, bitrate, codec, packets lost, jitter, round trip — read from the connection, not guessed |
+| Clipboard | Clipboard sync, off until switched on and then remembered. What you copy elsewhere goes to the Mac when you come back to OwnDesk, since a phone lets only the app in front read the clipboard; the Mac's clipboard comes to the phone if the Mac shares it with this phone. On an iPhone, iOS asks before OwnDesk reads the clipboard unless pasting from other apps is allowed for it in Settings |
 | End | Ends the session, after asking |
+
+A Mac shares its own clipboard only with devices it is told to: right-click the device in the Mac's
+sidebar and switch on **Share this Mac's clipboard with it**. It is off by default, because with it
+on, whatever anyone copies on that Mac, a password included, goes to the device whenever it has sync
+on. What a device copies reaches the Mac without that switch: it could type the same text anyway.
 
 The icons carry no labels. Hold one and its name appears.
 
@@ -738,16 +745,16 @@ Last run, all passing:
 | Suite | Size | What it proves |
 |---|---|---|
 | `packages/protocol` | 27 tests | Envelopes, receiver rules, pairing, TURN credentials, every schema |
-| `packages/swift` | 35 tests | The same vectors on Swift, plus peers and the control channel |
+| `packages/swift` | 36 tests | The same vectors on Swift, plus peers and the control channel |
 | `packages/terminal` | 9 tests | Key login, the shell, resize, exit status, refusals, the password fallback and OpenSSH-identical fingerprints, against a private sshd |
-| `apps/mac-agent` | 52 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
-| `apps/mac-controller` | 29 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264; and asking a host for terminal access, allowed, refused and by a stranger |
-| `apps/android` | 104 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings, pinned host keys and the terminal key messages |
+| `apps/mac-agent` | 53 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
+| `apps/mac-controller` | 32 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264; asking a host for terminal access, allowed, refused and by a stranger; and clipboard sync both ways, each only when switched on |
+| `apps/android` | 108 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings, pinned host keys and the terminal key messages |
 | `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
 | `scripts/test-ios-simulator.sh` | 5 UI tests, 12 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host; then it asks the host for terminal access, is allowed, and runs a command on a private sshd with no host key question |
-| `scripts/test-android-device.sh` | 8 checks | The Android app on a real phone, over adb on the same network: pairs with the real agent binary, opens its screen and taps it, asks for terminal access, is allowed, and runs a command on a private sshd with no host key question |
+| `scripts/test-android-device.sh` | 11 checks | The Android app on a real phone, over adb on the same network: pairs with the real agent binary, opens its screen and taps it, syncs a test clipboard both ways, asks for terminal access, is allowed, and runs a command on a private sshd with no host key question |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
-| `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
+| `npm run android-frames` | 16 frames | Every frame the phone can send, checked by the validator the host uses |
 
 The vectors are the ones that matter: if the Android app disagrees with a vector it disagrees with both
 Macs. After changing a schema or a key table, regenerate:
@@ -791,7 +798,8 @@ The short version:
 
 - The rendezvous server and TURN. Deferred in favour of Tailscale; the protocol still describes them.
 - Audio, in either direction.
-- Clipboard, file transfer, multiple monitors, local cursor rendering.
+- File transfer, multiple monitors, local cursor rendering. Clipboard sync is text only, not images
+  or files.
 - Waking a sleeping host.
 - Text selection beyond copying the screen, and mouse reporting, in the Android terminal.
 

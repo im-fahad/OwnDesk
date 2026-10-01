@@ -45,6 +45,13 @@ costs nothing in trust. Each Mac still decides who may control it:
 To end a pairing, unpair it. A phone only ever controls, so it is listed under "Devices that can
 control this one", with the same switch.
 
+- **Share this Mac's clipboard with it**, in the same menu, is off after pairing. On, that device
+  gets this Mac's clipboard while it has clipboard sync switched on during a session: once when the
+  sync starts, then on every change. What a device copies reaches this Mac without it.
+
+The clipboard button in the header switches clipboard sync for the Mac you are controlling. It is
+text only, and nothing about it is logged beyond how many characters went which way.
+
 Pair from either end: **Show a code** on one Mac and paste it on the other. A phone pairs from the
 same code, by scanning the QR with its camera. **Show full screen** fills the display with the code
 for a phone that struggles with the small one; it closes on a click, on Esc, or by itself when the

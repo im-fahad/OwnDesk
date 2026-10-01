@@ -134,7 +134,7 @@ public final class InputInjector: InputSink, @unchecked Sendable {
         case .text(let text):
             guard textLimiter.allow(now: now) else { return false }
             type(text)
-        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye:
+        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye, .clipboard, .clipboardSync:
             break
         }
         return true

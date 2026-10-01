@@ -23,6 +23,8 @@ export interface ProtocolCatalog {
   signaling_UNPAIR?: UnpairPayload;
   datachannel_bye?: ByeMessage;
   datachannel_capture_state?: CaptureStateMessage;
+  datachannel_clipboard?: ClipboardMessage;
+  datachannel_clipboard_sync?: ClipboardSyncMessage;
   datachannel_display_info?: DisplayInfoMessage;
   datachannel_hello?: HelloMessage;
   datachannel_key_down?: KeyDownMessage;
@@ -255,6 +257,24 @@ export interface CaptureStateMessage {
   ts: number;
   state: "active" | "paused_locked" | "paused_display_asleep" | "paused_error";
   detail?: string;
+}
+/**
+ * Clipboard text, in either direction, on the control channel. Only after clipboard_sync has turned it on for that direction. Never logged. The one data channel message allowed past 4 KB, up to 160 KB.
+ */
+export interface ClipboardMessage {
+  v: number;
+  type: "clipboard";
+  ts: number;
+  text: string;
+}
+/**
+ * From a controller: whether the person has switched clipboard sync on. From the host, in answer and whenever it changes: whether the host shares its own clipboard with this device, which is a per-device switch on the host, off by default.
+ */
+export interface ClipboardSyncMessage {
+  v: number;
+  type: "clipboard_sync";
+  ts: number;
+  enabled: boolean;
 }
 export interface DisplayInfoMessage {
   v: number;

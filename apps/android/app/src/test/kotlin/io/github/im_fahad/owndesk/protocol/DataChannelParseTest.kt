@@ -54,6 +54,22 @@ class DataChannelParseTest {
     }
 
     @Test
+    fun `clipboard text and the Mac's sharing state decode, and only clipboard may be large`() {
+        assertEquals(DataChannel.Incoming.Clipboard("copied 👋"),
+            DataChannel.parse("""{"v":1,"type":"clipboard","ts":0,"text":"copied 👋"}""", control))
+        val big = "x".repeat(30000)
+        assertEquals(DataChannel.Incoming.Clipboard(big),
+            DataChannel.parse("""{"v":1,"type":"clipboard","ts":0,"text":"$big"}""", control))
+        assertNull(DataChannel.parse("""{"v":1,"type":"clipboard","ts":0,"text":"${"x".repeat(40000)}"}""", control))
+        assertNull(DataChannel.parse("""{"v":1,"type":"clipboard","ts":0,"text":""}""", control))
+        assertEquals(DataChannel.Incoming.ClipboardShared(false),
+            DataChannel.parse("""{"v":1,"type":"clipboard_sync","ts":0,"enabled":false}""", control))
+        assertNull(DataChannel.parse("""{"v":1,"type":"clipboard_sync","ts":0,"enabled":"no"}""", control))
+        // Past 4 KB only clipboard text is allowed.
+        assertNull(DataChannel.parse("""{"v":1,"type":"bye","ts":0,"reason":"user","pad":"${"y".repeat(5000)}"}""", control))
+    }
+
+    @Test
     fun `bye decodes and carries its reason`() {
         assertEquals(
             DataChannel.Incoming.Bye("idle_timeout"),

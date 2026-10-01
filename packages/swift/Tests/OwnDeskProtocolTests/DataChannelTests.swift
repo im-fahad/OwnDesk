@@ -27,6 +27,8 @@ import Testing
             ("{\"v\":1,\"type\":\"ping\",\"ts\":0,\"nonce\":7}", .ping(nonce: 7), .control),
             ("{\"v\":1,\"type\":\"pong\",\"ts\":0,\"nonce\":4294967295}", .pong(nonce: 4294967295), .control),
             ("{\"v\":1,\"type\":\"bye\",\"ts\":0,\"reason\":\"idle_timeout\"}", .bye(.idleTimeout), .control),
+            ("{\"v\":1,\"type\":\"clipboard\",\"ts\":0,\"text\":\"copied 👋\"}", .clipboard("copied 👋"), .control),
+            ("{\"v\":1,\"type\":\"clipboard_sync\",\"ts\":0,\"enabled\":true}", .clipboardSync(enabled: true), .control),
         ]
         for (json, expected, channel) in samples {
             let frame = try decode(json, on: channel)
@@ -52,7 +54,11 @@ import Testing
                 Issue.record("unexpected error type \(error)")
             }
         }
-        rejects(String(repeating: "x", count: 5000), .tooLarge)
+        rejects(String(repeating: "x", count: 170_000), .tooLarge)
+        // Past 4 KB only clipboard text is allowed, up to its own limit.
+        rejects("{\"v\":1,\"type\":\"text\",\"ts\":1,\"text\":\"a\",\"pad\":\"\(String(repeating: "y", count: 5000))\"}", .tooLarge)
+        rejects("{\"v\":1,\"type\":\"clipboard\",\"ts\":1,\"text\":\"\(String(repeating: "x", count: 40000))\"}", .invalid("text"))
+        rejects("{\"v\":1,\"type\":\"clipboard_sync\",\"ts\":1,\"enabled\":\"yes\"}", .invalid("enabled"))
         rejects("{", .malformed)
         rejects("\"str\"", .malformed)
         rejects("[]", .malformed)

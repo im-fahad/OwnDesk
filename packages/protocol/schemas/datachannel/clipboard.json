@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owndesk.local/schemas/datachannel/clipboard.json",
+  "description": "Clipboard text, in either direction, on the control channel. Only after clipboard_sync has turned it on for that direction. Never logged. The one data channel message allowed past 4 KB, up to 160 KB.",
+  "type": "object",
+  "required": ["v", "type", "ts", "text"],
+  "properties": {
+    "v": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "clipboard" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 32768 }
+  }
+}

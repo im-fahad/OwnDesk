@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owndesk.local/schemas/datachannel/clipboard_sync.json",
+  "description": "From a controller: whether the person has switched clipboard sync on. From the host, in answer and whenever it changes: whether the host shares its own clipboard with this device, which is a per-device switch on the host, off by default.",
+  "type": "object",
+  "required": ["v", "type", "ts", "enabled"],
+  "properties": {
+    "v": { "$ref": "https://owndesk.local/schemas/common.json#/$defs/protocolVersion" },
+    "type": { "const": "clipboard_sync" },
+    "ts": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "enabled": { "type": "boolean" }
+  }
+}

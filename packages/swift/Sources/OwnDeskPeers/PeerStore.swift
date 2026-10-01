@@ -111,6 +111,11 @@ public final class PeerStore: @unchecked Sendable {
         try update(deviceId) { $0.mayControlUs = allowed }
     }
 
+    /// "Share this Mac's clipboard with it", per device.
+    public func setShareClipboard(_ deviceId: String, _ shared: Bool) throws {
+        try update(deviceId) { $0.shareClipboard = shared }
+    }
+
     /// Forgets a peer entirely, in both directions.
     @discardableResult
     public func forget(_ deviceId: String) throws -> Bool {

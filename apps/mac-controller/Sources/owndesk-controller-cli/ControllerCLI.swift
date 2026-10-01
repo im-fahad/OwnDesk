@@ -60,6 +60,8 @@ enum ControllerCLI {
             case .capture(let capture, let detail): print("  host capture: \(capture.rawValue)\(detail.map { " (\($0))" } ?? "")")
             case .remoteVideo: print("  video track received")
             case .log(let t): print("  log: \(t)")
+            case .clipboard(let text): print("  clipboard from the host: \(text.count) characters")
+            case .clipboardShared(let on): print("  host \(on ? "shares" : "does not share") its clipboard")
             }
         }
         func hasState(_ f: (SessionClient.State) -> Bool) -> Bool { lock.lock(); defer { lock.unlock() }; return states.contains(where: f) }

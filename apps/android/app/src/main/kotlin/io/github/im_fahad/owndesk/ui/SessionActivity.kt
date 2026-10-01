@@ -76,6 +76,13 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
     private lateinit var holdMark: View
     private lateinit var modeButton: ImageView
     private lateinit var infoButton: ImageView
+    private lateinit var clipboardButton: ImageView
+    /** Clipboard sync, remembered between sessions. Off by default. */
+    private var clipboardSync = false
+    /** The Mac shares its own clipboard with this phone; null until it says. */
+    private var macSharesClipboard: Boolean? = null
+    /** The text last sent or received, so a clipboard is not sent back to where it came from. */
+    private var clipboardSeen: String? = null
     private lateinit var infoPanel: LinearLayout
     private lateinit var captureBanner: TextView
     private var infoTicker: Runnable? = null
@@ -122,6 +129,9 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             listener = this,
         )
         session = remote
+        clipboardSync = getSharedPreferences("owndesk", Context.MODE_PRIVATE).getBoolean("clipboard_sync", false)
+        remote.setClipboardSync(clipboardSync)
+        tint(clipboardButton, clipboardSync)
 
         peerName = peer.name
         status.text = "connecting to ${peer.name}"
@@ -220,6 +230,8 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
         }
         icons.addView(modeButton)
         icons.addView(iconButton(R.drawable.ic_keys, "Keyboard") { toggleKeyboard() })
+        clipboardButton = iconButton(R.drawable.ic_clipboard, "Clipboard sync") { toggleClipboard() }
+        icons.addView(clipboardButton)
         infoButton = iconButton(R.drawable.ic_info, "Session info") { toggleInfo() }
         icons.addView(infoButton)
         icons.addView(iconButton(R.drawable.ic_end, "End session") { confirmEnd() })
@@ -422,6 +434,63 @@ class SessionActivity : AppCompatActivity(), RemoteSession.Listener {
             .setPositiveButton("End") { _, _ -> finish() }
             .setNegativeButton("Stay", null)
             .show()
+    }
+
+    // Clipboard ----------------------------------------------------------------------------------
+
+    /**
+     * Switches clipboard sync. On, what is copied on this phone goes to the Mac whenever OwnDesk
+     * comes back to the front (Android lets only the app in front read the clipboard), and the Mac's
+     * clipboard comes here if the Mac shares it with this phone.
+     */
+    private fun toggleClipboard() {
+        clipboardSync = !clipboardSync
+        getSharedPreferences("owndesk", Context.MODE_PRIVATE).edit().putBoolean("clipboard_sync", clipboardSync).apply()
+        tint(clipboardButton, clipboardSync)
+        session?.setClipboardSync(clipboardSync)
+        if (clipboardSync) {
+            clipboardSeen = null
+            sendLocalClipboard()
+            Toast.makeText(this, "Clipboard sync on. What you copy here goes to $peerName when you come back to OwnDesk.", Toast.LENGTH_LONG).show()
+        } else {
+            macSharesClipboard = null
+            Toast.makeText(this, "Clipboard sync off.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Back from another app: whatever was copied there goes over now.
+        if (hasFocus && clipboardSync) sendLocalClipboard()
+    }
+
+    private fun sendLocalClipboard() {
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val text = runCatching { manager.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() }.getOrNull()
+        if (text.isNullOrEmpty() || text == clipboardSeen) return
+        clipboardSeen = text
+        session?.sendClipboard(text)
+    }
+
+    override fun onClipboard(text: String) = runOnUiThread {
+        if (!clipboardSync) return@runOnUiThread
+        clipboardSeen = text
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        manager.setPrimaryClip(android.content.ClipData.newPlainText("OwnDesk", text))
+        Log.i("OwnDesk", "clipboard from $peerName: ${text.length} characters")
+    }
+
+    override fun onClipboardShared(shared: Boolean) = runOnUiThread {
+        val before = macSharesClipboard
+        macSharesClipboard = shared
+        if (clipboardSync && !shared && before != false) {
+            Toast.makeText(
+                this,
+                "$peerName keeps its clipboard to itself; what you copy here still goes there. To get its clipboard too, right-click this phone on $peerName and switch on “Share this Mac's clipboard with it”.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+        Log.i("OwnDesk", if (shared) "$peerName shares its clipboard" else "$peerName does not share its clipboard")
     }
 
     private fun toggleInfo() {

@@ -64,6 +64,12 @@ class RemoteSession(
          * unpaired there. The phone drops the Mac too, so both sides must pair again.
          */
         fun onTurnedAway() {}
+
+        /** The Mac's clipboard text, while clipboard sync is on. Never logged. */
+        fun onClipboard(text: String) {}
+
+        /** Whether the Mac shares its clipboard with this phone, which is a switch on the Mac. */
+        fun onClipboardShared(shared: Boolean) {}
     }
 
     private var client: SignalingClient? = null
@@ -218,6 +224,7 @@ class RemoteSession(
             override fun onChannelOpen(label: String) {
                 if (label == DataChannel.CONTROL) {
                     send(DataChannel.hello(appVersion, now()))
+                    if (clipboardSync) send(DataChannel.clipboardSync(true, now()))
                     listener.onLog("input ready")
                 }
             }
@@ -231,6 +238,9 @@ class RemoteSession(
                     }
                     is DataChannel.Incoming.Capture -> listener.onCapture(message.state, message.detail)
                     is DataChannel.Incoming.Bye -> if (!ended) listener.onEnded("the Mac ended the session: ${message.reason}")
+                    // Only while the person has sync on here; a Mac that sends anyway is not listened to.
+                    is DataChannel.Incoming.Clipboard -> if (clipboardSync) listener.onClipboard(message.text)
+                    is DataChannel.Incoming.ClipboardShared -> listener.onClipboardShared(message.enabled)
                     null -> Unit
                 }
             }
@@ -309,6 +319,20 @@ class RemoteSession(
     /** Input and control frames. Silently dropped before the channels open, which is correct. */
     fun send(message: JSONObject) {
         webrtc?.send(message)
+    }
+
+    @Volatile private var clipboardSync = false
+
+    /** Clipboard sync, as the person set it; sent again whenever the control channel opens. */
+    fun setClipboardSync(on: Boolean) {
+        clipboardSync = on
+        send(DataChannel.clipboardSync(on, now()))
+    }
+
+    /** This phone's clipboard text, for the Mac. Dropped unless clipboard sync is on. */
+    fun sendClipboard(text: String) {
+        if (!clipboardSync || text.isEmpty() || text.codePointCount(0, text.length) > DataChannel.CLIPBOARD_MAX_CODE_POINTS) return
+        send(DataChannel.clipboard(text, now()))
     }
 
     fun end() {

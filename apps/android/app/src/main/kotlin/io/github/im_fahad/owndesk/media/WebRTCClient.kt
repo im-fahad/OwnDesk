@@ -243,7 +243,8 @@ class WebRTCClient(
         val channel = channels[label] ?: return false
         if (channel.state() != RtcDataChannel.State.OPEN) return false
         val bytes = message.toString().toByteArray(StandardCharsets.UTF_8)
-        if (bytes.size > DataChannel.MAX_BYTES) return false
+        val limit = if (message.optString("type") == "clipboard") DataChannel.MAX_CLIPBOARD_BYTES else DataChannel.MAX_BYTES
+        if (bytes.size > limit) return false
         return channel.send(RtcDataChannel.Buffer(ByteBuffer.wrap(bytes), false))
     }
 

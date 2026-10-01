@@ -261,8 +261,9 @@ xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
 A real iPhone needs a team: README section 6.4 walks through it with a free Apple ID. Xcode 27 has
 no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
 
-Suite sizes, all passing on 2026-09-30: protocol 27, packages/swift 35, packages/terminal 9,
-agent 52, controller 29, android 104, OwnDeskTouch 26, end to end 17 steps, android frames 13. The
+Suite sizes, all passing on 2026-10-02: protocol 27, packages/swift 36, packages/terminal 9,
+agent 53, controller 32, android 108, OwnDeskTouch 26, end to end 17 steps, android frames 16, the
+Android device script 11 checks. The
 iPhone's UI tests (5, with 12 checks on the host) passed on 2026-09-30, the terminal stage included.
 
 ## 6. Things that cost time, so they should not cost it twice
@@ -582,6 +583,17 @@ known addresses. Only overlay addresses are taken, and on Android they are the l
 list hits its cap of six. Seen working: the phone, its MacBook record stripped of tailnet
 addresses, learned both back within seconds of opening the app at home.
 
+**Clipboard sync needed one larger message, and one switch.** Clipboard text rides the control
+channel as one `clipboard` message of up to 32768 code points, the only data channel message
+allowed past 4 KB (160 KB); every decoder, and the Android WebRTC layer's send check, had the 4 KB
+limit built in before it knew the type. A device's copies reach the Mac on the device's own say-so,
+since it could type the same text, but the Mac's clipboard goes out only to devices it was told to
+share with, because whatever anyone copies there, passwords included, would otherwise leave the
+Mac unasked. Each side notes the clipboard counter of text it was just given, so nothing echoes.
+The phones read the clipboard only when OwnDesk comes back to the front, which is all Android and
+iOS allow. Tests never touch a real clipboard: the in-process host takes a memory clipboard, and the
+headless agent with `--print-input` a printed one that starts with a known line.
+
 **JSch on Android has no ed25519 host keys.** It offers ECDSA and RSA only, so an SSH server with
 nothing but an ed25519 host key turns the phone away with "no matching host key type". Every Mac
 has ECDSA and RSA host keys as well, so it never shows on a real Mac; it did show on a test server
@@ -645,7 +657,7 @@ why a direct path is unavailable: on this network the home router offers no port
   them.
 - Audio from host to controller. Possible, but this WebRTC build can only take audio from a real
   input device on macOS, so it means carrying encoded audio on a data channel of our own.
-- Clipboard, file transfer, multiple monitors, local cursor rendering.
+- File transfer, multiple monitors, local cursor rendering. Clipboard sync is text only.
 - Waking a sleeping host. The Mac mini has `womp 1` on AC power, so a magic packet on the LAN would
   work; from outside the LAN it cannot, because a magic packet does not route over a tailnet.
 - Cancelling an attempt while it is connecting, on either controller.

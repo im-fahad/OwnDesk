@@ -25,6 +25,11 @@ public actor SessionClient {
         case rtt(Double)
         case remoteVideo
         case log(String)
+        /// Clipboard text from the host, while clipboard sync is on. The app puts it on this device's
+        /// clipboard; it is never logged.
+        case clipboard(String)
+        /// Whether the host shares its clipboard with this device, which is a switch on the host.
+        case clipboardShared(Bool)
     }
 
     public struct Dependencies: Sendable {
@@ -58,6 +63,7 @@ public actor SessionClient {
     private var resumeInFlight = false
     private var lastPath = "Direct"
     private var pingTask: Task<Void, Never>?
+    private var clipboardSync = false
     private var outstandingPings: [UInt32: Int64] = [:]
     private var reconnectTask: Task<Void, Never>?
     private var reconnectStartedAt: Int64?
@@ -117,6 +123,19 @@ public actor SessionClient {
     /// Input and control messages. Dropped silently until the data channels are open.
     public func send(_ message: DataChannelMessage) {
         webrtc?.send(message, ts: elapsed())
+    }
+
+    /// Clipboard sync for this session, as the person set it. Sent now if the session is up, and again
+    /// whenever the control channel opens, since a reconnect starts the host from scratch.
+    public func setClipboardSync(_ on: Bool) {
+        clipboardSync = on
+        webrtc?.send(.clipboardSync(enabled: on), ts: elapsed())
+    }
+
+    /// This device's clipboard text, for the host. Dropped unless clipboard sync is on.
+    public func sendClipboard(_ text: String) {
+        guard clipboardSync, !text.isEmpty, text.unicodeScalars.count <= Limits.clipboardMaxCodePoints else { return }
+        webrtc?.send(.clipboard(text), ts: elapsed())
     }
 
     /// Measured inbound video, for diagnosing a soft picture. Nil when no media is running.
@@ -368,6 +387,7 @@ public actor SessionClient {
     func mediaChannelOpened(_ label: ChannelLabel) {
         guard label == .control else { return }
         webrtc?.send(.hello(versions: Envelope.supportedVersions, app: deps.config.app, appVersion: deps.config.appVersion), ts: elapsed())
+        if clipboardSync { webrtc?.send(.clipboardSync(enabled: true), ts: elapsed()) }
     }
 
     func mediaFrame(_ frame: DataChannelFrame) {
@@ -384,6 +404,11 @@ public actor SessionClient {
             }
         case .bye(let reason):
             end("host ended the session: \(reason.rawValue)")
+        case .clipboard(let text):
+            // Only while the person has sync on here; a host that sends anyway is not listened to.
+            if clipboardSync { emit(.clipboard(text)) }
+        case .clipboardSync(let enabled):
+            emit(.clipboardShared(enabled))
         default:
             break
         }

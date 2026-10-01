@@ -32,6 +32,7 @@ enum OwnDeskAgentCLI {
       key y | key n       Allow or refuse the pending terminal key request
       devices             List trusted devices
       revoke <prefix>     Revoke a trusted device by device id prefix
+      share <prefix> on|off  Share this host's clipboard with a device (with --print-input, a test clipboard)
       access on|off       Remote Access kill switch
       end                 End the active session
       status              Show permissions and state
@@ -73,7 +74,8 @@ enum OwnDeskAgentCLI {
         if useFileIdentity { config.identityFile = config.dataDirectory.appendingPathComponent("identity.json") }
         if config.authorizedKeysFile == nil { config.authorizedKeysFile = config.dataDirectory.appendingPathComponent("authorized_keys") }
 
-        let agent = try Agent(config: config, input: printInput ? PrintedInput() : nil)
+        let agent = try Agent(config: config, input: printInput ? PrintedInput() : nil,
+                              clipboard: printInput ? PrintedClipboard() : nil)
         print("OwnDesk agent")
         print("  host name    \(config.hostName)")
         print("  device id    \(agent.identity.deviceId)")
@@ -122,6 +124,15 @@ enum OwnDeskAgentCLI {
                         let seen = d.lastSeen.map { Date(timeIntervalSince1970: Double($0) / 1000).description } ?? "never"
                         print("  \(d.fingerprint)  \(d.name) (\(d.type.rawValue))  id \(d.deviceId.prefix(16))…  last seen \(seen)")
                     }
+                case "share":
+                    // The device's name may have spaces: everything between "share" and on/off.
+                    guard parts.count >= 3, let state = parts.last, ["on", "off"].contains(state) else { print("usage: share <device id prefix or name> on|off"); continue }
+                    let who = parts.dropFirst().dropLast().joined(separator: " ")
+                    let matches = agent.peers.all.filter { $0.deviceId.hasPrefix(who) || $0.name == who }
+                    guard matches.count == 1 else { print("\(matches.count) devices match; be more specific"); continue }
+                    try? agent.peers.setShareClipboard(matches[0].deviceId, state == "on")
+                    await agent.coordinator.clipboardSharingChanged(for: matches[0].deviceId)
+                    print("clipboard \(state == "on" ? "shared with" : "not shared with") \(matches[0].name)")
                 case "revoke":
                     guard parts.count > 1 else { print("usage: revoke <device id prefix>"); continue }
                     let matches = await agent.coordinator.trustedDevices.filter { $0.deviceId.hasPrefix(parts[1]) }
@@ -213,11 +224,33 @@ final class PrintedInput: InputSink, @unchecked Sendable {
         case .keyDown(let code, let modifiers, _): line = "key_down \(code) \(modifiers.map(\.rawValue).joined(separator: "+"))"
         case .keyUp(let code, let modifiers): line = "key_up \(code) \(modifiers.map(\.rawValue).joined(separator: "+"))"
         case .text(let text): line = "text \(text.count) characters"
-        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye: return true
+        case .hello, .displayInfo, .captureState, .streamSettings, .ping, .pong, .bye, .clipboard, .clipboardSync: return true
         }
         print("input \(line)")
         return true
     }
 
     func releaseAll() {}
+}
+
+/// Stands in for this Mac's clipboard when testing a controller: it starts with a known line, so a
+/// test can see the host's clipboard arrive, and what a controller sends is printed as a count of
+/// characters, never as text (spec section 24). The real clipboard is never read or written.
+final class PrintedClipboard: ClipboardBridge, @unchecked Sendable {
+    private let lock = NSLock()
+    private var text = "owndesk-host-clipboard-42"
+    private var count = 1
+
+    var changeCount: Int { lock.withLock { count } }
+
+    func readText() -> String? { lock.withLock { text } }
+
+    func write(_ newText: String) -> Int {
+        print("clipboard \(newText.count) characters")
+        return lock.withLock {
+            text = newText
+            count += 1
+            return count
+        }
+    }
 }

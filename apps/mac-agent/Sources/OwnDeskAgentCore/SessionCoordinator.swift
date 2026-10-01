@@ -13,14 +13,16 @@ public actor SessionCoordinator {
         public var transport: any SignalingTransport
         public var mediaFactory: MediaSessionFactory?
         public var input: (any InputSink)?
+        public var clipboard: (any ClipboardBridge)?
         public var power: PowerAssertion?
         public var now: @Sendable () -> Int64
 
         public init(identity: any SigningIdentity, peers: PeerStore, config: AgentConfig, transport: any SignalingTransport,
-                    mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil, power: PowerAssertion? = nil,
+                    mediaFactory: MediaSessionFactory? = nil, input: (any InputSink)? = nil,
+                    clipboard: (any ClipboardBridge)? = nil, power: PowerAssertion? = nil,
                     now: @escaping @Sendable () -> Int64 = { nowMs() }) {
             self.identity = identity; self.peers = peers; self.config = config; self.transport = transport
-            self.mediaFactory = mediaFactory; self.input = input; self.power = power; self.now = now
+            self.mediaFactory = mediaFactory; self.input = input; self.clipboard = clipboard; self.power = power; self.now = now
         }
     }
 
@@ -45,6 +47,10 @@ public actor SessionCoordinator {
         var malformedCount = 0
         var malformedWindowStart: Int64
         var captureState: CaptureState = .active
+        /// The controller has clipboard sync switched on.
+        var clipboardWanted = false
+        /// The clipboard counter last sent or written by this session, so neither side echoes the other.
+        var clipboardSeen = -1
     }
 
     struct PendingPairing {
@@ -509,6 +515,16 @@ public actor SessionCoordinator {
             s.media?.send(.pong(nonce: nonce), ts: t)
         case .pong, .displayInfo, .captureState:
             session = s
+        case .clipboard(let text):
+            // Only when the person on that device switched sync on: nothing arrives unasked.
+            guard s.clipboardWanted, let clipboard = deps.clipboard else { session = s; return }
+            s.clipboardSeen = clipboard.write(text)
+            session = s
+            emit(.info("clipboard from \(s.deviceName): \(text.count) characters"))
+        case .clipboardSync(let enabled):
+            s.clipboardWanted = enabled
+            session = s
+            clipboardSyncChanged()
         case .streamSettings(let maxHeight, let maxFps, let prefer):
             session = s
             s.media?.applyStreamSettings(maxHeight: maxHeight, maxFps: maxFps, preferLatency: prefer == .latency)
@@ -520,6 +536,43 @@ public actor SessionCoordinator {
             session = s
             if deps.config.inputEnabled { deps.input?.inject(frame.message, sentAt: frame.ts, now: t) }
         }
+    }
+
+    // MARK: Clipboard sync
+
+    /// The session's clipboard state changed: the controller switched sync on or off, or the
+    /// switch here for that device moved. Tells the controller whether this Mac shares, and sends
+    /// this Mac's clipboard straight away when it does, then on every change.
+    private func clipboardSyncChanged() {
+        guard var s = session else { return }
+        let shares = deps.clipboard != nil && (deps.peers.peer(s.deviceId)?.sharesClipboard ?? false)
+        s.media?.send(.clipboardSync(enabled: shares), ts: now())
+        cancelTimer("clipboard")
+        guard shares, s.clipboardWanted else { return }
+        s.clipboardSeen = -1
+        session = s
+        sendClipboardIfChanged()
+    }
+
+    /// A device's "share this Mac's clipboard" switch moved here; tell it now if it is connected.
+    public func clipboardSharingChanged(for deviceId: String) {
+        guard session?.deviceId == deviceId else { return }
+        clipboardSyncChanged()
+    }
+
+    /// Looks at the clipboard once a second while sharing, and sends it when it changed.
+    private func sendClipboardIfChanged() {
+        guard var s = session, s.clipboardWanted, let clipboard = deps.clipboard,
+              deps.peers.peer(s.deviceId)?.sharesClipboard ?? false else { return }
+        let count = clipboard.changeCount
+        if count != s.clipboardSeen {
+            s.clipboardSeen = count
+            session = s
+            if let text = clipboard.readText(), !text.isEmpty, text.unicodeScalars.count <= Limits.clipboardMaxCodePoints {
+                s.media?.send(.clipboard(text), ts: now())
+            }
+        }
+        schedule("clipboard", afterMs: 1000) { [weak self] in await self?.sendClipboardIfChanged() }
     }
 
     func mediaRejected(_ error: DataChannelError) async {
@@ -579,7 +632,7 @@ public actor SessionCoordinator {
     private func tearDown(reason: SessionEndReason, notify: Bool) async {
         guard let s = session else { return }
         session = nil
-        for key in ["challenge", "resume", "housekeeping"] { cancelTimer(key) }
+        for key in ["challenge", "resume", "housekeeping", "clipboard"] { cancelTimer(key) }
         if notify {
             s.media?.send(.bye(reason), ts: now())
             send(.sessionEnd(SessionEndPayload(reason: reason)), to: s.deviceId, session: s.id, via: nil)

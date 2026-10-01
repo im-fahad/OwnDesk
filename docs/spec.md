@@ -838,7 +838,7 @@ Created by the controller before the offer. Host accepts by label and rejects un
 |---|---|---|---|
 | `input-lossy` | false | `maxRetransmits: 0` | `mouse_move`, `mouse_move_rel` |
 | `input-reliable` | true | reliable | `mouse_down`, `mouse_up`, `scroll`, `key_down`, `key_up`, `text` |
-| `control` | true | reliable | `hello`, `display_info`, `stream_settings`, `ping`, `pong`, `bye` |
+| `control` | true | reliable | `hello`, `display_info`, `capture_state`, `stream_settings`, `ping`, `pong`, `bye`, `clipboard`, `clipboard_sync` |
 
 Sender coalesces mouse moves to at most one per 4 ms. Scroll deltas are accumulated between sends on the sender side so a burst is a few messages, not hundreds.
 
@@ -846,7 +846,7 @@ Sender coalesces mouse moves to at most one per 4 ms. Scroll deltas are accumula
 
 ## 13. Data channel protocol
 
-JSON, UTF-8, one message per data channel frame, at most 4 KB. A binary encoding is a Phase 2 optimization, not an MVP need.
+JSON, UTF-8, one message per data channel frame, at most 4 KB, except `clipboard`, at most 160 KB. A binary encoding is a Phase 2 optimization, not an MVP need.
 
 Every message:
 
@@ -881,6 +881,8 @@ Every message:
 | `stream_settings` | controller to host | `max_height`, `max_fps`, `prefer`: `latency` or `quality` | Hints. Host clamps to its own limits. `max_height` becomes a `scaleResolutionDownBy` divisor and never upscales; a missing field restores automatic behaviour. `prefer: quality` keeps the resolution and spends frames, `latency` does the reverse. Sent again on every connect, since a new session starts at the host's defaults. |
 | `ping` / `pong` | both | `nonce` | Every 5 s. Three missed pongs trigger RECONNECTING. |
 | `bye` | both | `reason` | Same reasons as `SESSION_END`. |
+| `clipboard_sync` | both | `enabled` | From the controller: the person switched clipboard sync on or off, sent again on every connect. From the host, in answer and whenever it changes: whether the host shares its own clipboard with this device, a per-device switch on the host that is off unless switched on there. |
+| `clipboard` | both | `text`, 1 to 32768 code points | Plain text. Controller to host only while the controller has sync on; the host puts it on its clipboard. Host to controller only while the controller has sync on and the host shares with that device: once when that starts, then on every change. Neither side sends back text it was just given. Never logged, never stored, never on a server. |
 
 ### 13.3 Messages that must never exist
 
@@ -1334,7 +1336,6 @@ Phase 2:
 
 - Local cursor rendering with `cursor_position` and `cursor_shape` messages, capture with `showsCursor` false.
 - Multiple monitors and monitor selection through `display_list`.
-- Clipboard sync over `control`, opt-in per direction, never logged, never on the server.
 - File transfer over a dedicated reliable channel with approval, progress, cancel, and size limits.
 - Binary message encoding for the input channels.
 - Native-resolution capture on the LAN path.
