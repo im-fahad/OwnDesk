@@ -31,7 +31,8 @@ needs only Xcode and a Simulator. `scripts/test-android-device.sh` needs an Andr
 on the same network as the Mac; run it when you change the Android app's pairing, session or
 terminal, and say in the pull request whether you could. Neither changes anything outside its
 temporary folder: the host is headless with a throwaway identity, and the SSH server is your own
-`sshd` on a spare port with a key file of its own.
+`sshd` on a spare port with a key file of its own. The one exception is the phone's clipboard (the
+Simulator's, or the Android phone's), which ends up holding the host's test line.
 
 ## Pull requests
 

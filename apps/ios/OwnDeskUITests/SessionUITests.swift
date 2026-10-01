@@ -1,9 +1,9 @@
 import XCTest
 
 /// Pairs with a real Mac host and drives a session: taps, holds, two-finger taps, a pinch, trackpad
-/// mode, the keyboard and the key bar. It needs a host, so it skips unless one is named:
-/// scripts/test-ios-simulator.sh starts a headless one that prints every input it receives, runs
-/// this, and then checks the host saw each gesture as the right mouse or key event.
+/// mode, the keyboard, the key bar and clipboard sync. It needs a host, so it skips unless one is
+/// named: scripts/test-ios-simulator.sh starts a headless one that prints every input it receives,
+/// runs this, and then checks the host saw each gesture as the right mouse or key event.
 final class SessionUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -89,9 +89,28 @@ final class SessionUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         pause()
 
+        // Clipboard sync. The script put a line on the Simulator's clipboard and has the host share
+        // its own test clipboard with this iPhone. Switching sync on sends this iPhone's line to the
+        // host, once iOS's paste question is answered, and brings the host's line here.
+        app.buttons["session-clipboard"].tap()
+        allowPaste()
+        Thread.sleep(forTimeInterval: 3)
+        snap("clipboard")
+        app.buttons["session-clipboard"].tap()         // left off, as it was
+        pause()
+
         app.buttons["session-end"].tap()
         app.alerts.buttons["End"].tap()
         XCTAssertTrue(app.staticTexts["MACS YOU CAN CONTROL"].waitForExistence(timeout: 10), "the session did not close")
+    }
+
+    /// iOS asks before an app reads what another app copied. Someone would tap Allow Paste; the
+    /// question belongs to the system, so it is looked for there, and the app waits until it is
+    /// answered.
+    private func allowPaste() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.buttons["Allow Paste"]
+        if allow.waitForExistence(timeout: 10) { allow.tap() }
     }
 
     private func pause() {

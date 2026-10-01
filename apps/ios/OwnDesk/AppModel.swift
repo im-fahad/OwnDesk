@@ -88,6 +88,7 @@ final class AppModel {
             try? FileManager.default.removeItem(at: directory)
             UserDefaults.standard.removeObject(forKey: Self.pinsKey)
             UserDefaults.standard.removeObject(forKey: Self.terminalKey)
+            UserDefaults.standard.removeObject(forKey: "clipboardSync")
         }
         #endif
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

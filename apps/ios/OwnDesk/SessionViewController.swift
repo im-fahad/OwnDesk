@@ -238,10 +238,13 @@ final class SessionViewController: UIViewController {
         tint(clipboardButton, on: clipboardSync)
         let client = self.client
         let on = clipboardSync
-        Task { await client.setClipboardSync(on) }
+        // In this order: a clipboard sent before the host hears sync is on is dropped there.
+        Task { [weak self] in
+            await client.setClipboardSync(on)
+            if on { self?.sendLocalClipboard() }
+        }
         if clipboardSync {
             clipboardSeen = -1
-            sendLocalClipboard()
             showStatus("clipboard sync on", hideAfter: 2)
         } else {
             macSharesClipboard = nil

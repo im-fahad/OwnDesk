@@ -12,7 +12,8 @@
 # Three stages, each with its own pairing window, since a window lasts only 120 seconds:
 #   home      the home screen and the pairing sheet, no host needed
 #   session   pairs, opens the Mac's screen, drives the gestures and keys; the host then says
-#             whether each one arrived as the right input
+#             whether each one arrived as the right input. The host shares its test clipboard with
+#             the iPhone, and the clipboard button carries a line each way
 #   terminal  pairs, asks the host to allow the iPhone's terminal key (answered yes here), then opens
 #             a terminal on a private sshd (this Mac's own, run as you on a spare port, never the
 #             Remote Login setting) with no host key question, and runs a command that writes a file
@@ -132,6 +133,16 @@ run_tests OwnDeskUITests/HomeScreenUITests
 STATUS=$?
 
 echo "running the session UI test"
+# Once the iPhone is paired, the host shares its test clipboard with it, as someone would from the
+# device's menu on the Mac. The Simulator's clipboard gets a known line of its own, for the host.
+printf 'owndesk-iphone-clipboard-7' | xcrun simctl pbcopy "$DEVICE"
+(
+  for _ in $(seq 1 1200); do
+    name="$(sed -n 's/^paired "\(.*\)"$/\1/p' "$LOG" | tail -1)"
+    if [[ -n "$name" ]]; then echo "share $name on" >&3; exit 0; fi
+    sleep 0.1
+  done
+) &
 open_pairing
 TEST_RUNNER_OWNDESK_PAIR_CODE="$CODE" TEST_RUNNER_OWNDESK_SCREENSHOTS="${SCREENSHOTS:-}" \
   run_tests OwnDeskUITests/SessionUITests || STATUS=1
@@ -177,6 +188,18 @@ if grep -q "Accepted publickey for $(whoami)" "$SSHD_DIR/sshd.log"; then
   echo "  ok   the terminal logged in with the iPhone's key"
 else
   echo "  FAIL the terminal logged in with the iPhone's key"; STATUS=1
+fi
+check 'clipboard shared with' "the host shared its clipboard with the iPhone"
+if grep -q "clipboard from Test Mac: 25 characters" "$WORK/app.log"; then
+  echo "  ok   the host's clipboard reached the iPhone once sync was on"
+else
+  echo "  FAIL the host's clipboard reached the iPhone once sync was on"; STATUS=1
+fi
+check '^clipboard 26 characters' "the iPhone's clipboard reached the host"
+if [[ "$(xcrun simctl pbpaste "$DEVICE")" == "owndesk-host-clipboard-42" ]]; then
+  echo "  ok   the iPhone's clipboard now holds the host's line"
+else
+  echo "  FAIL the iPhone's clipboard now holds the host's line"; STATUS=1
 fi
 check 'terminal key of "iPhone 17[^"]*": installed' "the host installed the key only after it was allowed"
 if grep -qE '^ecdsa-sha2-nistp256 [A-Za-z0-9+/=]+ owndesk-[0-9a-f]{16} ' "$SSHD_DIR/authorized_keys"; then
