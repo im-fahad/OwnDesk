@@ -152,7 +152,20 @@ class MainActivity : AppCompatActivity() {
                 it.fingerprint.startsWith(prefix, ignoreCase = true) || it.deviceId.startsWith(prefix)
             }
             if (match == null) log("no paired Mac matches $prefix")
-            else lifecycleScope.launch { log(askForTerminalKey(match, port = 22).second) }
+            else lifecycleScope.launch { log(askForTerminalKey(match, port = intent.getIntExtra("ssh_port", 22)).second) }
+        }
+        // Drops a Mac from this phone alone, the way a test cleans up the host it paired with.
+        intent.getStringExtra("forget")?.let { prefix ->
+            val match = peers.all().firstOrNull {
+                it.fingerprint.startsWith(prefix, ignoreCase = true) || it.deviceId.startsWith(prefix)
+            }
+            if (match == null) log("no paired Mac matches $prefix")
+            else {
+                peers.forget(match.deviceId)
+                TerminalStore(this).forget(match.deviceId)
+                refreshPeers()
+                log("forgot ${match.name}")
+            }
         }
         // The phone's terminal key, so a test can put it on a Mac without reading the screen.
         if (intent.hasExtra("ssh_key")) {

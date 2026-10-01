@@ -1,0 +1,73 @@
+# The suites that need no phone, no screen and no permission, on every push and pull request.
+# The phone apps' end-to-end scripts (scripts/test-ios-simulator.sh, scripts/test-android-device.sh)
+# need a Simulator or a phone, so they are run by hand; CONTRIBUTING.md says when.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol-and-android:
+    name: Protocol and Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install
+        run: npm ci
+      - name: Protocol tests
+        run: npm test
+      - name: Type check
+        run: npm run typecheck
+      - name: Android unit tests
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - name: Android frames against the schemas
+        run: npm run android-frames
+
+  apple:
+    name: Swift packages and the Mac host
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          swift --version
+      - name: packages/swift
+        run: swift test --package-path packages/swift
+      - name: packages/terminal (against this runner's own sshd, on a spare port)
+        run: swift test --package-path packages/terminal
+      - name: apps/mac-agent
+        run: swift test --package-path apps/mac-agent
+      - name: apps/mac-controller
+        run: swift test --package-path apps/mac-controller
+      - name: apps/ios/OwnDeskTouch
+        run: swift test --package-path apps/ios/OwnDeskTouch
+      - name: End to end against the agent binary
+        run: |
+          npm ci
+          swift build --package-path apps/mac-agent --product owndesk-agent
+          npm run e2e

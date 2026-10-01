@@ -1,0 +1,48 @@
+name: Something is wrong
+description: OwnDesk does something it should not, or does not do something it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem goes to the private report described in SECURITY.md, never here.
+        Please leave out real addresses, fingerprints, pairing codes and logs that show them.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen
+      placeholder: 1. On the Mac… 2. On the phone…
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where
+      multiple: true
+      options: [Mac app, Android app, iPhone app, Terminal, Pairing, Screen control, Install or build]
+    validations:
+      required: true
+  - type: dropdown
+    id: path
+    attributes:
+      label: How the devices reach each other
+      options: [Same network, Tailscale, Not sure]
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      placeholder: OwnDesk commit or tag, macOS 27.0, Android 16 / iOS 27
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: What the app's log says
+      description: The Mac app's log panel (⌘J), `adb logcat -s 'OwnDesk:*'`, or the iPhone's log. Remove addresses and fingerprints first.
+      render: text

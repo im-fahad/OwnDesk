@@ -1,6 +1,7 @@
 # Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome. Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Before you start
 
@@ -25,7 +26,17 @@ keep `swift test` in `apps/ios/OwnDeskTouch` and `scripts/test-ios-simulator.sh`
 to the terminal should keep `swift test` in `packages/terminal` passing, which starts the Mac's own
 `sshd` on a spare port, and the emulator tests in the Android suite.
 
+Two end-to-end scripts run the phone apps against the real host binary. `scripts/test-ios-simulator.sh`
+needs only Xcode and a Simulator. `scripts/test-android-device.sh` needs an Android phone on adb and
+on the same network as the Mac; run it when you change the Android app's pairing, session or
+terminal, and say in the pull request whether you could. Neither changes anything outside its
+temporary folder: the host is headless with a throwaway identity, and the SSH server is your own
+`sshd` on a spare port with a key file of its own.
+
 ## Pull requests
+
+The automatic tests run on every pull request: the protocol, Android unit and Swift suites and the
+end-to-end run against the agent binary. The pull request template's checklist covers the rest.
 
 - Keep each pull request to one change, with tests for it.
 - Match the style of the code around it.

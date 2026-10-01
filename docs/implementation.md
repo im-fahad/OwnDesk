@@ -58,7 +58,7 @@ apps/mac-agent             hosting half (OwnDeskAgentCore) plus the headless own
 apps/mac-controller        controlling half (OwnDeskControllerCore) plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent binary from Node
 tools/web-harness          browser controller, development only
-scripts/                   build, install, uninstall, draw the app icons, test the iPhone app
+scripts/                   build, install, uninstall, draw the app icons, test the phone apps
 assets/                    AppIcon.icns, which the build copies into every bundle
 ```
 
@@ -244,6 +244,7 @@ npm run android-frames                     # the phone's frames against the real
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
 (cd apps/ios/OwnDeskTouch && swift test)
 scripts/test-ios-simulator.sh                  # the iPhone app in the Simulator, against a real host
+scripts/test-android-device.sh                 # the Android app on a phone over adb, against a real host
 
 scripts/build-apps.sh owndesk                  # dist/OwnDesk.app, ad-hoc signed
 scripts/install-owndesk.sh                     # ~/Applications, menu bar, starts at login
@@ -570,6 +571,18 @@ harness's own reader took the pairing requests away from the reader that approve
 pairing timed out. Tests answer from the harness's record of events instead. A related one: the
 pairing client checks one host at a time through a shared slot, so tests that pair must not run in
 parallel suites; the terminal key tests live in the serialized end-to-end suite.
+
+**JSch on Android has no ed25519 host keys.** It offers ECDSA and RSA only, so an SSH server with
+nothing but an ed25519 host key turns the phone away with "no matching host key type". Every Mac
+has ECDSA and RSA host keys as well, so it never shows on a real Mac; it did show on a test server
+that had only ed25519, which is why the Android test's server carries an ECDSA key too.
+
+**A test that types must know where the keys go.** The first run of the Android test typed its
+command after the terminal had failed to open; the phone was back on its home screen, Enter opened
+the first Mac in its list, a real one, and the next line went to that Mac's screen session. The
+script now types only while OwnDesk's terminal is in front, taps only once the session is with its
+own test host, refuses to run without the test host's fingerprint (an empty prefix matches every
+paired Mac), and stops otherwise.
 
 **Drive the phone from the computer, and read the phone's own log.** The terminal was tested on
 the real phone from a Mac: a debug intent opens a terminal on a named Mac, `uiautomator dump` finds

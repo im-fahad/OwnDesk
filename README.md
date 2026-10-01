@@ -672,6 +672,7 @@ everything else.
 | The terminal asks for a password, or refuses the login | The Mac does not have this device's key, or the user name is wrong | **Ask *that Mac* to allow this device** in Terminal settings, and click Allow on the Mac; or check the name with `whoami` there and paste the command |
 | Asking the Mac says it did not answer | It is off, asleep, or not letting others in | Switch on **Let others control it** on that Mac, then ask again |
 | Everything works at home, nothing away from home | The Mac was paired while its Tailscale was off, so no Tailscale address is known | Section 6.8: pin its `100.x.y.z:47500` address, from `tailscale ip -4` on that Mac |
+| An Android terminal says "no matching host key type" | The Mac's SSH server has only an ed25519 host key, which the Android app's SSH library cannot use | Every Mac has an ECDSA one too unless it was removed; `ssh-keygen -A` with sudo puts the standard set back |
 | `ls: Operation not permitted` in Documents, Desktop or Downloads, in the terminal only | macOS keeps those folders from remote logins until told otherwise | Behind Remote Login's ⓘ, turn on **Allow full disk access for remote users** |
 | The terminal refuses because the Mac's SSH key has changed | The pinned host key no longer matches: macOS was reinstalled, or someone is in the middle | If the Mac really changed, **Forget it** in Terminal settings; otherwise stop and look |
 
@@ -702,7 +703,7 @@ apps/mac-agent             the hosting half, plus the headless owndesk-agent CLI
 apps/mac-controller        the controlling half, plus owndesk-controller-cli
 tools/e2e                  headless end-to-end test driving the real agent from Node
 tools/web-harness          browser controller, development only
-scripts/                   build, install, uninstall, draw the app icons, test the iPhone app
+scripts/                   build, install, uninstall, draw the app icons, test the phone apps
 assets/                    AppIcon.icns, copied into every Mac bundle by the build
 ```
 
@@ -728,6 +729,7 @@ npm run harness                            # browser client at http://127.0.0.1:
 (cd apps/android && ANDROID_HOME=~/Library/Android/sdk ./gradlew :app:testDebugUnitTest)
 (cd apps/ios/OwnDeskTouch && swift test)
 scripts/test-ios-simulator.sh              # the iPhone app in the Simulator, against a real host
+scripts/test-android-device.sh             # the Android app on a phone over adb, against a real host
 ```
 
 Last run, all passing:
@@ -742,6 +744,7 @@ Last run, all passing:
 | `apps/android` | 104 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings, pinned host keys and the terminal key messages |
 | `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
 | `scripts/test-ios-simulator.sh` | 5 UI tests, 12 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host; then it asks the host for terminal access, is allowed, and runs a command on a private sshd with no host key question |
+| `scripts/test-android-device.sh` | 8 checks | The Android app on a real phone, over adb on the same network: pairs with the real agent binary, opens its screen and taps it, asks for terminal access, is allowed, and runs a command on a private sshd with no host key question |
 | `npm run e2e` | 17 steps | The real agent binary, driven from Node by an independent WebRTC stack |
 | `npm run android-frames` | 13 frames | Every frame the phone can send, checked by the validator the host uses |
 
@@ -795,5 +798,6 @@ The short version:
 
 ## 11. License
 
-[MIT](LICENSE). Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). Report security
-issues privately as described in [SECURITY.md](SECURITY.md).
+[MIT](LICENSE). Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[code of conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in
+[SECURITY.md](SECURITY.md).

@@ -1,0 +1,19 @@
+name: An idea
+description: Something OwnDesk could do. For anything larger than a fix, agree the design here before the work.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do that you cannot now
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: If it touches the protocol, say which messages. Nothing may run a command or grant access without a click on the Mac (README section 9).
+  - type: textarea
+    id: else
+    attributes:
+      label: What you do instead today
