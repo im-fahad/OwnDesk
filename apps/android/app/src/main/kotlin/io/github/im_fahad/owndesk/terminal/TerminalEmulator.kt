@@ -173,6 +173,76 @@ class TerminalEmulator(cols: Int, rows: Int, private val scrollbackLimit: Int = 
     /** What is on the screen now, as text. */
     fun screenText(): String = screen.joinToString("\n") { it.text() }.trimEnd()
 
+    // Selection. Rows here count from the oldest line of the scrollback, so a row keeps meaning the
+    // same line while new output pushes the screen into the history.
+
+    /** The scrollback and the screen together. */
+    val totalRows: Int get() = scrollback.size + rows
+
+    /** The row the view shows at [viewRow] when scrolled back [scrollOffset] lines. */
+    fun absoluteRow(viewRow: Int, scrollOffset: Int = 0): Int = scrollback.size - scrollOffset + viewRow
+
+    fun lineAt(row: Int): TerminalLine? = when {
+        row < 0 -> null
+        row < scrollback.size -> scrollback[row]
+        row - scrollback.size < rows -> screen[row - scrollback.size]
+        else -> null
+    }
+
+    /** The cell holding the character at [col]: the right half of a wide one belongs to its left. */
+    fun leadColumn(row: Int, col: Int): Int {
+        val line = lineAt(row) ?: return col
+        val c = col.coerceIn(0, line.cols - 1)
+        return if (c > 0 && line.attrs[c] and Attr.WIDE_TRAIL != 0) c - 1 else c
+    }
+
+    /**
+     * The word at a cell, as the first and last columns, for a long press. A word runs between
+     * blanks and brackets and quotes, so a path, an address or a flag is taken whole. Null on a blank.
+     */
+    fun wordAt(row: Int, col: Int): IntRange? {
+        val line = lineAt(row) ?: return null
+        val start = leadColumn(row, col)
+        if (!isWordCell(line, start)) return null
+        var first = start
+        while (first > 0 && (line.attrs[first - 1] and Attr.WIDE_TRAIL != 0 || isWordCell(line, first - 1))) first--
+        var last = start
+        while (last < line.cols - 1 && (line.attrs[last + 1] and Attr.WIDE_TRAIL != 0 || isWordCell(line, last + 1))) last++
+        return first..last
+    }
+
+    private fun isWordCell(line: TerminalLine, col: Int): Boolean {
+        val code = line.codes[col]
+        if (code == 0 || Character.isWhitespace(code)) return false
+        return code > 127 || code.toChar() !in WORD_BREAKS
+    }
+
+    /**
+     * The text from one cell to another, both included, in either order. A line the shell wrapped
+     * runs on into the next without a line break; any other line ends with one, its trailing blanks
+     * dropped, as a copy from a terminal should.
+     */
+    fun textBetween(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int): String {
+        val forward = fromRow < toRow || (fromRow == toRow && fromCol <= toCol)
+        val (r0, c0, r1, c1) = if (forward) listOf(fromRow, fromCol, toRow, toCol) else listOf(toRow, toCol, fromRow, fromCol)
+        val out = StringBuilder()
+        for (row in r0.coerceAtLeast(0)..r1.coerceAtMost(totalRows - 1)) {
+            val line = lineAt(row) ?: continue
+            val first = if (row == r0) leadColumn(row, c0) else 0
+            val last = if (row == r1) c1.coerceIn(0, line.cols - 1) else line.cols - 1
+            val piece = StringBuilder()
+            for (i in first..last) {
+                if (line.attrs[i] and Attr.WIDE_TRAIL != 0) continue
+                piece.appendCodePoint(if (line.codes[i] == 0) 32 else line.codes[i])
+                line.extra?.get(i)?.let { piece.append(it) }
+            }
+            val runsOn = line.wrapped && row != r1
+            out.append(if (runsOn) piece else piece.trimEnd(' '))
+            if (row != r1 && !runsOn) out.append('\n')
+        }
+        return out.toString()
+    }
+
     // Writing
 
     /** Feeds what the shell printed. UTF-8 sequences may be split across calls. */
@@ -895,6 +965,9 @@ class TerminalEmulator(cols: Int, rows: Int, private val scrollbackLimit: Int = 
 
     companion object {
         private fun defaultTabs(cols: Int) = BooleanArray(cols) { it > 0 && it % 8 == 0 }
+
+        /** What ends a word for a long press, besides blanks. */
+        private const val WORD_BREAKS = "\"'`()[]{}<>,;|"
 
         /** DEC special graphics, the box-drawing set programs like tmux and htop still use. */
         private val LINE_DRAWING = intArrayOf(

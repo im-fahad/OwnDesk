@@ -6,9 +6,13 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.Rect
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.GestureDetector
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
@@ -26,7 +30,9 @@ import kotlin.math.roundToInt
  * It asks the keyboard for raw keys rather than text, the way a terminal must: autocorrect and
  * word suggestions have no place in a shell, and a key like Return has to arrive as one. A finger
  * scrolls back through what went by, two fingers change the text size, and a tap brings the
- * keyboard up.
+ * keyboard up. A long press selects the word under it, the way text is selected anywhere else on
+ * the phone: the finger drags on to take more, the handles adjust it, and the system's floating
+ * menu copies it.
  */
 class TerminalView(context: Context) : View(context), TerminalEmulator.Listener {
     interface Host {
@@ -69,11 +75,27 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
     private val palette = IntArray(256)
     private val glyph = CharArray(2)
 
+    /** A selected run of text: the cell where it began and the one it reaches, in emulator rows. */
+    private class Cell(val row: Int, val col: Int)
+    private var anchor: Cell? = null
+    private var reach: Cell? = null
+    /** Which end the finger is moving: the long press's own drag moves [reach], a handle its end. */
+    private var dragging: DragEnd? = null
+    private enum class DragEnd { ANCHOR, REACH }
+    /** How far below its text the finger held a handle, so the end follows the text, not the finger. */
+    private var dragOffsetY = 0f
+    private var actionMode: ActionMode? = null
+    private val selectionFill = Paint().apply { color = SELECTION }
+    private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CURSOR }
+
+    val hasSelection: Boolean get() = anchor != null
+
     private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent): Boolean = true
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
-            showKeyboard()
+            // A tap ends a selection first; the next one brings the keyboard.
+            if (hasSelection) clearSelection() else showKeyboard()
             return true
         }
 
@@ -85,13 +107,14 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
             if (lines != 0) {
                 scrollRemainder -= lines * cellHeight
                 scrollOffset = (scrollOffset - lines).coerceIn(0, em.scrollback.size)
+                actionMode?.invalidateContentRect()
                 invalidate()
             }
             return true
         }
 
         override fun onLongPress(e: MotionEvent) {
-            onLongPress?.invoke()
+            startSelection(e.x, e.y)
         }
     })
 
@@ -108,8 +131,8 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
         }
     })
 
-    /** Long press, for a paste menu the screen decides on. */
-    var onLongPress: (() -> Unit)? = null
+    /** Paste from the selection menu; the screen owns the clipboard and the paste itself. */
+    var onPaste: (() -> Unit)? = null
 
     init {
         isFocusable = true
@@ -156,6 +179,8 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
         if (c == columns && r == rows) return
         columns = c
         rows = r
+        // Lines rewrap at a new width, so the cells a selection named are no longer the same text.
+        clearSelection()
         val em = emulator
         if (em == null) {
             emulator = TerminalEmulator(c, r, listener = this)
@@ -210,6 +235,7 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
                 val line = em.line(row, scrollOffset)
                 val y = top + row * cellHeight
                 drawBackgrounds(canvas, line, left, y)
+                drawSelection(canvas, em.absoluteRow(row, scrollOffset), left, y)
                 drawGlyphs(canvas, line, left, y)
             }
             if (scrollOffset == 0 && em.cursorVisible && em.cursorRow < rows) {
@@ -231,8 +257,41 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
                     fill.style = Paint.Style.FILL
                 }
             }
+            drawHandles(canvas, em, left, top)
         }
     }
+
+    /** The selection's start and end, in reading order. */
+    private fun ordered(): Pair<Cell, Cell>? {
+        val a = anchor ?: return null
+        val b = reach ?: return null
+        return if (a.row < b.row || (a.row == b.row && a.col <= b.col)) a to b else b to a
+    }
+
+    private fun drawSelection(canvas: Canvas, row: Int, left: Float, y: Float) {
+        val (start, end) = ordered() ?: return
+        if (row < start.row || row > end.row) return
+        val first = if (row == start.row) start.col else 0
+        val last = if (row == end.row) end.col else columns - 1
+        if (last < first) return
+        canvas.drawRect(left + first * cellWidth, y, left + (last + 1) * cellWidth, y + cellHeight, selectionFill)
+    }
+
+    /** A drop under each end of the selection, to drag it by. */
+    private fun drawHandles(canvas: Canvas, em: TerminalEmulator, left: Float, top: Float) {
+        val (start, end) = ordered() ?: return
+        val radius = handleRadius()
+        for ((cell, atEnd) in listOf(start to false, end to true)) {
+            val viewRow = cell.row - em.absoluteRow(0, scrollOffset)
+            if (viewRow !in 0 until rows) continue
+            val x = left + (if (atEnd) cell.col + 1 else cell.col) * cellWidth
+            val y = top + (viewRow + 1) * cellHeight
+            canvas.drawRect(x - 1.5f, y - cellHeight, x + 1.5f, y, handleFill)
+            canvas.drawCircle(x, y + radius, radius, handleFill)
+        }
+    }
+
+    private fun handleRadius(): Float = (cellHeight * 0.45f).coerceAtLeast(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 7f, resources.displayMetrics))
 
     private fun drawBackgrounds(canvas: Canvas, line: TerminalLine, left: Float, y: Float) {
         var col = 0
@@ -330,10 +389,189 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
     // Touch
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && hasSelection) {
+            dragging = handleAt(event.x, event.y)
+            val held = when (dragging) { DragEnd.ANCHOR -> anchor; DragEnd.REACH -> reach; null -> null }
+            val em = emulator
+            if (held != null && em != null) {
+                val rowMiddle = paddingTop + (held.row - em.absoluteRow(0, scrollOffset) + 0.5f) * cellHeight
+                dragOffsetY = event.y - rowMiddle
+                actionMode?.finish()
+                return true
+            }
+        }
+        if (dragging != null) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> moveSelection(event.x, event.y - dragOffsetY)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    dragging = null
+                    dragOffsetY = 0f
+                    showSelectionMenu()
+                    // Resets the detector without a release, which it would take for a tap that
+                    // clears the selection just made.
+                    val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+                    gestures.onTouchEvent(cancel)
+                    cancel.recycle()
+                }
+            }
+            return true
+        }
         scaler.onTouchEvent(event)
         if (!scaler.isInProgress) gestures.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) scrollRemainder = 0f
         return true
+    }
+
+    /** The emulator cell under a point, clamped to the grid. */
+    private fun cellAt(x: Float, y: Float, em: TerminalEmulator): Cell {
+        val viewRow = ((y - paddingTop) / cellHeight).toInt().coerceIn(0, rows - 1)
+        val col = ((x - paddingLeft) / cellWidth).toInt().coerceIn(0, columns - 1)
+        val row = em.absoluteRow(viewRow, scrollOffset)
+        return Cell(row, em.leadColumn(row, col))
+    }
+
+    private fun startSelection(x: Float, y: Float) {
+        val em = emulator ?: return
+        synchronized(em) {
+            val cell = cellAt(x, y, em)
+            val word = em.wordAt(cell.row, cell.col)
+            if (word == null) {
+                // A blank: nothing to select, but paste and select-all are still useful here.
+                anchor = null
+                reach = null
+            } else {
+                anchor = Cell(cell.row, word.first)
+                reach = Cell(cell.row, word.last)
+                dragging = DragEnd.REACH
+                dragOffsetY = 0f
+            }
+        }
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        invalidate()
+        if (dragging == null) showSelectionMenu(x, y)
+    }
+
+    private fun moveSelection(x: Float, y: Float) {
+        val em = emulator ?: return
+        synchronized(em) {
+            // Near the top or bottom edge the view scrolls, so a selection can run past one screen.
+            if (y < paddingTop + cellHeight / 2 && !em.altActive) scrollOffset = (scrollOffset + 1).coerceAtMost(em.scrollback.size)
+            if (y > height - paddingBottom - cellHeight / 2) scrollOffset = (scrollOffset - 1).coerceAtLeast(0)
+            val cell = cellAt(x, y, em)
+            when (dragging) {
+                DragEnd.ANCHOR -> anchor = cell
+                DragEnd.REACH -> reach = cell
+                null -> {}
+            }
+        }
+        invalidate()
+    }
+
+    /** Which handle a touch lands on, if any: generous, since a fingertip covers several cells. */
+    private fun handleAt(x: Float, y: Float): DragEnd? {
+        val em = emulator ?: return null
+        val a = anchor ?: return null
+        val b = reach ?: return null
+        val reachDistance = handleRadius() * 3
+        val top = em.absoluteRow(0, scrollOffset)
+        fun distance(cell: Cell, atEnd: Boolean): Float {
+            val viewRow = cell.row - top
+            if (viewRow !in 0 until rows) return Float.MAX_VALUE
+            val hx = paddingLeft + (if (atEnd) cell.col + 1 else cell.col) * cellWidth
+            val hy = paddingTop + (viewRow + 1) * cellHeight + handleRadius()
+            return kotlin.math.hypot(x - hx, y - hy)
+        }
+        val aFirst = a.row < b.row || (a.row == b.row && a.col <= b.col)
+        val da = distance(a, !aFirst)
+        val db = distance(b, aFirst)
+        val nearest = minOf(da, db)
+        if (nearest > reachDistance) return null
+        return if (da <= db) DragEnd.ANCHOR else DragEnd.REACH
+    }
+
+    /** The selected text, or null with nothing selected. */
+    fun selectedText(): String? {
+        val em = emulator ?: return null
+        val a = anchor ?: return null
+        val b = reach ?: return null
+        return synchronized(em) { em.textBetween(a.row, a.col, b.row, b.col) }
+    }
+
+    fun clearSelection() {
+        anchor = null
+        reach = null
+        dragging = null
+        actionMode?.finish()
+        actionMode = null
+        invalidate()
+    }
+
+    /** Everything on the screen now, for Select all. */
+    private fun selectScreen() {
+        val em = emulator ?: return
+        synchronized(em) {
+            scrollOffset = 0
+            anchor = Cell(em.absoluteRow(0), 0)
+            reach = Cell(em.absoluteRow(rows - 1), columns - 1)
+        }
+        invalidate()
+        showSelectionMenu()
+    }
+
+    private fun copySelection() {
+        val text = selectedText() ?: return
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("terminal", text))
+        clearSelection()
+    }
+
+    /** The system's floating menu, over the selection or where the finger was. */
+    private fun showSelectionMenu(x: Float = -1f, y: Float = -1f) {
+        actionMode?.finish()
+        actionMode = startActionMode(object : ActionMode.Callback2() {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                if (hasSelection) menu.add(Menu.NONE, MENU_COPY, 0, android.R.string.copy)
+                menu.add(Menu.NONE, MENU_PASTE, 1, android.R.string.paste)
+                menu.add(Menu.NONE, MENU_ALL, 2, android.R.string.selectAll)
+                return true
+            }
+
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                when (item.itemId) {
+                    MENU_COPY -> copySelection()
+                    MENU_PASTE -> { clearSelection(); onPaste?.invoke() }
+                    MENU_ALL -> selectScreen()
+                }
+                return true
+            }
+
+            override fun onDestroyActionMode(mode: ActionMode) {
+                if (actionMode === mode) actionMode = null
+            }
+
+            override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
+                val em = emulator
+                val range = ordered()
+                if (em == null || range == null) {
+                    val px = if (x >= 0) x.toInt() else width / 2
+                    val py = if (y >= 0) y.toInt() else height / 2
+                    outRect.set(px, py, px + 1, py + 1)
+                    return
+                }
+                val top = em.absoluteRow(0, scrollOffset)
+                val firstRow = (range.first.row - top).coerceIn(0, rows - 1)
+                val lastRow = (range.second.row - top).coerceIn(0, rows - 1)
+                val oneRow = firstRow == lastRow
+                val l = if (oneRow) range.first.col else 0
+                val r = if (oneRow) range.second.col + 1 else columns
+                outRect.set(
+                    (paddingLeft + l * cellWidth).toInt(), (paddingTop + firstRow * cellHeight).toInt(),
+                    (paddingLeft + r * cellWidth).toInt(), (paddingTop + (lastRow + 1) * cellHeight).toInt(),
+                )
+            }
+        }, ActionMode.TYPE_FLOATING)
     }
 
     fun showKeyboard() {
@@ -500,6 +738,7 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
     }
 
     private fun send(bytes: ByteArray) {
+        if (hasSelection) clearSelection()
         if (ctrlPending) ctrlPending = false
         if (altPending) altPending = false
         if (scrollOffset != 0) {
@@ -509,16 +748,14 @@ class TerminalView(context: Context) : View(context), TerminalEmulator.Listener 
         host?.send(bytes)
     }
 
-    /** What is on the screen now, for copying. */
-    fun screenText(): String {
-        val em = emulator ?: return ""
-        return synchronized(em) { em.screenText() }
-    }
-
     companion object {
         const val BACKGROUND = 0xFF1F1F1F.toInt()
         const val FOREGROUND = 0xFFD4D4D4.toInt()
         const val CURSOR = 0xFF4D8EF7.toInt()
+        const val SELECTION = 0x664D8EF7
+        private const val MENU_COPY = 1
+        private const val MENU_PASTE = 2
+        private const val MENU_ALL = 3
         private const val KeyCharacterMap_COMBINING = android.view.KeyCharacterMap.COMBINING_ACCENT
     }
 }

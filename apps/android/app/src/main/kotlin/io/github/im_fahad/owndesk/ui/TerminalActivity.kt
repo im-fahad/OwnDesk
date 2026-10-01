@@ -20,7 +20,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -182,7 +181,7 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
         terminal = TerminalView(this).apply {
             host = this@TerminalActivity
             setPadding(dp(4), dp(4), dp(4), dp(2))
-            onLongPress = { showEditMenu() }
+            onPaste = { paste() }
         }
         stage.addView(terminal, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         card = LinearLayout(this).apply {
@@ -267,25 +266,6 @@ class TerminalActivity : AppCompatActivity(), TerminalView.Host, SshShell.Listen
         cardSpinner.visibility = if (busy) View.VISIBLE else View.GONE
         cardButtons.visibility = if (busy) View.GONE else View.VISIBLE
         card.visibility = View.VISIBLE
-    }
-
-    private fun showEditMenu() {
-        PopupMenu(this, terminal).apply {
-            menu.add("Paste")
-            menu.add("Copy what is on screen")
-            setOnMenuItemClickListener { item ->
-                when (item.title) {
-                    "Paste" -> paste()
-                    else -> {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("terminal", terminal.screenText()))
-                        Toast.makeText(this@TerminalActivity, "Copied.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                true
-            }
-            show()
-        }
     }
 
     private fun paste() {

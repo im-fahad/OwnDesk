@@ -387,4 +387,51 @@ class TerminalEmulatorTest {
         t.feed("ab\r\n\r\ncd")
         assertEquals("ab\n\ncd", t.screenText())
     }
+
+    // Selection
+
+    @Test
+    fun `a long press takes a whole path or flag as one word, and nothing on a blank`() {
+        val (t, _) = terminal(cols = 30, rows = 2)
+        t.feed("ls -la ~/src/app.kt \"quoted\"")
+        val row = t.absoluteRow(0)
+        assertEquals(7..18, t.wordAt(row, 10))
+        assertEquals(3..5, t.wordAt(row, 3))
+        assertEquals("quotes end a word", 21..26, t.wordAt(row, 23))
+        assertNull(t.wordAt(row, 6))
+        assertNull(t.wordAt(row, 29))
+    }
+
+    @Test
+    fun `selected text keeps line breaks, drops trailing blanks, and joins a wrapped line`() {
+        val (t, _) = terminal(cols = 5, rows = 4)
+        t.feed("one\r\nabcdefg\r\nz")
+        val top = t.absoluteRow(0)
+        // "abcde" wrapped into "fg": copied as one line.
+        assertEquals("one\nabcdefg\nz", t.textBetween(top, 0, top + 3, 4))
+        // Either order gives the same text, and a part of a line is just that part.
+        assertEquals("ne\nab", t.textBetween(top + 1, 1, top, 1))
+        assertEquals("cdefg", t.textBetween(top + 1, 2, top + 2, 1))
+    }
+
+    @Test
+    fun `a selection names the same text after the screen scrolls into the history`() {
+        val (t, _) = terminal(cols = 6, rows = 2)
+        t.feed("first\r\nsecond")
+        val row = t.absoluteRow(0)
+        assertEquals("first", t.textBetween(row, 0, row, 5))
+        t.feed("\r\nthird\r\nfourth")
+        assertEquals(2, t.scrollback.size)
+        assertEquals("first", t.textBetween(row, 0, row, 5))
+    }
+
+    @Test
+    fun `a wide character is selected whole from either half`() {
+        val (t, _) = terminal(cols = 6, rows = 1)
+        t.feed("a\u4e2db")
+        val row = t.absoluteRow(0)
+        assertEquals(1, t.leadColumn(row, 2))
+        assertEquals("\u4e2db", t.textBetween(row, 2, row, 3))
+        assertEquals(0..3, t.wordAt(row, 2))
+    }
 }

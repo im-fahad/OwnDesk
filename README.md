@@ -653,7 +653,9 @@ asks again.
 
 On Android a key bar under the terminal gives what a phone keyboard lacks: Esc, Tab, Ctrl and Alt
 for the next key, the arrows, Home, End, Page Up and Down, a few symbols, and paste. Pinch changes
-the text size, a drag scrolls back, and a long press offers paste and a copy of what is on screen.
+the text size, and a drag scrolls back. A long press selects the word under it, a path or an address
+taken whole; keep dragging, or drag the handles, to take more, then Copy from the floating menu, which
+also has Paste and Select all.
 Turned sideways, the header and status bar make way for more rows. On the iPhone, SwiftTerm's own
 bar above the keyboard gives Esc, Ctrl, Tab and the arrows, and a drag scrolls back. On the Mac the
 terminal is an ordinary window: ⌘C and ⌘V work, ⌘W closes it and ends the shell, and the shell sees
@@ -749,7 +751,7 @@ Last run, all passing:
 | `packages/terminal` | 9 tests | Key login, the shell, resize, exit status, refusals, the password fallback and OpenSSH-identical fingerprints, against a private sshd |
 | `apps/mac-agent` | 53 tests | Flows on an in-memory transport, a real WebSocket, libwebrtc on both ends in one process |
 | `apps/mac-controller` | 32 tests | Geometry, key maps, the offer's codec preference, and in-process agent round trips with real video: as an iPhone, and at full desktop sizes, which must arrive as H.264; asking a host for terminal access, allowed, refused and by a stranger; and clipboard sync both ways, each only when switched on |
-| `apps/android` | 108 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator, the SSH key encodings, pinned host keys and the terminal key messages |
+| `apps/android` | 112 tests | The same vectors on Kotlin, plus gestures, pointer mapping, SDP and QR decoding, the terminal emulator and its text selection, the SSH key encodings, pinned host keys and the terminal key messages |
 | `apps/ios/OwnDeskTouch` | 26 tests | The Android app's gesture and pointer cases in Swift, and the keyboard table against the host's |
 | `scripts/test-ios-simulator.sh` | 5 UI tests, 16 checks | The iPhone app in the Simulator, paired with the real agent binary, each gesture checked on the host; clipboard sync, a line each way, with iOS's paste question answered; then it asks the host for terminal access, is allowed, and runs a command on a private sshd with no host key question |
 | `scripts/test-android-device.sh` | 11 checks | The Android app on a real phone, over adb on the same network: pairs with the real agent binary, opens its screen and taps it, syncs a test clipboard both ways, asks for terminal access, is allowed, and runs a command on a private sshd with no host key question |
@@ -801,7 +803,7 @@ The short version:
 - File transfer, multiple monitors, local cursor rendering. Clipboard sync is text only, not images
   or files.
 - Waking a sleeping host.
-- Text selection beyond copying the screen, and mouse reporting, in the Android terminal.
+- Mouse reporting in the Android terminal.
 
 ---
 

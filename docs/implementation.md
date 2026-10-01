@@ -196,7 +196,12 @@ the alternate screen, 256 and true colour, wide characters and combining marks, 
 answered that `zsh` themes and `vim` send. It has no Android in it, so it is tested on the JVM
 with a set of sequence cases, and was replayed against a captured shell session while it was
 written. `TerminalView` draws it on a Canvas and asks the keyboard for raw keys the way Termux
-does, with a `TYPE_NULL` input connection, so autocorrect stays out of the shell. `SshShell` is
+does, with a `TYPE_NULL` input connection, so autocorrect stays out of the shell. A selection is
+held as emulator rows counted from the oldest scrollback line, so it stays on the same text while
+output pushes the screen into the history; the emulator turns it into text (`textBetween`, joining
+lines the shell wrapped), and the view draws it with handles and the system's floating action mode.
+The release that ends a handle drag goes to the gesture detector as a cancel, since it would
+otherwise count as a tap and clear the selection. `SshShell` is
 JSch (the maintained mwiede fork), chosen because it is pure Java and takes an `Identity` of its
 own, which is how the phone's Keystore key signs the login without ever being exported:
 `DeviceSshKey` encodes the public key and the signature the way RFC 5656 wants them.
@@ -667,8 +672,7 @@ why a direct path is unavailable: on this network the home router offers no port
   down reaches the Mac once, not repeated, since iOS sends no repeat events for it. While the app is
   in the background iOS suspends it, so a session there survives only if the app comes back within
   the reconnect window.
-- The Android terminal has no text selection beyond copying what is on screen, and no mouse
-  reporting. The iPhone's terminal has run only in the Simulator.
+- The Android terminal has no mouse reporting. The iPhone's terminal has run only in the Simulator.
 - The Android phone ignores `pong`, so it has no round trip time of its own from the control channel (the
   info panel takes one from `getStats` instead), there is no ping keepalive from it, and it does
   not reconnect by itself when the network changes. It does now read `display_info`,
