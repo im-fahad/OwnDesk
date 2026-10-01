@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.im_fahad.owndesk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.2.0-dev"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildFeatures {

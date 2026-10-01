@@ -34,7 +34,7 @@ public struct ControllerConfig: Sendable {
         authTimeoutSeconds: Int = 15,
         negotiateTimeoutSeconds: Int = 30,
         app: AppName = .macController,
-        appVersion: String = "0.2.0-dev"
+        appVersion: String = "0.3.0"
     ) {
         self.deviceName = deviceName
         self.dataDirectory = dataDirectory
