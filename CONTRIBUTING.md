@@ -11,6 +11,33 @@ Issues and pull requests are welcome. Everyone taking part follows the
   breaks one of them will not be merged, however useful it is.
 - For anything larger than a fix, open an issue first so the design can be agreed before the work.
 
+## How a change gets in
+
+```mermaid
+flowchart TD
+    A{How big?} -->|A fix| D[Branch from main]
+    A -->|Anything larger| B[Open an issue,<br/>agree the design]
+    B --> C{Touches the protocol?}
+    C -->|yes| C1[Change docs/spec.md first,<br/>in the same pull request]
+    C -->|no| D
+    C1 --> D
+    D --> E[Make the change, with tests]
+    E --> F[Run every suite you touched,<br/>and a phone script if a phone app changed]
+    F --> G[Open the pull request,<br/>fill in its checklist]
+    G --> H[The automatic tests run]
+    H --> I{Green, and the<br/>security rules kept?}
+    I -->|yes| J[Reviewed and merged]
+    I -->|no| E
+```
+
+## First time
+
+1. Install Node 24 or newer and Xcode 26 or newer; for the Android app, Android Studio (it brings
+   a JDK 17 and the Android SDK).
+2. Clone the repository and run `npm install` at its root.
+3. Run `npm test` and `(cd packages/swift && swift test)` to check the setup. Both should pass on
+   a fresh clone, with no permissions and no devices.
+
 ## Building and testing
 
 The commands are in [README.md, section 8](README.md#8-building-and-testing). Every suite you touch

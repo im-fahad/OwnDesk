@@ -4,7 +4,7 @@ What exists today, how it works, and the things that were learned the hard way. 
 follows is [spec.md](spec.md); where the two differ, this file describes reality and the spec has
 been amended to match.
 
-Written 2026-09-09 and brought up to date 2026-09-30. Tag `v0.1.0` is the last state where the
+Written 2026-09-09 and brought up to date 2026-10-02. Tag `v0.1.0` is the last state where the
 agent and the controller were separate apps. The project was called PRC until 2026-09-25.
 [../README.md](../README.md) is the guided tour: the technology, the flow, and how to use it. This
 file is the record of decisions and traps.
@@ -32,7 +32,13 @@ Since 2026-09-28 every controller also opens a terminal on a paired Mac. That is
 server with OwnDesk as the client: nothing in OwnDesk's protocol carries a command, each device has
 an SSH key of its own for it, and the Mac's host key is pinned after the first connection. The Mac
 and the iPhone draw it with SwiftTerm over `packages/terminal`; the Android app has an emulator of
-its own over JSch.
+its own over JSch, with text selection like the rest of the phone.
+
+Since 2026-10-02 (v0.3.0 and after) every controller can also sync the clipboard with the Mac,
+text only and off on both sides until switched on: a device's copies reach the Mac once it switches
+sync on, and the Mac's reach a device only if that Mac shares with it, a per-device switch that is
+off by default. A Mac also announces its Tailscale addresses in its Bonjour record, so a device that
+has been home with it can find it from elsewhere even if it was paired while Tailscale was off.
 
 ## 2. Repository map
 
@@ -72,18 +78,36 @@ The v0.1 SwiftUI app targets in `apps/mac-agent` and `apps/mac-controller` were 
 
 ## 3. How a session happens
 
-1. **Discovery.** The host advertises `_owndesk._tcp` over Bonjour with its device id in the
-   TXT record. Away from the LAN the controller uses a stored address instead, and tries every
-   address it knows in parallel, taking the first that answers.
+1. **Discovery.** The host advertises `_owndesk._tcp` over Bonjour with its device id, and its
+   Tailscale addresses as `via`, in the TXT record. Away from the LAN the controller uses a stored
+   address instead, and tries every address it knows in parallel, taking the first that answers.
 2. **Signalling.** The host serves a WebSocket on port 47500. There is no server in the middle;
    the design keeps room for one but Tailscale has made it unnecessary.
 3. **Authentication.** Request, challenge, auth, accept. Both sides sign, both check the other's
    nonce. Only then is SDP exchanged, and because the SDP travels inside a signed envelope the
    DTLS fingerprint is signed too.
 4. **Media.** The controller offers, the host answers. Video is H.264 from ScreenCaptureKit
-   through VideoToolbox. Three data channels carry input and control.
+   through VideoToolbox. Three data channels carry input and control, clipboard sync included.
 5. **Input.** The controller maps pointer positions to normalised coordinates, the host turns them
    back into Quartz events.
+
+The controller's side of it, as a state machine (spec section 10 has the full rules):
+
+```mermaid
+stateDiagram-v2
+    [*] --> Finding: Connect
+    Finding --> Authenticating: an address answers
+    Finding --> Ended: nothing answers in 15 s
+    Authenticating --> Negotiating: SESSION_ACCEPT, both signed
+    Authenticating --> Ended: rejected, unpaired, or not allowed
+    Negotiating --> Connected: DTLS up, video arrives
+    Connected --> Reconnecting: media or signalling lost
+    Reconnecting --> Connected: ICE restart, or SESSION_RESUME
+    Reconnecting --> Authenticating: resume refused
+    Reconnecting --> Ended: 60 s without success
+    Connected --> Ended: bye, or the person ends it
+    Ended --> [*]
+```
 
 ## 4. The parts, and why they are shaped that way
 
@@ -267,9 +291,9 @@ A real iPhone needs a team: README section 6.4 walks through it with a free Appl
 no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
 
 Suite sizes, all passing on 2026-10-02: protocol 27, packages/swift 36, packages/terminal 9,
-agent 53, controller 32, android 108, OwnDeskTouch 26, end to end 17 steps, android frames 16, the
-Android device script 11 checks. The
-iPhone's UI tests (5, with 12 checks on the host) passed on 2026-09-30, the terminal stage included.
+agent 53, controller 32, android 112, OwnDeskTouch 26, end to end 17 steps, android frames 16, the
+Android device script 11 checks, and the iPhone's UI tests in the Simulator, 5 with 16 checks on the
+host, the clipboard and terminal stages included.
 
 ## 6. Things that cost time, so they should not cost it twice
 
@@ -651,6 +675,12 @@ data and Tailscale, the phone opened terminals on both Macs in about two seconds
 paired while its Tailscale was off, had its tailnet address pinned by hand. The two Macs asked each
 other the same way.
 
+On 2026-10-02 clipboard sync was tried on every controller: between the two Macs in the app, both
+ways with nothing echoed back; on the phone against the real agent, both ways; and in the iPhone
+Simulator, where the paste question iOS asks had to be answered and a clipboard sent before the
+host heard sync was on was found being dropped, now fixed by sending them in order. The phone's
+terminal selected, copied and pasted text on a real shell the same day.
+
 Measured: LAN 1920x1080 at 52 to 58 fps with 8 to 12 ms round trip. Over Tailscale, when it cannot
 connect the two directly, it relays and the round trip becomes several hundred milliseconds at
 under a megabit; the picture stays sharp and the frame rate gives way. `tailscale netcheck` shows
@@ -666,8 +696,6 @@ why a direct path is unavailable: on this network the home router offers no port
 - Waking a sleeping host. The Mac mini has `womp 1` on AC power, so a magic packet on the LAN would
   work; from outside the LAN it cannot, because a magic packet does not route over a tailnet.
 - Cancelling an attempt while it is connecting, on either controller.
-- The Mac app does not browse for Macs the way the phone now does, so a Mac whose address moved is
-  still found only because `firstReachable` probes every candidate in parallel.
 - The iPhone app has not run on an iPhone yet, only in the Simulator. A hardware keyboard key held
   down reaches the Mac once, not repeated, since iOS sends no repeat events for it. While the app is
   in the background iOS suspends it, so a session there survives only if the app comes back within

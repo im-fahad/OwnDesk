@@ -1,7 +1,8 @@
 # OwnDesk Mac controller: the controlling half
 
 The side that drives another Mac: discovery, pairing, authentication, receiving the screen over
-WebRTC, and forwarding mouse, scroll, keyboard, and text. Spec sections 4.2, 7, 8, 10, 13.
+WebRTC, forwarding mouse, scroll, keyboard and text, clipboard sync, and asking a host to allow a
+terminal key. Spec sections 4.2, 7, 7.7, 8, 10, 13.
 
 **This is a library, not the app you install.** `OwnDeskControllerCore` is one of the two halves inside
 [`apps/owndesk`](../owndesk), which is what runs on each Mac. See [../../README.md](../../README.md) for how
@@ -55,9 +56,27 @@ folder you sync to the other machine.
 ## Choosing an address
 
 **Connect** needs no address in the normal case. The controller opens a TCP connection to every
-address the host advertised at pairing time at once and uses the first that answers, so the same
-button works at home on the LAN and away over Tailscale. Bonjour is tried first when the host is on
-the current network. The address field only overrides that.
+address it knows for the host at once and uses the first that answers, so the same button works at
+home on the LAN and away over Tailscale. Bonjour is tried first when the host is on the current
+network. The address field only overrides that.
+
+The addresses it knows are the ones in the pairing code, plus any Tailscale addresses the host has
+announced since in its Bonjour record (`via`), which the app keeps whenever it sees them at home. A
+host paired while its Tailscale was off is still reached from elsewhere that way.
+
+```mermaid
+flowchart TD
+    A[Connect] --> B{Address typed<br/>in the field?}
+    B -->|yes| C[Use only that one]
+    B -->|no| D{Host seen on<br/>this network by Bonjour?}
+    D -->|yes| E{Its current Bonjour<br/>address resolves?}
+    E -->|yes| H
+    E -->|no| F
+    D -->|no| F[Every known address at once:<br/>pairing code, last that worked,<br/>Tailscale ones learned]
+    F --> G{An answer within 15 s?}
+    G -->|yes| H[Signed handshake,<br/>then video]
+    G -->|no| I[Gives up: off, unreachable,<br/>or a different Mac at that address]
+```
 
 If the host never answers, the attempt ends after 15 seconds rather than hanging: an agent drops
 envelopes addressed to a different device id without replying (spec section 6 rule 3), so a silent
@@ -131,6 +150,8 @@ connection (spec section 10).
 | `SessionClient.swift` | Authentication, offer, ICE, keepalive, reconnection, teardown |
 | `WebRTCClient.swift` | Peer connection as offerer, data channels, remote track, path detection |
 | `InputMapper.swift` | Letterbox-aware coordinate mapping, key code inversion, modifier and scroll mapping |
+| `TerminalKeyClient.swift` | Asks a host to allow this device's terminal key, and takes only its signed answer |
+| `SdpPreference.swift` | Puts H.264 first in the offer, at the level a full-size desktop needs |
 | `OwnDeskPeers` (in `packages/swift`) | Paired Macs on disk: who is paired, and whether it can host |
 | `apps/owndesk/Sources/owndesk/VideoView.swift` | Metal video view plus the input overlay and keyboard capture |
 
@@ -140,15 +161,17 @@ connection (spec section 10).
 swift test
 ```
 
-Fifteen tests. Geometry, key maps, path classification, endpoint parsing, and peer persistence are
+32 tests. Geometry, key maps, path classification, endpoint parsing, and peer persistence are
 unit tests. The end-to-end suite starts a real agent in the same process with its synthetic screen,
 pairs through the real signaling server with the host approving, connects, receives video frames,
 measures a ping round trip, sends input, disconnects, and checks that an unpaired controller is
-rejected and an unreachable host ends cleanly. About one second, no permissions.
+rejected and an unreachable host ends cleanly. It also connects as an iPhone and at full desktop
+sizes, which must arrive as H.264; asks for terminal access, allowed, refused and by a stranger; and
+syncs the clipboard both ways, each direction only when switched on. A few seconds, no permissions.
 
 ## Known limits at this step
 
 - Video shows the host's cursor baked into the stream. Local cursor rendering is Phase 2.
-- Cmd+Tab and other OS-level shortcuts cannot be captured; use the toolbar.
+- Cmd+Tab and other OS-level shortcuts cannot be captured; use the Keys menu in the app.
 - No rendezvous client. LAN, direct addresses, and Tailscale only, which is the deployed answer.
 - No way to cancel an attempt while it is connecting; it ends itself after 15 seconds.

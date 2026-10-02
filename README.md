@@ -329,7 +329,7 @@ recipient, known sender, signature, clock skew of ±300 s, replay by sequence nu
 |---|---|---|
 | `input-lossy` | unordered, no retransmits | `mouse_move`, `mouse_move_rel` |
 | `input-reliable` | ordered | `mouse_down`, `mouse_up`, `scroll`, `key_down`, `key_up`, `text` |
-| `control` | ordered | `hello`, `display_info`, `stream_settings`, `ping`, `pong`, `bye` |
+| `control` | ordered | `hello`, `display_info`, `capture_state`, `stream_settings`, `ping`, `pong`, `bye`, `clipboard_sync`, `clipboard` |
 
 Video is H.264 from ScreenCaptureKit through VideoToolbox, capped by the controller's quality
 setting, with degradation set to keep the resolution and give up frame rate: a desktop is mostly
@@ -345,6 +345,50 @@ Media loss triggers an ICE restart on the existing session. Signaling loss recon
 `SESSION_RESUME`; a rejected resume falls back to full authentication, never to re-pairing. After
 60 seconds without success the session ends. One offer is outstanding at a time, and late answers
 are ignored.
+
+### 5.6 Terminal access
+
+The terminal never goes through the protocol above. The only thing OwnDesk carries for it is a
+one-time request to let a device's SSH key in, and a person at the Mac decides.
+
+```mermaid
+sequenceDiagram
+    participant D as Device, Mac or phone
+    participant H as Host Mac
+    participant S as The Mac's own SSH server
+    D->>H: TERMINAL_KEY_REQUEST, signed: bare SSH public key
+    alt key already in authorized_keys
+        H-->>D: already_installed + account + host keys
+    else not yet
+        Note over H: Shows the device, its fingerprint,<br/>the key's fingerprint, the account
+        H->>H: Someone clicks Allow (or Deny, or 2 min pass)
+        H->>H: Appends a line tagged with the device to ~/.ssh/authorized_keys
+        H-->>D: TERMINAL_KEY_RESULT, signed: installed + account + host keys
+    end
+    Note over D: Pins the host keys, saves the account
+    D->>S: SSH, port 22, logs in with the device's key
+    S-->>D: Host key checked against the pin, then a shell
+    Note over H,D: Unpairing removes the tagged line again
+```
+
+### 5.7 Clipboard sync
+
+Text only, on the session's `control` channel, and off on both sides until switched on.
+
+```mermaid
+sequenceDiagram
+    participant C as Controller
+    participant H as Host Mac
+    Note over C: Clipboard button on
+    C->>H: clipboard_sync enabled
+    H-->>C: clipboard_sync: does this Mac share with this device?
+    C->>H: clipboard: what is on this device's clipboard
+    Note over H: Put on the Mac's clipboard
+    opt only if the Mac shares with this device
+        H-->>C: clipboard: the Mac's clipboard, now and on every change
+    end
+    Note over C,H: Neither sends back text it was just given
+```
 
 ---
 
@@ -666,6 +710,23 @@ pass as the other, and unpairing a Mac forgets its terminal settings and pinned 
 everything else.
 
 ### 6.10 When something is wrong
+
+Start here when a connection fails, then find the exact symptom in the table below.
+
+```mermaid
+flowchart TD
+    A[Connect fails] --> B{Is the Mac on, awake,<br/>and logged in?}
+    B -->|no| B1[Wake it, log in.<br/>A Mac must be logged in<br/>before it can be controlled]
+    B -->|yes| C{Let others control it<br/>on, on that Mac?}
+    C -->|no| C1[Switch it on there]
+    C -->|yes| D{Same network?}
+    D -->|yes| E{The Mac's dot<br/>in the list green?}
+    E -->|no| E1[Fingerprints match?<br/>If not, this is a different Mac:<br/>forget the stale entry]
+    E -->|yes| F[Screen Recording and<br/>Accessibility granted on the Mac?<br/>After a rebuild, grant again]
+    D -->|no| G{Tailscale on both,<br/>same tailnet?}
+    G -->|no| G1[Start it, sign in]
+    G -->|yes| H[Open OwnDesk once at home<br/>with the Mac, or pin<br/>100.x.y.z:47500 by hand]
+```
 
 | Symptom | Likely cause | What to do |
 |---|---|---|

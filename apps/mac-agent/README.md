@@ -1,7 +1,8 @@
 # OwnDesk Mac agent: the hosting half
 
 The host side of OwnDesk: the signalling endpoint, pairing, mutual session authentication,
-ScreenCaptureKit into libwebrtc, and CGEvent input injection. Spec sections 4.1, 7, 8, 12 to 15,
+ScreenCaptureKit into libwebrtc, CGEvent input injection, clipboard sharing, and installing a
+paired device's terminal key after someone clicks Allow. Spec sections 4.1, 4.7, 7, 8, 12 to 15,
 20, 21.
 
 **This is a library, not the app you install.** `OwnDeskAgentCore` is one of the two halves inside
@@ -43,6 +44,10 @@ Options:
 | `--no-bonjour` | Do not advertise on the LAN |
 | `--file-identity` | **Development only.** Keep the identity in `<data-dir>/identity.json` (mode 0600) instead of the Keychain. With a Secure Enclave the file holds only the key's opaque reference. |
 | `--synthetic-screen` | **Test only.** Stream a generated 720p pattern instead of the screen. No Screen Recording needed. |
+| `--synthetic-size <w>x<h>` | **Test only.** The pattern's size, for testing a real display's dimensions |
+| `--print-input` | **Test only.** Print each input message instead of injecting it, typed text as a character count only. No Accessibility needed. It also gives the host a test clipboard that starts with a known line, so the real clipboard is never touched. |
+| `--authorized-keys <path>` | Where an allowed terminal key is written. Default `<data-dir>/authorized_keys`, never `~/.ssh`, so running this never changes who can log in to this Mac |
+| `--ssh-host-keys <dir>` | **Test only.** The SSH host keys to vouch for in a terminal key answer. Default `/etc/ssh`; tests point it at their own sshd |
 
 Why `--file-identity` exists: a `swift build` binary is ad-hoc signed, and its signature changes on
 every rebuild. The Keychain ties an item to the signature, so each rebuilt binary would prompt for
@@ -56,6 +61,8 @@ cancel            close the pairing window
 y | n             approve or deny the pending pairing request after comparing fingerprints
 key y | key n     allow or refuse a paired device's terminal key; it goes into <data-dir>/authorized_keys
                   (or --authorized-keys <path>), never ~/.ssh, when run from here
+share <prefix> on|off
+                  share this host's clipboard with a device, by id prefix or name
 devices           list trusted devices
 revoke <prefix>   revoke by device id prefix
 access on|off     Remote Access kill switch: off ends sessions, stops listening and advertising
@@ -109,6 +116,33 @@ The harness does its signing with the pure-JavaScript noble libraries rather tha
 browsers disable WebCrypto on plain `http://` pages that are not localhost, and the page has to stay
 plain http so it can open the agent's `ws://` endpoint.
 
+## How a message is handled
+
+Every envelope that reaches the host goes through the same checks in the same order, and the first
+failure ends it. Nothing after a failed check runs, and most failures get no reply at all, so a
+probe learns nothing (spec sections 6 and 21).
+
+```mermaid
+flowchart TD
+    A[Envelope arrives on the WebSocket] --> B{Size and<br/>protocol version}
+    B -->|bad| X[Dropped]
+    B --> C{Addressed to<br/>this Mac?}
+    C -->|no| X
+    C --> D{Sender known,<br/>or a pairing request<br/>with a valid proof?}
+    D -->|no| X
+    D --> E{Signature valid?}
+    E -->|no| X
+    E --> F{Clock within ±300 s,<br/>sequence not replayed?}
+    F -->|no| X
+    F --> G{Payload matches<br/>its JSON Schema?}
+    G -->|no| X
+    G --> H[Handled: pairing, session,<br/>unpairing or terminal key]
+    H --> I{Needs a person?<br/>pairing, terminal key}
+    I -->|yes| J[Shown in the app,<br/>waits for a click]
+    I -->|no| K[Answered, signed]
+    J --> K
+```
+
 ## What is where
 
 | File | Role |
@@ -120,6 +154,11 @@ plain http so it can open the agent's `ws://` endpoint.
 | `WebRTCSession.swift` | Peer connection as answerer, video sender, data channels, path detection |
 | `InputInjector.swift` | CGEvent posting with rate limits, click counting, drag, scroll phases, Unicode text |
 | `OwnDeskPeers` (in `packages/swift`) | The peer list on disk: who is paired, and whether it can host |
+| `AuthorizedKeys.swift` | Appends an allowed device's terminal key as a tagged line, and removes only tagged lines on unpairing |
+| `Clipboard.swift` | The clipboard as a small interface: the real pasteboard in the app, a stand-in in tests |
+| `NetworkInterfaces.swift` | This Mac's addresses, and which are Tailscale's, for pairing codes and the Bonjour `via` record |
+| `CaptureSupervisor.swift` | Brings capture back after display sleep, a locked screen or a display change, and tells the controller while it is paused |
+| `PowerAssertion.swift` | Keeps the Mac awake while a session is live |
 | `Agent.swift` | Wiring and the dev file identity store |
 
 ## Headless end-to-end test
@@ -136,7 +175,7 @@ OWNDESK_E2E_VERBOSE=1 npm run e2e    # echo the agent's output
 controller from Node with werift, an independent WebRTC implementation. It pairs with proof and
 approval, checks the fingerprint the host shows, authenticates, verifies a stranger is rejected,
 negotiates H.264 and the three data channels, checks ping and display info, sends a wrong-channel
-and a forbidden message, counts video RTP, ends the session, and shuts the agent down. Sixteen
+and a forbidden message, counts video RTP, ends the session, and shuts the agent down. Seventeen
 steps, about fifteen seconds, no permissions, no browser, no display.
 
 By default the agent streams a generated pattern (`--synthetic-screen`) so video can be verified
@@ -148,10 +187,12 @@ anywhere. That flag exists only for testing and is never on unless asked for.
 swift test
 ```
 
-Twenty-eight tests. Pairing and session flows run against an in-memory transport with fake media.
-The signaling server is tested over a real WebSocket on localhost. The WebRTC test runs libwebrtc on
-both ends in one process, negotiates, exchanges ICE, opens all three data channels, and sends
-messages both ways. No permission is needed for any of them, so they run anywhere.
+53 tests. Pairing, unpairing, session and terminal key flows run against an in-memory transport
+with fake media: a key is installed only after an Allow, refused on a Deny or after two minutes, and
+removed again on unpairing. The signaling server is tested over a real WebSocket on localhost. The
+WebRTC test runs libwebrtc on both ends in one process, negotiates, exchanges ICE, opens all three
+data channels, and sends messages both ways. No permission is needed for any of them, so they run
+anywhere.
 
 ## Known limits at this step
 
