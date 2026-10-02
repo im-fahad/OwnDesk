@@ -12,6 +12,11 @@ Each controller can also open a terminal on a Mac. That is the Mac's own SSH ser
 with OwnDesk as the client: the protocol above still carries no command, and each device logs in
 with an SSH key of its own, hardware-backed like its identity.
 
+<p align="center">
+  <img src="docs/media/android-control.gif" width="760" alt="An Android phone showing a Mac's screen: it taps into a note, types a line, zooms in, and moves the pointer in trackpad mode">
+  <br><sub>An Android phone controlling a Mac: typing into a note, zooming in, trackpad mode.</sub>
+</p>
+
 **Runs on:** macOS 14+ (host and controller; the download is for Apple silicon, Intel Macs build from
 source) · Android 8+ (controller) · iOS 17+ (controller)<br>
 **Away from home:** through [Tailscale](https://tailscale.com), with no port forwarding<br>
@@ -626,6 +631,11 @@ the Mac, and the device forgets the Mac's login and host keys.
 
 ### 6.6 Control from a Mac
 
+<p align="center">
+  <img src="docs/media/mac-to-mac.gif" width="760" alt="The OwnDesk window on one Mac connects to another Mac, clicks into a note there and types, then disconnects">
+  <br><sub>One Mac controlling another: connect, type into a note, disconnect.</sub>
+</p>
+
 | Control | What it does |
 |---|---|
 | Sidebar, ⌘B | Paired Macs, nearby Macs, this Mac's fingerprint, pairing |
@@ -676,6 +686,11 @@ sidebar and switch on **Share this Mac's clipboard with it**. It is off by defau
 on, whatever anyone copies on that Mac, a password included, goes to the device whenever it has sync
 on. What a device copies reaches the Mac without that switch: it could type the same text anyway.
 
+<p align="center">
+  <img src="docs/media/android-clipboard.gif" width="760" alt="The phone switches clipboard sync on, and Edit, Paste on the Mac pastes the line the phone copied">
+  <br><sub>Clipboard sync: a line copied on the phone, pasted on the Mac with Edit → Paste.</sub>
+</p>
+
 The icons carry no labels. Hold one and its name appears.
 
 The iPhone has the same gestures and the same sidebar, which sits beside the picture in landscape
@@ -705,6 +720,11 @@ with OwnDesk open. If that has not happened yet, give the address by hand, once,
 The terminal uses the same addresses with the SSH port in place of 47500.
 
 ### 6.9 Open a terminal
+
+<p align="center">
+  <img src="docs/media/android-terminal.gif" width="320" alt="The phone asks the Mac for terminal access, someone clicks Allow, then commands run in a shell on the Mac and a line is selected, copied and pasted">
+  <br><sub>A terminal on the Mac from the phone: ask, Allow on the Mac, then a shell; select, copy, paste.</sub>
+</p>
 
 Every controller can open a shell on a paired Mac, the way Termius would, without leaving OwnDesk.
 It is the Mac's own SSH server, so the Mac needs two things:
@@ -798,6 +818,7 @@ flowchart TD
 docs/
   spec.md                  the design, and the protocol it defines
   implementation.md        what exists, and the traps found while building it
+  media/                   the GIFs and screenshots in these docs, recorded against a demo Mac
 packages/protocol          the single source of truth for the wire format
   schemas/                 JSON Schema for every message, split by transport
   keycodes/                key code tables for macOS, Android and USB HID (iPhone keyboards)

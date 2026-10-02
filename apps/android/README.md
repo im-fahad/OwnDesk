@@ -52,6 +52,8 @@ flowchart TD
 
 ## Using it
 
+![The phone showing a Mac's screen: tapping into a note, typing, zooming in, trackpad mode](../../docs/media/android-control.gif)
+
 Tap a paired Mac to open its screen. The session screen is always landscape. Then:
 
 | Gesture | What the Mac sees |

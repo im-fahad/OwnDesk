@@ -7,6 +7,8 @@ headless CLIs remain for testing.
 [../../README.md](../../README.md) is the guided tour: the technology, the full flow from pairing to
 a moving picture, and the user guide. This file is the app's own reference.
 
+![The OwnDesk window controlling another Mac: the paired Mac in the sidebar, Quality and Keys menus, the clipboard button, Terminal and Disconnect in the toolbar, and the connection's path, resolution and round trip in the status line](../../docs/media/mac-app.png)
+
 ## Build and install
 
 ```sh
