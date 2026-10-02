@@ -12,14 +12,49 @@ Each controller can also open a terminal on a Mac. That is the Mac's own SSH ser
 with OwnDesk as the client: the protocol above still carries no command, and each device logs in
 with an SSH key of its own, hardware-backed like its identity.
 
-**Runs on:** macOS 14+ (host and controller) · Android 8+ (controller) · iOS 17+ (controller)<br>
+**Runs on:** macOS 14+ (host and controller; the download is for Apple silicon, Intel Macs build from
+source) · Android 8+ (controller) · iOS 17+ (controller)<br>
 **Away from home:** through [Tailscale](https://tailscale.com), with no port forwarding<br>
 **Status:** early, used daily on the author's own devices
 
-[Quick start](#6-user-guide) · [How it works](#3-architecture) · [Security](SECURITY.md) ·
+[Quick start](#quick-start) · [How it works](#3-architecture) · [Security](SECURITY.md) ·
 [The design](docs/spec.md) · [What was built](docs/implementation.md) · [License: MIT](LICENSE)
 
-**Contents** — [The devices](#1-the-devices) · [Technology](#2-technology) ·
+## Quick start
+
+1. **On the Mac to be controlled**, download `OwnDesk-…-macos.zip` from
+   [Releases](https://github.com/im-fahad/OwnDesk/releases), unzip it, and follow `INSTALL.txt`
+   inside: clear the download mark, run `scripts/install-owndesk.sh`. Open OwnDesk from the menu bar
+   and switch on **Let others control it**; allow Screen Recording and Accessibility when macOS asks.
+2. **On the controlling device**:
+   - another Mac: the same download;
+   - an Android phone: `OwnDesk-…-android.apk` from the same release, opened on the phone;
+   - an iPhone: built from source with your own Apple ID, see [section 6.4](#64-install-on-an-iphone).
+3. **Pair**, on the same Wi-Fi: on the Mac, **Pair a Mac… → Show a code**; scan it with the phone or
+   paste it on the other Mac. Check that the fingerprints match, then **Approve** on the Mac.
+4. **Connect**: tap or click the Mac. For a terminal too, turn on Remote Login on that Mac and use
+   the **Terminal** button.
+
+Away from home, install [Tailscale](https://tailscale.com) on both devices; nothing else changes.
+Prefer to build it yourself? [Section 6](#6-user-guide) has every step.
+
+## How it compares
+
+| | OwnDesk | RustDesk | Chrome Remote Desktop | TeamViewer |
+|---|---|---|---|---|
+| Account needed | No | No | A Google account | A TeamViewer account, for unattended access |
+| Open source | Yes, MIT | Yes, AGPL-3.0 | No | No |
+| Who brokers the connection | Nobody: direct on your network, your own tailnet away | RustDesk's public servers, unless you run your own | Google | TeamViewer |
+| Devices that can be controlled | Macs | Windows, Mac, Linux, Android | Windows, Mac, Linux | Most platforms |
+| Cost | Free | Free; paid server option | Free | Free for personal use; paid for business |
+
+Where OwnDesk falls short today: only Macs can be controlled, there is no file transfer or audio
+yet, the Mac app is signed without an Apple certificate, so macOS asks you to confirm it once, and
+the iPhone app must be built from source. It suits someone who wants to reach their own Macs with
+nothing in between, not a help desk. Beside the screen it also gives each device a terminal on the
+Mac, through the Mac's own SSH server.
+
+**Contents** — [Quick start](#quick-start) · [How it compares](#how-it-compares) · [The devices](#1-the-devices) · [Technology](#2-technology) ·
 [Architecture](#3-architecture) · [The two halves](#4-the-two-halves-hosting-and-controlling) ·
 [Full flow](#5-full-flow-from-a-cold-machine-to-a-moving-picture) ·
 [User guide](#6-user-guide) · [Repository](#7-repository-layout) ·
@@ -423,6 +458,9 @@ terminal needs the Mac's own Remote Login (section 6.9). Pairing once covers bot
 
 ### 6.2 Install on a Mac
 
+The quickest way is the download in [Releases](https://github.com/im-fahad/OwnDesk/releases), as in
+the [quick start](#quick-start). To build it yourself instead:
+
 You need macOS 14 or newer and Xcode 26 or newer. No Apple account or certificate is involved.
 The first build downloads its Swift packages (WebRTC, SwiftNIO SSH, SwiftTerm), so it needs the
 Internet once and takes a few minutes.
@@ -452,6 +490,11 @@ Remote Login, and behind its ⓘ, **Allow full disk access for remote users**, s
 Documents, Desktop and Downloads. A Mac used only to open terminals on others needs neither.
 
 ### 6.3 Install on an Android phone
+
+The quickest way is the APK in [Releases](https://github.com/im-fahad/OwnDesk/releases): open it on
+the phone and allow installing from that source. It is signed with the project's release key, so it
+cannot be installed over a copy you built yourself, which carries a debug key; uninstall that one
+first, and pair again. To build it yourself instead:
 
 You need a JDK 17 or newer and the Android SDK; Android Studio brings both. Without a separate JDK,
 point `JAVA_HOME` at the one inside Android Studio:

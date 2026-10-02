@@ -456,7 +456,7 @@ final class AppModel {
     // MARK: Storage
 
     static var appVersion: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.3.0"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.4.0"
     }
 
     static func dataDirectory() -> URL {

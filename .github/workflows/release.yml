@@ -1,0 +1,112 @@
+# Builds a release when a version tag is pushed, and leaves it as a draft to be read and published by
+# hand. Run it from the Actions tab instead to build the same files as artifacts, with no release.
+#
+#   git tag v0.4.0 && git push origin v0.4.0
+#
+# The Mac app is signed ad hoc, as every OwnDesk build is: no Apple certificate is involved. The
+# Android APK is signed with the release key in the repository's secrets; without them it is built
+# unsigned and left out, since Android will not install it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    name: Mac app
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Toolchain
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+      - name: Build
+        env:
+          OWNDESK_VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/build-apps.sh owndesk
+      - name: Package
+        run: scripts/package-release.sh "${{ steps.version.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: dist/release/OwnDesk-*-macos.zip
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Release key
+        env:
+          KEYSTORE_B64: ${{ secrets.OWNDESK_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "OWNDESK_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No release key in the secrets; the APK will be unsigned and left out."
+          fi
+      - name: Build
+        working-directory: apps/android
+        env:
+          OWNDESK_KEYSTORE_PASSWORD: ${{ secrets.OWNDESK_KEYSTORE_PASSWORD }}
+          OWNDESK_KEY_ALIAS: ${{ secrets.OWNDESK_KEY_ALIAS }}
+          OWNDESK_KEY_PASSWORD: ${{ secrets.OWNDESK_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: Check the signature, and name it
+        run: |
+          apk=apps/android/app/build/outputs/apk/release/app-release.apk
+          signer="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          mkdir -p out
+          if [ -f "$apk" ] && "$signer" verify --print-certs "$apk"; then
+            cp "$apk" "out/OwnDesk-${{ steps.version.outputs.version }}-android.apk"
+          fi
+          rm -f "$RUNNER_TEMP/release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+          if-no-files-found: warn
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [mac, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Checksums
+        run: cd files && sha256sum OwnDesk-* > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" files/* --repo "$GITHUB_REPOSITORY" --draft \
+            --title "OwnDesk ${GITHUB_REF_NAME#v}" --generate-notes \
+            --notes "Install on a Mac: unzip, then follow INSTALL.txt inside. On Android: open the APK on the phone and allow installing from this source. The iPhone app is built from source, see the README, section 6.4."

@@ -12,17 +12,33 @@ android {
         applicationId = "io.github.im_fahad.owndesk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildFeatures {
         buildConfig = true
     }
 
+    // A release build is signed only when a keystore is given, as the release workflow does from
+    // its secrets: OWNDESK_KEYSTORE (a path), OWNDESK_KEYSTORE_PASSWORD, OWNDESK_KEY_ALIAS and
+    // OWNDESK_KEY_PASSWORD. Without them it stays unsigned, and no key is ever in the repository.
+    val releaseKeystore = System.getenv("OWNDESK_KEYSTORE")?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("OWNDESK_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("OWNDESK_KEY_ALIAS")
+                keyPassword = System.getenv("OWNDESK_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

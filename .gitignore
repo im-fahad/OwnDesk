@@ -20,6 +20,8 @@ local.properties
 .DS_Store
 
 # Secrets and local config
+*.jks
+*.keystore
 .env
 *.local.json
 # The iPhone app's signing: a personal team ID and bundle ID stay on their own Mac

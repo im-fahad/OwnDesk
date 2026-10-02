@@ -287,6 +287,19 @@ xcodebuild -project apps/ios/OwnDesk.xcodeproj -scheme OwnDesk \
   -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
+**Releasing.** Push a tag such as `v0.4.0`. `.github/workflows/release.yml` then builds the Mac app
+on a macOS runner, signed ad hoc like every other build, packs it with
+`scripts/package-release.sh` into a zip that holds the app, the install and uninstall scripts and
+an `INSTALL.txt`, builds the Android APK signed with the release key, and leaves a **draft** release
+with both and their SHA-256 sums, to be read and published by hand. Bump `versionCode` and
+`versionName` in `apps/android/app/build.gradle.kts` first; the Mac app takes its version from the
+tag. Release builds come from the runner and never from a developer's Mac, since a local build
+carries its builder's home folder path in the binary. The Android release key is in the repository's
+secrets (`OWNDESK_KEYSTORE_B64`, `OWNDESK_KEYSTORE_PASSWORD`, `OWNDESK_KEY_ALIAS`,
+`OWNDESK_KEY_PASSWORD`) and in one offline copy kept by the owner; it is never in the repository.
+Losing it would mean phones cannot update the app in place, only reinstall and pair again. Running
+the workflow from the Actions tab builds the same files as artifacts, with no release.
+
 A real iPhone needs a team: README section 6.4 walks through it with a free Apple ID. Xcode 27 has
 no Simulator app of its own; a simulated iPhone shows in DeviceHub, in `Xcode.app/Contents/Applications`.
 
