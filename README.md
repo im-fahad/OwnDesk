@@ -633,7 +633,7 @@ the Mac, and the device forgets the Mac's login and host keys.
 ### 6.6 Control from a Mac
 
 <p align="center">
-  <img src="docs/media/mac-to-mac.gif" width="760" alt="The OwnDesk window on one Mac connects to another Mac, clicks into a note there and types, then disconnects">
+  <img src="docs/media/mac-to-mac.gif" width="760" alt="The OwnDesk window on one Mac controlling another Mac: it clicks into a note there and types">
   <br><sub>One Mac controlling another: connect, type into a note, disconnect.</sub>
 </p>
 
