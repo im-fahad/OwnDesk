@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 IDENTITY="${OWNDESK_SIGN_IDENTITY:--}"
-VERSION="${OWNDESK_VERSION:-0.4.0}"
+VERSION="${OWNDESK_VERSION:-0.4.1}"
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
 
