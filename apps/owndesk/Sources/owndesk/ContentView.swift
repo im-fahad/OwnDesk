@@ -43,6 +43,12 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.15), value: model.showSidebar)
         .animation(.easeOut(duration: 0.15), value: model.showLog)
         .sheet(isPresented: $showPairing) { PairingSheet(isPresented: $showPairing) }
+        // A pairing finished with the sheet closed has nothing to confirm; left set, it would
+        // flash and close the sheet the next time it opens.
+        .onChange(of: model.justPaired) { _, name in
+            if name != nil && !showPairing { model.justPaired = nil }
+        }
+        .sheet(item: $model.choosingAddress) { mac in AddressSheet(mac: mac).environmentObject(model) }
         .sheet(item: $model.terminalSetup) { mac in TerminalSettingsSheet(mac: mac).environmentObject(model) }
         .sheet(item: $model.terminalKeyRequest) { request in TerminalKeyRequestSheet(request: request).environmentObject(model) }
     }
@@ -184,14 +190,9 @@ struct HeaderBar: View {
 
     private var idleControls: some View {
         HStack(spacing: 6) {
-            TextField("address override", text: $model.manualAddress)
-                .textFieldStyle(.plain)
-                .font(Theme.uiSecondary)
-                .foregroundStyle(Theme.text)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Theme.content, in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.border))
-                .frame(width: 190)
+            if let id = model.selectedPeerId, let peer = model.peers.host(id) {
+                AddressChip(peer: peer, pinned: model.addressPins[id]) { model.choosingAddress = peer }
+            }
 
             Button(model.isBusy ? "Connecting…" : "Connect") { model.connect() }
                 .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
@@ -289,6 +290,7 @@ struct SidebarPanel: View {
             Button("Connect") { model.selectedPeerId = peer.deviceId; model.connect() }
             Button("Open Terminal") { model.openTerminal(peer) }
             Button("Terminal settings…") { model.terminalSetup = peer }
+            Button("Choose an address…") { model.choosingAddress = peer }
             Divider()
         }
         Toggle("Allow it to control this Mac", isOn: Binding(
@@ -406,11 +408,22 @@ struct ScreenArea: View {
             // survives every panel toggle.
             VideoView()
                 .id(videoGeneration)
-            if !model.isConnected { placeholder }
+            if !model.isConnected {
+                // The last frame stays behind a disconnected or connecting session; blurred and
+                // dimmed, it says "not live" and leaves the card the one thing to read.
+                ZStack {
+                    WithinWindowBlur()
+                    Color.black.opacity(0.35)
+                }
+                .transition(.opacity)
+                placeholder
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
             if model.isConnected, !model.captureState.isActive { captureBanner }
             if model.showTextField { textOverlay }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.25), value: model.isConnected)
         .onReceive(NotificationCenter.default.publisher(for: .owndeskRebuildVideo)) { _ in
             videoGeneration += 1
         }
@@ -432,6 +445,8 @@ struct ScreenArea: View {
         }
         .padding(28)
         .background(Theme.content.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
+        .shadow(color: .black.opacity(0.45), radius: 24, y: 8)
     }
 
     /// A banner rather than a curtain: the picture is stale but input still reaches the other Mac,
@@ -569,15 +584,17 @@ struct PairingSheet: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            if mode == .enter { enterCode } else { showCode }
+            if let name = model.justPaired {
+                pairedConfirmation(name)
+            } else if mode == .enter { enterCode } else { showCode }
 
-            if !model.pairingStatus.isEmpty {
+            if !model.pairingStatus.isEmpty && model.justPaired == nil {
                 Text(model.pairingStatus).font(Theme.uiSecondary).foregroundStyle(Theme.warn)
             }
             HStack {
                 Spacer()
                 Button("Close") { isPresented = false }.buttonStyle(HeaderButtonStyle(tint: Theme.textDim))
-                if mode == .enter {
+                if mode == .enter && model.justPaired == nil {
                     Button(model.isPairing ? "Waiting for approval…" : "Pair") { model.usePairingCode() }
                         .buttonStyle(HeaderButtonStyle(tint: Theme.accent))
                         .disabled(model.isPairing || model.pairingText.isEmpty)
@@ -599,6 +616,32 @@ struct PairingSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .animation(.easeOut(duration: 0.2), value: model.justPaired)
+        // A finished pairing is confirmed for a moment, then the sheet gets out of the way so
+        // the new device in the sidebar is what the user sees next.
+        .task(id: model.justPaired) {
+            guard model.justPaired != nil else { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            isPresented = false
+        }
+        .onDisappear {
+            // Nothing from a finished pairing should greet the next one.
+            if model.justPaired != nil {
+                model.justPaired = nil
+                model.pairingStatus = ""
+            }
+        }
+    }
+
+    private func pairedConfirmation(_ name: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.accent)
+            Text("Paired with \(name).").font(.headline).foregroundStyle(Theme.text)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .transition(.opacity)
     }
 
     private var enterCode: some View {
@@ -685,4 +728,18 @@ struct PairingSheet: View {
             }
         }
     }
+}
+
+/// Blurs what is drawn beneath it in the same window. SwiftUI's own blur does not reach the
+/// Metal-backed video view, which AppKit draws, so this is AppKit's blur instead.
+struct WithinWindowBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .withinWindow
+        view.material = .hudWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }

@@ -57,7 +57,16 @@ text only, and nothing about it is logged beyond how many characters went which 
 Pair from either end: **Show a code** on one Mac and paste it on the other. A phone pairs from the
 same code, by scanning the QR with its camera. **Show full screen** fills the display with the code
 for a phone that struggles with the small one; it closes on a click, on Esc, or by itself when the
-phone's request arrives.
+phone's request arrives. Once a pairing completes, on either Mac, the sheet says **Paired with *that
+device*** for a moment and closes, so the new device in the sidebar is what you see next.
+
+**Connect** finds the other Mac by itself: Bonjour on the same network, then every address it is
+known by, at once. Where one route matters, as a Mac reachable away from home only over Tailscale,
+click the address beside **Connect** (it reads **Any address** until one is chosen), or choose
+**Choose an address…** in the Mac's right-click menu. The sheet lists each known address with what
+it is for (on this network now, local network, Tailscale); click one, or type one, and **Use it**.
+The choice is kept for that Mac and used by the terminal too. It is tried first, and when it does
+not answer the others still are. **Use any address** clears it.
 
 **Unpair…** in a device's right-click menu, or the ⓧ that appears on hover, ends the pairing on both
 sides, and both must pair again. Another Mac is told at once with a signed `UNPAIR` when it can be
@@ -76,6 +85,9 @@ at login adds nothing to the Dock, and an open window can still take keyboard fo
 | Double click the header | Zooms, or whatever "double-click a window's title bar to" is set to in System Settings |
 | Drag the header | Moves the window |
 | **Quit** | Really quits: the launch agent brings the app back after a crash, never after Quit |
+
+While no session is live, the last picture stays behind a blur, under a card with **Connect** and
+the reason the session ended, so a stale screen is never mistaken for the live one.
 
 ## The terminal
 

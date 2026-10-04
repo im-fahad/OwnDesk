@@ -37,7 +37,9 @@ flowchart TD
 - Pairs by scanning the code a Mac displays, or from the same code pasted as text. The camera is
   used for nothing else, and the reading happens on the phone: a pairing code is a secret and does
   not travel anywhere to be decoded. It proves possession of the code with an HMAC and checks that
-  the Mac's key hashes to the id printed in the code. Both people compare fingerprints.
+  the Mac's key hashes to the id printed in the code. Both people compare fingerprints. Until the
+  Mac answers, the list shows **Waiting for *that Mac* to approve** with this phone's fingerprint,
+  and a failed pairing says why in a dialog.
 - Signs every signaling envelope and applies the same receiver rules as the Macs, so a replayed,
   stale, misaddressed or unsigned message is refused.
 - Runs the session handshake, then offers a WebRTC connection the Mac answers, and shows the

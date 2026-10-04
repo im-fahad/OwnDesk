@@ -612,7 +612,8 @@ An iPad works the same way.
 |---|---|
 | Open OwnDesk, **Pair a Mac…** → **Show a code** (it needs **Let others control it** on) | On a Mac: **Pair a Mac…**, paste the code, **Pair**. On a phone: **Pair a Mac…** → **Scan a code**, and point the camera at the QR |
 | It shows the other device's fingerprint | It shows its own fingerprint |
-| Compare the two. If they match, **Approve** | The Mac appears in the list |
+| Compare the two. If they match, **Approve** | A phone shows **Waiting for *that Mac* to approve** until then |
+| The sheet says **Paired with *that device*** and closes, leaving the new device in the sidebar | The Mac appears in the list |
 
 If they do not match, deny: someone else is trying to pair. That comparison is the whole security
 of pairing, so it is worth the two seconds.
@@ -715,7 +716,10 @@ with OwnDesk open. If that has not happened yet, give the address by hand, once,
 - On a phone, touch and hold the Mac in the list, **Choose an address**, and enter
   `100.x.y.z:47500`. **Use any address** undoes it. A pinned Tailscale address works at home too,
   since Tailscale connects directly on the same network.
-- On a Mac, type the same into the address field in the header before **Connect** or **Terminal**.
+- On a Mac, click the address beside **Connect** (it reads **Any address** until one is chosen), or
+  right-click the Mac in the sidebar and choose **Choose an address…**. Pick or type
+  `100.x.y.z:47500` and click **Use it**. The choice is kept for that Mac, and if it does not
+  answer the other addresses are still tried. **Use any address** undoes it.
 
 The terminal uses the same addresses with the SSH port in place of 47500.
 

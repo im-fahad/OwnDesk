@@ -1,6 +1,7 @@
 package io.github.im_fahad.owndesk.ui
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -17,6 +18,7 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -67,6 +69,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logView: TextView
     private lateinit var logPanel: View
     private lateinit var statusLine: TextView
+    /** Shown while a Mac is asked to approve this phone, the way the iPhone app shows it. */
+    private lateinit var pairingCard: LinearLayout
+    private lateinit var pairingTitle: TextView
+    private lateinit var pairButton: TextView
     private var busy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -210,6 +216,8 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(16), 0, dp(16), dp(16))
         }
         list.addView(sectionHeading("MACS YOU CAN CONTROL"))
+        pairingCard = waitingCard()
+        list.addView(pairingCard, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp(6) })
         peerList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         list.addView(peerList, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
@@ -255,7 +263,8 @@ class MainActivity : AppCompatActivity() {
         addView(sectionHeading("THIS PHONE"))
         addView(label(identity.fingerprint, Theme.FINGERPRINT, Theme.TEXT, mono = true))
         addView(label(KeystoreIdentity.deviceName(this@MainActivity), Theme.UI_SMALL, Theme.TEXT_DIM))
-        addView(accentButton("Pair a Mac...") { askForCode() }, rowParams(top = 12))
+        pairButton = accentButton("Pair a Mac...") { if (!busy) askForCode() }
+        addView(pairButton, rowParams(top = 12))
         addView(
             label(
                 "On the Mac, open OwnDesk and choose Show a code. Approve there only when it shows this phone's fingerprint.",
@@ -264,6 +273,48 @@ class MainActivity : AppCompatActivity() {
             ),
             rowParams(top = 8),
         )
+    }
+
+    /**
+     * The card that waits for the Mac's Approve. A pairing can take as long as the person needs to
+     * walk to the Mac, so the wait is said in the list itself, not only in the status line.
+     */
+    private fun waitingCard(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.TOP
+        visibility = View.GONE
+        setPadding(dp(12), dp(12), dp(12), dp(12))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(6).toFloat()
+            setColor(Theme.PANEL)
+            setStroke(1, (Theme.ACCENT and 0x00FFFFFF) or (0x99 shl 24))
+        }
+        addView(
+            ProgressBar(this@MainActivity).apply {
+                isIndeterminate = true
+                indeterminateTintList = ColorStateList.valueOf(Theme.TEXT_DIM)
+            },
+            LinearLayout.LayoutParams(dp(18), dp(18)).apply { topMargin = dp(2); rightMargin = dp(10) },
+        )
+        val texts = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+        pairingTitle = label("", Theme.UI, Theme.TEXT)
+        texts.addView(pairingTitle)
+        texts.addView(
+            label("Approve on the Mac only when it shows ${identity.fingerprint}.", Theme.UI_SMALL, Theme.TEXT_DIM),
+            rowParams(top = 4),
+        )
+        addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+    }
+
+    private fun showWaiting(macName: String?) {
+        if (macName == null) {
+            pairingCard.visibility = View.GONE
+            pairButton.alpha = 1f
+        } else {
+            pairingTitle.text = "Waiting for $macName to approve"
+            pairingCard.visibility = View.VISIBLE
+            pairButton.alpha = 0.5f
+        }
     }
 
     /** The strip the system reserves for its own bars, so the header is not hidden under the clock. */
@@ -669,6 +720,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val qr = withContext(Dispatchers.IO) { PairingClient.parse(code) }
                 log("code is from ${qr.host_name}, ${Identity.fingerprint(qr.host_device_id)}")
+                showWaiting(qr.host_name)
                 log("approve on the Mac if it shows ${identity.fingerprint}")
                 val outcome = withContext(Dispatchers.IO) {
                     PairingClient(identity, KeystoreIdentity.deviceName(this@MainActivity)).pair(qr)
@@ -678,8 +730,15 @@ class MainActivity : AppCompatActivity() {
                 refreshPeers()
             } catch (e: Exception) {
                 log("pairing failed: ${e.message}")
+                // The waiting card is gone, so say why where the person is looking.
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Pairing did not finish")
+                    .setMessage((e.message ?: "The Mac did not answer.").replaceFirstChar { it.uppercase() })
+                    .setPositiveButton("OK", null)
+                    .show()
             } finally {
                 busy = false
+                showWaiting(null)
             }
         }
     }

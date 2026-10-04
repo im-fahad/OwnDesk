@@ -58,7 +58,9 @@ folder you sync to the other machine.
 **Connect** needs no address in the normal case. The controller opens a TCP connection to every
 address it knows for the host at once and uses the first that answers, so the same button works at
 home on the LAN and away over Tailscale. Bonjour is tried first when the host is on the current
-network. The address field only overrides that.
+network. In the app, an address chosen for a Mac (the address beside **Connect**, or **Choose an
+address…** on the Mac's right-click menu) is tried before those, and kept per Mac; when it does
+not answer, the usual search still runs.
 
 The addresses it knows are the ones in the pairing code, plus any Tailscale addresses the host has
 announced since in its Bonjour record (`via`), which the app keeps whenever it sees them at home. A

@@ -54,9 +54,9 @@ extension AppState {
     /// then every address it was known by, with OwnDesk's port dropped in favour of the SSH one.
     func terminalHosts(for peer: Peer) async -> [String] {
         var hosts: [String] = []
-        // An address typed in the header, as for the screen: the way to reach a Mac whose pairing
+        // The address chosen for this Mac, as for the screen: the way to reach a Mac whose pairing
         // carried no Tailscale address.
-        if !manualAddress.isEmpty, let host = Endpoints.url(for: manualAddress)?.host { hosts.append(host) }
+        if let pin = addressPins[peer.deviceId], let host = Endpoints.url(for: pin)?.host { hosts.append(host) }
         if let found = discoveredPeer(for: peer.deviceId), let url = await Endpoints.resolve(found.endpoint), let host = url.host {
             hosts.append(host)
         }
@@ -89,6 +89,7 @@ extension AppState {
     /// terminal needs neither a pasted line nor a fingerprint to compare. Returns what to tell the person.
     func requestTerminalKey(from peer: Peer, port: Int) async -> (ok: Bool, message: String) {
         var urls: [URL] = []
+        if let pin = addressPins[peer.deviceId], let url = Endpoints.url(for: pin) { urls.append(url) }
         if let found = discoveredPeer(for: peer.deviceId), let url = await Endpoints.resolve(found.endpoint) { urls.append(url) }
         urls += peer.addresses.compactMap { Endpoints.url(for: $0) }
         let key = sshKey.authorizedKeysLine(comment: "")

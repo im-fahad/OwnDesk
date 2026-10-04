@@ -86,6 +86,9 @@ final class AppState: ObservableObject {
         didSet { if invite == nil { PairingCodeWindow.close() } }
     }
     @Published var pairingOutcome: String?
+    /// The device a pairing just finished with, on either side. The pairing sheet confirms it
+    /// briefly and then closes, so the sidebar listing the new device is what the user sees.
+    @Published var justPaired: String?
     @Published var screenRecording = Permissions.screenRecordingGranted
     @Published var accessibility = Permissions.accessibilityGranted
 
@@ -113,7 +116,15 @@ final class AppState: ObservableObject {
     /// The local clipboard counter last sent or written, so neither side echoes the other.
     var pasteboardSeen = -1
     var clipboardTimer: Timer?
-    @Published var manualAddress = ""
+    /// A one-off address for the next connection, set only by the control channel's `connect`.
+    /// What a person chooses is kept per Mac, in `addressPins`.
+    var manualAddress = ""
+    /// The address each Mac is tried at first, by device id, as chosen in its address sheet. A Mac
+    /// without one uses whichever of its addresses answers.
+    @Published private(set) var addressPins: [String: String] =
+        UserDefaults.standard.dictionary(forKey: "addressPins") as? [String: String] ?? [:]
+    /// The Mac whose address sheet is open.
+    @Published var choosingAddress: Peer?
     @Published var textToSend = ""
 
     // MARK: Pairing input, shared
@@ -317,6 +328,7 @@ final class AppState: ObservableObject {
             refreshPeers()
             pairingOutcome = "Paired with \(name)."
             pendingRequest = nil
+            justPaired = name
             append("paired with \(name)")
         case .pairingFailed(let reason):
             pairingOutcome = "Pairing not completed: \(reason)."
@@ -379,6 +391,40 @@ final class AppState: ObservableObject {
         discovered.first { $0.deviceId == deviceId }
     }
 
+    // MARK: Addresses
+
+    /// Chooses the address a Mac is tried at first, or clears the choice when the text is blank.
+    func setAddressPin(_ address: String?, for deviceId: String) {
+        let clean = address?.trimmingCharacters(in: .whitespaces) ?? ""
+        let before = addressPins[deviceId]
+        addressPins[deviceId] = clean.isEmpty ? nil : clean
+        guard addressPins[deviceId] != before else { return }
+        UserDefaults.standard.set(addressPins, forKey: "addressPins")
+        if let name = peers.peer(deviceId)?.name {
+            append(clean.isEmpty ? "\(name) will use whichever address answers" : "\(name) will use \(clean)")
+        }
+    }
+
+    /// Where a Mac answers on this network right now, as host:port, when Bonjour has found it.
+    func liveAddress(of peer: Peer) async -> String? {
+        guard let found = discoveredPeer(for: peer.deviceId),
+              let url = await Endpoints.resolve(found.endpoint), let host = url.host,
+              // A link-local IPv6 address only works with its interface attached, and means nothing
+              // to read or to keep, so it is not offered.
+              !host.lowercased().hasPrefix("fe80") else { return nil }
+        let shown = host.contains(":") ? "[\(host)]" : host
+        return url.port.map { "\(shown):\($0)" } ?? shown
+    }
+
+    /// What an address is for, since the choice between them is really a choice of route.
+    static func routeNote(for address: String, live: String?) -> String {
+        if address == live { return "on this network now" }
+        let host = Endpoints.url(for: address)?.host ?? address
+        if PathClassifier.isOverlay(host) { return "Tailscale, reaches it from anywhere" }
+        if PathClassifier.isPrivate(host) || host.hasSuffix(".local") { return "local network" }
+        return "elsewhere"
+    }
+
     // MARK: Pairing, either direction
 
     /// Show a code for another device to scan or paste. Only a hosting Mac can offer one, because
@@ -426,6 +472,7 @@ final class AppState: ObservableObject {
                 selectedPeerId = h.deviceId
                 pairingStatus = "Paired with \(h.name)."
                 pairingText = ""
+                justPaired = h.name
                 append("paired with \(h.name)")
             } catch {
                 pairingStatus = "Pairing failed: \(error)"
@@ -436,6 +483,7 @@ final class AppState: ObservableObject {
     }
 
     func forget(_ deviceId: String) {
+        setAddressPin(nil, for: deviceId)
         try? peers.forget(deviceId)
         forgetTerminal(deviceId)
         // Also when hosting is off and the host half is not there to do it.
@@ -557,13 +605,27 @@ final class AppState: ObservableObject {
     private func connect(to peer: Peer) async {
         var url: URL?
         var addressUsed: String?
-        if !manualAddress.isEmpty {
-            url = Endpoints.url(for: manualAddress)
-            addressUsed = manualAddress
-            if url == nil { append("bad address: \(manualAddress)"); state = .ended("bad address"); return }
-        } else if let found = discoveredPeer(for: peer.deviceId) {
-            append("resolving \(Endpoints.describe(found.endpoint))")
-            url = await Endpoints.resolve(found.endpoint)
+        let oneOff = manualAddress
+        manualAddress = ""
+        if !oneOff.isEmpty {
+            url = Endpoints.url(for: oneOff)
+            addressUsed = oneOff
+            if url == nil { append("bad address: \(oneOff)"); state = .ended("bad address"); return }
+        } else {
+            // The chosen address first; when it does not answer, the usual search still runs, so
+            // a Mac chosen by its Tailscale address is still found at home with Tailscale off.
+            if let pin = addressPins[peer.deviceId] {
+                if let pinned = Endpoints.url(for: pin), await Endpoints.firstReachable([pinned]) != nil {
+                    url = pinned
+                    addressUsed = pin
+                } else {
+                    append("\(peer.name)'s chosen address \(pin) did not answer, trying the others")
+                }
+            }
+            if url == nil, let found = discoveredPeer(for: peer.deviceId) {
+                append("resolving \(Endpoints.describe(found.endpoint))")
+                url = await Endpoints.resolve(found.endpoint)
+            }
         }
         if url == nil {
             let candidates = peer.addresses.compactMap { Endpoints.url(for: $0) }
@@ -687,7 +749,7 @@ final class AppState: ObservableObject {
         case "rejected: \(SessionRejectReason.untrusted.rawValue)":
             "\(name) no longer has this Mac paired, so it was removed here too. Pair again to use it."
         case "no address":
-            "Could not reach \(name). It may be asleep or offline, or “Let others control it” may be off on it."
+            "Could not reach \(name). It may be asleep or offline, or “Let others control it” may be off on it. If it is on another network, click the address next to Connect and choose its Tailscale address."
         case "disconnected":
             "You disconnected."
         default:
